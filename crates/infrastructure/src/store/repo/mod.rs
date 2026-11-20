@@ -16,7 +16,7 @@ use meeting_copilot_domain::port::repository::{
 };
 use meeting_copilot_domain::vo::{CardRef, InsightRef, SessionId, UtteranceRef};
 
-use super::{StoreConfig, StoreError, SCHEMA_VERSION};
+use super::{StoreConfig, StoreError, StoreKey, SCHEMA_VERSION};
 
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
@@ -81,18 +81,34 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
+    /// 打开库。启用 `sqlcipher` feature 时必须改用 [`SqliteStore::open_with_key`]，
+    /// 否则因缺少密钥直接失败，不会静默生成明文库。
     pub fn open(config: &StoreConfig) -> Result<Self, StoreError> {
+        Self::open_with_key(config, None)
+    }
+
+    /// 打开库并注入 L1 派生的 32B 数据库密钥（`crypto::derive_l1` 的输出）。
+    pub fn open_with_key(config: &StoreConfig, key: Option<&StoreKey>) -> Result<Self, StoreError> {
         config.validate()?;
         let conn = Connection::open(&config.path).map_err(sql_error)?;
-        Self::prepare(conn, config.wal_enabled)
+        Self::prepare(conn, config.wal_enabled, key)
     }
 
+    /// 内存库不落盘，无需页级加密密钥。
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory().map_err(sql_error)?;
-        Self::prepare(conn, false)
+        Self::prepare(conn, false, None)
     }
 
-    fn prepare(conn: Connection, wal_enabled: bool) -> Result<Self, StoreError> {
+    fn prepare(
+        conn: Connection,
+        wal_enabled: bool,
+        key: Option<&StoreKey>,
+    ) -> Result<Self, StoreError> {
+        #[cfg(feature = "sqlcipher")]
+        apply_key(&conn, key)?;
+        #[cfg(not(feature = "sqlcipher"))]
+        let _ = key;
         if wal_enabled {
             let _ = conn.pragma_update(None, "journal_mode", "WAL");
         }
@@ -192,6 +208,20 @@ impl SqliteStore {
             .map_err(sql_error)?;
         usize::try_from(count).map_err(|_| StoreError::Sqlite("count 溢出".into()))
     }
+}
+
+/// 在读取任何数据页之前下发 SQLCipher 原始密钥，并用一次元数据读取校验密钥。
+#[cfg(feature = "sqlcipher")]
+fn apply_key(conn: &Connection, key: Option<&StoreKey>) -> Result<(), StoreError> {
+    let key = key.ok_or(StoreError::MissingKey)?;
+    // SQLCipher 原始密钥字面量：`x'<64 位十六进制>'`，跳过口令 KDF。
+    conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", key.to_hex()))
+        .map_err(sql_error)?;
+    conn.query_row("SELECT count(*) FROM sqlite_master", [], |row| {
+        row.get::<_, i64>(0)
+    })
+    .map_err(|_| StoreError::WrongKey)?;
+    Ok(())
 }
 
 fn migrate(conn: &Connection) -> Result<(), StoreError> {
@@ -658,6 +688,8 @@ mod tests {
         assert!(SqliteStore::open(&config).is_err());
     }
 
+    // 样本库是明文 SQLite，仅在非 SQLCipher 构建下有意义。
+    #[cfg(not(feature = "sqlcipher"))]
     #[test]
     fn v0_database_is_migrated_and_preserves_rows() {
         let stamp = std::time::SystemTime::now()
@@ -704,5 +736,89 @@ mod tests {
 
         drop(store);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[cfg(feature = "sqlcipher")]
+    mod sqlcipher {
+        use super::*;
+        use crate::crypto::{derive_l1, MASTER_KEY_LEN};
+        use crate::store::StoreKey;
+
+        fn key(master: &[u8; MASTER_KEY_LEN]) -> StoreKey {
+            StoreKey::new(
+                derive_l1(master, "com.meetingcopilot.desktop", b"sqlcipher-test-salt")
+                    .expect("派生"),
+            )
+        }
+
+        fn temp_db(tag: &str) -> std::path::PathBuf {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            std::env::temp_dir().join(format!(
+                "meeting-copilot-sqlcipher-{tag}-{}-{stamp}.db",
+                std::process::id()
+            ))
+        }
+
+        fn config_at(path: &std::path::Path) -> StoreConfig {
+            StoreConfig {
+                path: path.to_string_lossy().into_owned(),
+                key_ref: Some("keychain://test/db".into()),
+                wal_enabled: false,
+            }
+        }
+
+        fn cleanup(path: &std::path::Path) {
+            for suffix in ["", "-wal", "-shm"] {
+                let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+            }
+        }
+
+        #[test]
+        fn missing_key_is_rejected() {
+            let path = temp_db("missing-key");
+            assert_eq!(
+                SqliteStore::open(&config_at(&path)).err(),
+                Some(StoreError::MissingKey)
+            );
+            cleanup(&path);
+        }
+
+        #[test]
+        fn wrong_key_is_rejected_and_correct_key_roundtrips() {
+            let path = temp_db("roundtrip");
+            let config = config_at(&path);
+            let master = [7_u8; MASTER_KEY_LEN];
+
+            {
+                let store = SqliteStore::open_with_key(&config, Some(&key(&master))).expect("open");
+                SessionRepository::create(&store, &session()).expect("create");
+            }
+
+            let bytes = std::fs::read(&path).expect("read");
+            assert!(
+                !bytes.starts_with(b"SQLite format 3\0"),
+                "库文件必须是 SQLCipher 密文"
+            );
+
+            let wrong = key(&[9_u8; MASTER_KEY_LEN]);
+            assert_eq!(
+                SqliteStore::open_with_key(&config, Some(&wrong)).err(),
+                Some(StoreError::WrongKey)
+            );
+
+            let store = SqliteStore::open_with_key(&config, Some(&key(&master))).expect("reopen");
+            assert!(
+                SessionRepository::get(&store, &session_id())
+                    .expect("get")
+                    .is_some(),
+                "正确密钥必须能读回数据"
+            );
+
+            drop(store);
+            cleanup(&path);
+        }
     }
 }

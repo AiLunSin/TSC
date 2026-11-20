@@ -60,7 +60,7 @@
 
 | 问题 | 现状 | 方案 |
 |---|---|---|
-| SQLCipher 页级加密 | 默认 `bundled` SQLite，未启用页级加密 | 在具备 NASM/OpenSSL 的机器或 CI（ubuntu 自带 nasm）上切换 `rusqlite` feature 为 `bundled-sqlcipher-vendored-openssl`，在 `prepare` 中执行由 L1 派生密钥生成的 `PRAGMA key`，并补跨密钥打开失败测试 |
+| SQLCipher 页级加密 | 已接入 `sqlcipher` feature（`bundled-sqlcipher-vendored-openssl`），`prepare` 首步执行 `PRAGMA key`，缺密钥/错密钥均拒绝打开 | 由新增的 `sqlcipher (page-level encryption)` job 在 ubuntu 上安装 NASM 后实跑；Windows 本机需安装 NASM 才能启用 |
 | macOS 两 target | 本机无法验证 | 由 `rust (aarch64-apple-darwin)` 与 `rust (x86_64-apple-darwin)` 两个 job 覆盖 |
 | Windows arm64 | 未纳入 CI 矩阵 | 使用自托管 ARM64 runner 或安装 ARM64 MSVC 组件后恢复 |
 | rustfmt | 本机 rustup 组件被拒，已用独立二进制完成格式化 | CI runner 自带组件，`cargo fmt --check` 可正常执行 |
@@ -145,3 +145,18 @@ error: proc macro panicked
 原因：Windows 构建使用 `icon.ico`，macOS 构建要求 `icon.png`。
 
 修复：`scripts/gen-icon.py` 同时生成 `icon.ico`（32×32）与 `icon.png`（128×128 RGBA），已纳入版本控制。
+
+## 10. SQLCipher 页级加密接入（2026-11-20）
+
+`crates/infrastructure` 新增 feature，`SqliteStore` 打开链路改造：
+
+| 项 | 内容 |
+|---|---|
+| 默认（`bundled-sqlite`） | 内置 SQLite，库文件明文，依赖密钥门禁 + 字段级 AES-GCM |
+| `--features sqlcipher` | `rusqlite/bundled-sqlcipher-vendored-openssl`，库文件页级加密 |
+| 打开 | `SqliteStore::open_with_key(config, Some(&StoreKey))`，`prepare` 首步 `PRAGMA key = "x'…'"` 并读 `sqlite_master` 校验 |
+| 失败语义 | 缺密钥 → `StoreError::MissingKey`；错误密钥 → `StoreError::WrongKey`；不静默落明文 |
+| 测试 | 缺密钥拒绝、错误密钥拒绝、正确密钥回读、文件头非 `SQLite format 3`（cfg `sqlcipher`） |
+| CI | 新增 `sqlcipher (page-level encryption)` job：ubuntu + `apt-get install nasm` + `cargo test -p meeting-copilot-infrastructure --features sqlcipher` |
+
+本地复验：默认特性下 `cargo fmt/clippy/test` 全绿（80 个测试）；`--features sqlcipher` 的 Rust 代码已通过临时 feature 桩完成 `cargo check --all-targets`。Windows 本机因缺少 Strawberry Perl，vendored OpenSSL 未能完成构建，该路径以 CI 结果为准。

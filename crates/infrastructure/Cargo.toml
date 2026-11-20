@@ -6,11 +6,18 @@ rust-version.workspace = true
 license.workspace = true
 description = "基础设施层：加密存储、审计链、检索抓取、LLM 网关、度量。"
 
+[features]
+default = ["bundled-sqlite"]
+# 默认：内置 SQLite，库文件为明文，依赖密钥门禁 + 字段级 AES-256-GCM。
+bundled-sqlite = ["rusqlite/bundled"]
+# 页级加密：内置 SQLCipher + 随包 OpenSSL。构建机需 NASM（Windows）与 Perl/OpenSSL 构建链。
+sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
+
 [dependencies]
 aes-gcm = "0.10"
 hkdf = "0.12"
 meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.41" }
 serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"

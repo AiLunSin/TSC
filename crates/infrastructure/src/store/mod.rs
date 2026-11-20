@@ -1,16 +1,45 @@
 //! 本地存储（SPEC 4.3-3、DESIGN 2.3.1）。
 //!
 //! 打开前强制校验密钥引用，禁止静默降级为明文库。
-//! 页级加密（SQLCipher）需要额外的构建链；当 `sqlcipher` feature 可用时
-//! 由 rusqlite 的 SQLCipher 后端接管，否则退化为"密钥门禁 + 字段级加密"。
+//! 启用 `sqlcipher` feature 时（`cargo build --features sqlcipher`），由
+//! SQLCipher 后端接管页级加密，`SqliteStore::open_with_key` 需要传入 L1 派生密钥；
+//! 未启用时退化为"密钥门禁 + 字段级加密"。
 
 use meeting_copilot_domain::error::CopilotError;
+
+use crate::crypto::MASTER_KEY_LEN;
 
 pub mod repo;
 
 pub use repo::SqliteStore;
 
 pub const SCHEMA_VERSION: u32 = 1;
+
+/// L1 派生的 32 字节数据库密钥。仅内存持有，日志与 Debug 输出一律脱敏。
+#[derive(Clone, PartialEq, Eq)]
+pub struct StoreKey([u8; MASTER_KEY_LEN]);
+
+impl StoreKey {
+    pub fn new(bytes: [u8; MASTER_KEY_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn as_bytes(&self) -> &[u8; MASTER_KEY_LEN] {
+        &self.0
+    }
+
+    /// SQLCipher 原始密钥字面量，使用 64 位十六进制避免口令 KDF 开销。
+    #[cfg(feature = "sqlcipher")]
+    fn to_hex(&self) -> String {
+        self.0.iter().map(|byte| format!("{byte:02X}")).collect()
+    }
+}
+
+impl std::fmt::Debug for StoreKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("StoreKey(<redacted>)")
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StoreError {
@@ -37,7 +66,8 @@ impl From<StoreError> for CopilotError {
     }
 }
 
-/// 打开参数。`key_ref` 只能是 OS 密钥库引用，不接受明文口令。
+/// 打开参数。`key_ref` 只能是 OS 密钥库引用，不接受明文口令；
+/// 实际密钥在 `SqliteStore::open_with_key` 中单独传入。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StoreConfig {
     pub path: String,
