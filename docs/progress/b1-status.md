@@ -49,3 +49,19 @@
 3. **ASR 模型**：中文流式模型文件 + 许可确认（任务 12.1/12.3）；
 4. **LLM 端点与 Key**：OpenAI 兼容服务（任务 13.1/13.4）；
 5. 飞书/Zoom 需一次**真实会议**并开启字幕，用于采集控件树与延迟数据（任务 10/11）。
+## 5. 2026-11-20 环境更新与进展
+
+### 客户端
+- 腾讯会议 **3.48.0.443**（`D:\会议\WeMeet\WeMeetApp.exe`）已确认；
+- Zoom 客户端目录 `%APPDATA%\Zoomin` 存在；
+- macOS 按用户要求**暂不覆盖**（任务 8 标记为范围外）。
+
+### ASR 模型
+- 已从 `hf-mirror.com` 下载中英双语流式 zipformer（int8，Apache-2.0），存放于 `models/asr/bilingual-zh-en-2023-02-20/`（不入库）；
+- 用 `sherpa-onnx 2.0.2` 参考运行时实测：RTF **0.0509**、首字延迟 **53 ms**、2 线程；详见 `docs/baseline/asr.md`；
+- Rust 接入需 CMake + C++ 工具链，本机暂缺。
+
+### LLM 端点
+- 本机无 Ollama / LM Studio / 本地模型；
+- `api.openai.com`、`huggingface.co`、`github.com` 均不可达；`dashscope.aliyuncs.com` 域名可达但无 API Key；
+- **需要用户提供 OpenAI 兼容端点地址与 Key**（或指定使用哪家国内服务）。

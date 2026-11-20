@@ -13,3 +13,5 @@ app/src-tauri/gen/
 *.cdx.json
 docs/compliance/sbom/*.json
 !docs/compliance/sbom/.gitkeep
+models/
+.tmp/
