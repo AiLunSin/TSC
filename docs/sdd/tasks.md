@@ -286,7 +286,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 - [ ] **12.1 sherpa-onnx 双语流式接入** — `crates/infrastructure/src/asr/sherpa_stream.rs`
   - 追溯 SPEC 4.1-1、4.5-4 · DESIGN 1.2.3、2.4.1
   - DoD：中英混合流式识别可用，输出 `Partial`/`Final` 两类事件；语言标签随事件输出；CPU 限制 2 线程；模型加载内存 ≤550MB
-- [ ] **12.2 稳定前缀策略** — `crates/application/src/understand/stable_prefix.rs`
+- [x] **12.2 稳定前缀策略** — `crates/application/src/understand/stable_prefix.rs`
   - 追溯 SPEC 4.4-4（控制误报率）、5.2.1-8 · DESIGN 1.2.3
   - DoD：连续两次一致的文本才提交给下游；抖动场景下提交文本的回退（撤销）率 ≤5%；单测覆盖"逐字追加/整句替换/尾部修正"三种流式模式
 - [ ] **12.3 Silero VAD 静音与重叠检测** — `crates/infrastructure/src/audio/vad.rs`
