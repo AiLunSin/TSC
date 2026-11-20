@@ -1,0 +1,74 @@
+# CI 就绪状态与 GitHub 上传阻塞
+
+> 记录日期：2026-11-20
+> 关联提交：`c6eded4 feat: 初始化 Meeting Copilot B0 工程基座与 CI 流水线`
+
+## 1. 本地 CI 预检（模拟 GitHub Actions 各步骤）
+
+| 步骤 | 命令 | 结果 |
+|---|---|---|
+| web / install | `npm ci`（依赖已锁） | 通过 |
+| web / lint | `npm run lint` | 0 error |
+| web / typecheck | `npm run typecheck` | 0 error |
+| web / bindings-contract | `npm run check:bindings` | 4 个 DTO 一致 |
+| web / build | `npm run build` | 通过，JS gzip 71.44 KB |
+| web / bundle-size-budget | 本地复算 | 约 71 KB，低于 800 KB |
+| rust / fmt | `rustfmt --check`（独立二进制） | 40+ 文件 0 差异 |
+| rust / clippy | `cargo clippy --workspace --all-targets -D warnings` | 通过 |
+| rust / build | `cargo build --workspace` | 通过 |
+| rust / test | `cargo test --workspace` | **80 个测试全部通过** |
+| compliance / layering | `scripts/check-layering.sh` | PASS |
+| compliance / secrets | `scripts/scan-secrets.sh` | 0 命中 |
+
+## 2. 本轮对 CI 的修复
+
+| 问题 | 修复 |
+|---|---|
+| `bundle-size-budget` 的 `find \| xargs gzip` 会混入 gzip 文件名头，统计不可靠 | 改为逐文件 `gzip -9 -c` 求和，并加 shell 括号 |
+| `macos-13` 已接近退役 | 改用 `macos-14` 同时构建 arm64 与交叉 x86_64 |
+| `cargo install cargo-deny/cargo-cyclonedx` 易超 15 分钟 | 改用 `taiki-e/install-action` 拉取预编译二进制 |
+| 缺少绑定契约门禁 | 新增 `bindings-contract` 步骤 |
+| `deny.toml` 含占位 crate，语义误导 | 移除 `exceptions` 与 `bans.deny` 占位项 |
+| Windows 行尾 CRLF 可能破坏 Linux 上的 shell 脚本 | 增加 `.gitattributes` 强制 `eol=lf` |
+| Windows arm64 target 需 ARM64 MSVC 工具链，标准 runner 不保证 | 暂移出矩阵，待自托管或专用工具链恢复 |
+
+## 3. GitHub 上传阻塞（外部原因）
+
+| 检查 | 结果 |
+|---|---|
+| `https://github.com` | HTTP `000`（不可达） |
+| `https://api.github.com` | HTTP `000`（不可达） |
+| 环境变量代理 | 无 |
+| Git HTTP 代理 | 无 |
+| 系统 WinHTTP 代理 | 直接访问 |
+| 本地常见代理端口 7890/7897/10809/8080 | 全部 `000` |
+| GitHub CLI（`gh`） | 未安装 |
+| Git 凭证助手 | 未配置 |
+| 远程仓库 | 无 |
+
+**结论**：当前网络无法直连 GitHub，且没有任何可用认证凭据，因此无法执行 `git push`，也无法触发 Actions。
+
+**解除条件（满足任一）**：
+
+1. 提供可用的 HTTPS 代理（设置 `HTTPS_PROXY`），并确认代理可访问 `github.com`；
+2. 提供目标仓库地址与 Personal Access Token（`https://<token>@github.com/<owner>/<repo>.git`）；
+3. 配置 SSH Key 且网络可达 `github.com:22`。
+
+仓库已在项目目录初始化为独立仓库（不再使用用户主目录的空仓库），提交历史从 `c6eded4` 开始。
+
+## 4. 剩余问题与方案
+
+| 问题 | 现状 | 方案 |
+|---|---|---|
+| SQLCipher 页级加密 | 默认 `bundled` SQLite，未启用页级加密 | 在具备 NASM/OpenSSL 的机器或 CI（ubuntu 自带 nasm）上切换 `rusqlite` feature 为 `bundled-sqlcipher-vendored-openssl`，在 `prepare` 中执行由 L1 派生密钥生成的 `PRAGMA key`，并补跨密钥打开失败测试 |
+| macOS 两 target | 本机无法验证 | 由 `rust (aarch64-apple-darwin)` 与 `rust (x86_64-apple-darwin)` 两个 job 覆盖 |
+| Windows arm64 | 未纳入 CI 矩阵 | 使用自托管 ARM64 runner 或安装 ARM64 MSVC 组件后恢复 |
+| rustfmt | 本机 rustup 组件被拒，已用独立二进制完成格式化 | CI runner 自带组件，`cargo fmt --check` 可正常执行 |
+| TS 绑定生成 | 已落地手写 `types.ts` + `schema.json` + 双向契约测试 | 后续可替换为 `ts-rs`/`tauri-specta` 自动生成，契约测试保留 |
+| v0→v1 迁移回放 | 已补测试：旧行保留、版本升至 1 | — |
+
+## 5. 推送后的首轮 CI 预期
+
+- web 与 compliance 预计一次通过；
+- rust 三 target 首次运行需拉取 Tauri 依赖，耗时可能接近 15 分钟上限，建议观察首个 run 后再决定是否提高 `timeout-minutes`；
+- 若 `cargo deny` 对 `MPL-2.0` 之外的传递依赖报未识别许可证，按实际报错逐项加入 `allow` 或替换依赖。
