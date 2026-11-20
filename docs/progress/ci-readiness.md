@@ -160,3 +160,27 @@ error: proc macro panicked
 | CI | 新增 `sqlcipher (page-level encryption)` job：ubuntu + `apt-get install nasm` + `cargo test -p meeting-copilot-infrastructure --features sqlcipher` |
 
 本地复验：默认特性下 `cargo fmt/clippy/test` 全绿（80 个测试）；`--features sqlcipher` 的 Rust 代码已通过临时 feature 桩完成 `cargo check --all-targets`。Windows 本机因缺少 Strawberry Perl，vendored OpenSSL 未能完成构建，该路径以 CI 结果为准。
+
+## 10. 第五轮 CI 修复：SQLCipher 与许可证（2026-11-20）
+
+### 失败 1：`sqlcipher (page-level encryption)` 6 个测试失败
+
+SQLCipher 模式下 `SqliteStore::open_in_memory()` 仍以 `key = None` 调用 `apply_key`，返回 `MissingKey`，导致 5 个使用 `store()` 的用例与 `schema_is_migrated_to_v1` 失败。
+
+修复：
+- `open_in_memory` 在 `sqlcipher` feature 下生成一次性随机 `StoreKey`（内存库不落盘，密钥随库销毁）；
+- `v0_database_is_migrated_and_preserves_rows` 标注 `#[cfg(not(feature = "sqlcipher"))]`（SQLCipher 模式下不存在明文 v0 库）。
+
+本地编译说明：Windows git-bash 的 Perl 缺少 `Locale::Maketext::Simple`，OpenSSL 配置阶段退出，因此 SQLCipher 测试只能由 Ubuntu CI 验证（与 NASM 无关，openssl-src 已使用 `no-asm`）。
+
+### 失败 2：`compliance` 的 `licenses` 检查
+
+`sqlite3-src` 声明 `MIT AND BSD-3-Clause AND blessing AND WTFPL`，其中 `blessing`（SQLite Blessing）与 `WTFPL` 未在允许列表。
+
+修复：`deny.toml` 的 `allow` 增加 `blessing`、`WTFPL`。本地 `cargo deny check licenses` 已通过（exit 0）。
+
+### 本地复验
+
+- `cargo deny check licenses` → `licenses ok`
+- `cargo test -p meeting-copilot-infrastructure` → 24 passed
+- `cargo clippy -p meeting-copilot-infrastructure --all-targets -D warnings` → 通过

@@ -29,6 +29,8 @@ allow = [
   "MPL-2.0",
   "CC0-1.0",
   "BSL-1.0",
+  "blessing",
+  "WTFPL",
 ]
 # 白名单之外的许可证一律拒绝；AGPL/GPL/SSPL/OSL/EUPL 均不在允许列表内，因此默认被拒绝。
 # 注意：cargo-deny 已移除 [licenses] 的 deny 键（见 EmbarkStudios/cargo-deny#611），

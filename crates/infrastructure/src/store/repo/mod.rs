@@ -94,11 +94,19 @@ impl SqliteStore {
         Self::prepare(conn, config.wal_enabled, key)
     }
 
-    /// 内存库不落盘，无需页级加密密钥。
-    pub fn open_in_memory() -> Result<Self, StoreError> {
-        let conn = Connection::open_in_memory().map_err(sql_error)?;
-        Self::prepare(conn, false, None)
-    }
+/// 内存库不落盘。SQLCipher 模式下仍需密钥才能启用加密引擎，
+/// 因此此处生成一次性随机密钥；库销毁后密钥随之丢失。
+pub fn open_in_memory() -> Result<Self, StoreError> {
+    let conn = Connection::open_in_memory().map_err(sql_error)?;
+    #[cfg(feature = "sqlcipher")]
+    let prepared = {
+        let key = StoreKey::new(crate::crypto::generate_master());
+        Self::prepare(conn, false, Some(&key))
+    };
+    #[cfg(not(feature = "sqlcipher"))]
+    let prepared = Self::prepare(conn, false, None);
+    prepared
+}
 
     fn prepare(
         conn: Connection,
@@ -689,6 +697,7 @@ mod tests {
     }
 
     // 样本库是明文 SQLite，仅在非 SQLCipher 构建下有意义。
+    #[cfg(not(feature = "sqlcipher"))]
     #[cfg(not(feature = "sqlcipher"))]
     #[test]
     fn v0_database_is_migrated_and_preserves_rows() {
