@@ -22,8 +22,11 @@ pub trait UtteranceRepository: Send + Sync {
     /// 主表 + FTS5 + 向量索引三写同事务。
     fn append(&self, session: &SessionId, utterance: &Utterance) -> Result<(), CopilotError>;
 
-    fn apply_correction(&self, session: &SessionId, correction: &Correction)
-        -> Result<(), CopilotError>;
+    fn apply_correction(
+        &self,
+        session: &SessionId,
+        correction: &Correction,
+    ) -> Result<(), CopilotError>;
 
     fn list(&self, session: &SessionId) -> Result<Vec<Utterance>, CopilotError>;
 
@@ -34,17 +37,29 @@ pub trait UtteranceRepository: Send + Sync {
 pub trait InsightRepository: Send + Sync {
     fn save(&self, session: &SessionId, insight: &Insight) -> Result<(), CopilotError>;
 
-    fn get(&self, session: &SessionId, reference: &InsightRef) -> Result<Option<Insight>, CopilotError>;
+    fn get(
+        &self,
+        session: &SessionId,
+        reference: &InsightRef,
+    ) -> Result<Option<Insight>, CopilotError>;
 
     fn list(&self, session: &SessionId) -> Result<Vec<Insight>, CopilotError>;
 
-    fn save_summary(&self, session: &SessionId, summary: &RollingSummary) -> Result<(), CopilotError>;
+    fn save_summary(
+        &self,
+        session: &SessionId,
+        summary: &RollingSummary,
+    ) -> Result<(), CopilotError>;
 }
 
 pub trait CardRepository: Send + Sync {
     fn save(&self, session: &SessionId, card: &SuggestionCard) -> Result<(), CopilotError>;
 
-    fn get(&self, session: &SessionId, reference: &CardRef) -> Result<Option<SuggestionCard>, CopilotError>;
+    fn get(
+        &self,
+        session: &SessionId,
+        reference: &CardRef,
+    ) -> Result<Option<SuggestionCard>, CopilotError>;
 
     fn update(&self, session: &SessionId, card: &SuggestionCard) -> Result<(), CopilotError>;
 }

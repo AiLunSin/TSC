@@ -8,7 +8,7 @@ use crate::model::enums::{
 };
 use crate::model::session::TextRange;
 use crate::vo::{
-    CardRef, Confidence, ConclusionText, ProviderId, ReferenceRef, SanitizedQuery, TitleText,
+    CardRef, ConclusionText, Confidence, ProviderId, ReferenceRef, SanitizedQuery, TitleText,
     TraceId, UtteranceRef, WallClock,
 };
 

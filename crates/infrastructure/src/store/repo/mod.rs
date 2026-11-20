@@ -139,7 +139,11 @@ impl SqliteStore {
         .map_err(sql_error)?;
         tx.execute(
             "INSERT INTO utterances_fts (session_id, reference, text) VALUES (?1, ?2, ?3)",
-            params![session.as_str(), utterance.reference.as_str(), utterance.text.as_str()],
+            params![
+                session.as_str(),
+                utterance.reference.as_str(),
+                utterance.text.as_str()
+            ],
         )
         .map_err(sql_error)?;
         if fail_before_vector {
@@ -147,7 +151,11 @@ impl SqliteStore {
         }
         tx.execute(
             "INSERT INTO utterance_vectors (session_id, reference, vector) VALUES (?1, ?2, ?3)",
-            params![session.as_str(), utterance.reference.as_str(), vec![0_u8; 8]],
+            params![
+                session.as_str(),
+                utterance.reference.as_str(),
+                vec![0_u8; 8]
+            ],
         )
         .map_err(sql_error)?;
         tx.commit().map_err(sql_error)?;
@@ -221,9 +229,10 @@ impl SessionRepository for SqliteStore {
     }
 
     fn transition(&self, id: &SessionId, next: SessionState) -> Result<Session, CopilotError> {
-        let current = SessionRepository::get(self, id)?.ok_or_else(|| CopilotError::StoreFailure {
-            detail: format!("会话 {id} 不存在"),
-        })?;
+        let current =
+            SessionRepository::get(self, id)?.ok_or_else(|| CopilotError::StoreFailure {
+                detail: format!("会话 {id} 不存在"),
+            })?;
         let updated = current.transition(next)?;
         let payload = encode(&updated)?;
         self.lock()
@@ -252,7 +261,9 @@ impl SessionRepository for SqliteStore {
 
     fn delete_irrecoverable(&self, id: &SessionId) -> Result<(), CopilotError> {
         let mut conn = self.lock();
-        let tx = conn.transaction().map_err(|e| CopilotError::from(sql_error(e)))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| CopilotError::from(sql_error(e)))?;
         for statement in [
             "DELETE FROM utterances WHERE session_id = ?1",
             "DELETE FROM utterances_fts WHERE session_id = ?1",
@@ -272,11 +283,7 @@ impl SessionRepository for SqliteStore {
 }
 
 impl UtteranceRepository for SqliteStore {
-    fn append(
-        &self,
-        session: &SessionId,
-        utterance: &Utterance,
-    ) -> Result<(), CopilotError> {
+    fn append(&self, session: &SessionId, utterance: &Utterance) -> Result<(), CopilotError> {
         self.append_tx(session, utterance, false)
             .map_err(CopilotError::from)
     }
@@ -287,7 +294,9 @@ impl UtteranceRepository for SqliteStore {
         correction: &Correction,
     ) -> Result<(), CopilotError> {
         let mut conn = self.lock();
-        let tx = conn.transaction().map_err(|e| CopilotError::from(sql_error(e)))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| CopilotError::from(sql_error(e)))?;
         let payload: Option<String> = tx
             .query_row(
                 "SELECT payload FROM utterances WHERE session_id = ?1 AND reference = ?2",
@@ -339,7 +348,6 @@ impl UtteranceRepository for SqliteStore {
     }
 
     fn delete(&self, session: &SessionId, reference: &UtteranceRef) -> Result<(), CopilotError> {
-
         let mut conn = self.lock();
         let payloads: Vec<String> = {
             let mut statement = conn
@@ -360,7 +368,9 @@ impl UtteranceRepository for SqliteStore {
             }
         }
 
-        let tx = conn.transaction().map_err(|e| CopilotError::from(sql_error(e)))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| CopilotError::from(sql_error(e)))?;
         for statement in [
             "DELETE FROM utterances WHERE session_id = ?1 AND reference = ?2",
             "DELETE FROM utterances_fts WHERE session_id = ?1 AND reference = ?2",
@@ -442,9 +452,10 @@ impl InsightRepository for SqliteStore {
 
 impl CardRepository for SqliteStore {
     fn save(&self, session: &SessionId, card: &SuggestionCard) -> Result<(), CopilotError> {
-        card.validate().map_err(|error| CopilotError::PrivacyViolation {
-            detail: error.to_string(),
-        })?;
+        card.validate()
+            .map_err(|error| CopilotError::PrivacyViolation {
+                detail: error.to_string(),
+            })?;
         let payload = encode(card)?;
         self.lock()
             .execute(
@@ -496,7 +507,7 @@ mod tests {
         ConsentRecord, ParticipantList, PlatformBinding, RetentionWindow, TextRange,
     };
     use meeting_copilot_domain::model::utterance::SpeakerRef;
-    use meeting_copilot_domain::vo::{Confidence, UtteranceText, UtteranceRef, WallClock};
+    use meeting_copilot_domain::vo::{Confidence, UtteranceRef, UtteranceText, WallClock};
 
     use super::*;
 
@@ -563,12 +574,9 @@ mod tests {
             .expect("存在");
         assert_eq!(loaded.state, SessionState::NotStarted);
 
-        let listening = SessionRepository::transition(
-            &store,
-            &session_id(),
-            SessionState::Listening,
-        )
-        .expect("transition");
+        let listening =
+            SessionRepository::transition(&store, &session_id(), SessionState::Listening)
+                .expect("transition");
         assert_eq!(listening.state, SessionState::Listening);
         assert!(listening.is_eligible_for_capture());
     }
@@ -636,8 +644,7 @@ mod tests {
         .expect("insight");
         InsightRepository::save(&store, &session_id(), &insight).expect("save");
 
-        let result =
-            UtteranceRepository::delete(&store, &session_id(), &item.reference);
+        let result = UtteranceRepository::delete(&store, &session_id(), &item.reference);
         assert!(result.is_err(), "被引用片段必须禁止删除");
     }
 

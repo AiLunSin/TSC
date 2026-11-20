@@ -50,7 +50,9 @@ impl ProviderRequest {
     }
 
     pub fn is_domain_blocked(&self, domain: &str) -> bool {
-        self.blocked_domains.iter().any(|pattern| pattern.matches(domain))
+        self.blocked_domains
+            .iter()
+            .any(|pattern| pattern.matches(domain))
     }
 }
 

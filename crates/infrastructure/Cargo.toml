@@ -9,8 +9,8 @@ description = "基础设施层：加密存储、审计链、检索抓取、LLM �
 [dependencies]
 aes-gcm = "0.10"
 hkdf = "0.12"
-meeting-copilot-domain = { path = "../domain" }
-rusqlite = { version = "0.32", features = ["bundled"] }
+meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"

@@ -86,7 +86,10 @@ mod tests {
 
     #[test]
     fn rejects_empty() {
-        assert_eq!(SanitizedQuery::issue("  ", 0), Err(SanitizedQueryError::Empty));
+        assert_eq!(
+            SanitizedQuery::issue("  ", 0),
+            Err(SanitizedQueryError::Empty)
+        );
     }
 
     #[test]

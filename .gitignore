@@ -2,10 +2,14 @@ node_modules/
 dist/
 target/
 *.log
+*.tsbuildinfo
 .env
 .env.*
 .DS_Store
 .vscode/
 .idea/
+.codeartsdoer/
+app/src-tauri/gen/
+*.cdx.json
 docs/compliance/sbom/*.json
 !docs/compliance/sbom/.gitkeep

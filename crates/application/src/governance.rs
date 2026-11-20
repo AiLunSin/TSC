@@ -82,7 +82,9 @@ impl AuditGuard {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, GuardState> {
-        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 

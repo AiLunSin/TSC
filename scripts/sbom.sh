@@ -21,7 +21,7 @@ echo "[1/3] 生成 npm SBOM"
 
 echo "[2/3] 生成 Rust SBOM"
 if command -v cargo-cyclonedx >/dev/null 2>&1; then
-  (cd "${ROOT}" && cargo cyclonedx --format json --output-cdx)
+  (cd "${ROOT}" && cargo cyclonedx --format json --spec-version 1.5)
   find "${ROOT}/crates" "${ROOT}/app/src-tauri" -maxdepth 2 -name '*.cdx.json' -exec cp {} "${TMP_DIR}/" \; 2>/dev/null || true
 else
   echo "警告: 未安装 cargo-cyclonedx，Rust 侧 SBOM 留空并标记 incomplete" >&2

@@ -7,8 +7,8 @@ use meeting_copilot_domain::model::enums::{Platform, ProviderKind, ReadingMode, 
 use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::model::utterance::SpeakerRef;
 use meeting_copilot_domain::port::capture::{
-    AudioChunk, AudioSource, SourceHealth, SubtitleCapability, SubtitleDescriptor, SubtitleEvent,
-    SubtitleSource, Subscription,
+    AudioChunk, AudioSource, SourceHealth, Subscription, SubtitleCapability, SubtitleDescriptor,
+    SubtitleEvent, SubtitleSource,
 };
 use meeting_copilot_domain::port::governance::{Sanitizer, SensitiveHit};
 use meeting_copilot_domain::port::search::{
@@ -277,12 +277,16 @@ fn assert_audio_contract(source: &dyn AudioSource) {
 }
 
 fn assert_sanitizer_contract(sanitizer: &dyn Sanitizer) {
-    let (text, count) = sanitizer.sanitize_query("张三 的手机号是 13800138000").expect("脱敏");
+    let (text, count) = sanitizer
+        .sanitize_query("张三 的手机号是 13800138000")
+        .expect("脱敏");
     assert!(!text.contains("张三"));
     assert!(!text.contains("13800138000"));
     assert_eq!(count, 2);
 
-    let query = sanitizer.issue_query("张三 的模型上下文窗口").expect("产出查询");
+    let query = sanitizer
+        .issue_query("张三 的模型上下文窗口")
+        .expect("产出查询");
     assert!(query.redaction_count() >= 1);
     assert!(!query.as_str().contains("张三"));
 

@@ -9,7 +9,10 @@ pub mod repository;
 pub mod search;
 pub mod understand;
 
-pub use capture::{AudioChunk, AudioSource, SourceHealth, SubtitleCapability, SubtitleEvent, SubtitleSource, Subscription};
+pub use capture::{
+    AudioChunk, AudioSource, SourceHealth, Subscription, SubtitleCapability, SubtitleEvent,
+    SubtitleSource,
+};
 pub use governance::{AuditLog, Decision, Guardrail, PolicyResolver, Presenter, Sanitizer};
 pub use repository::{CardRepository, InsightRepository, SessionRepository, UtteranceRepository};
 pub use search::{

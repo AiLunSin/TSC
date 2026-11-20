@@ -98,7 +98,10 @@ mod tests {
     #[test]
     fn fail_closed_policy_disables_auto_suggestion() {
         let policy = EffectivePolicy::fail_closed();
-        assert_eq!(policy.auto_suggestion, AutoSuggestionSwitch::DisabledByPolicy);
+        assert_eq!(
+            policy.auto_suggestion,
+            AutoSuggestionSwitch::DisabledByPolicy
+        );
         assert!(!policy.auto_outbound_allowed());
         assert_eq!(policy.audit_retention_days, 180);
     }

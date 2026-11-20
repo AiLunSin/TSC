@@ -80,7 +80,11 @@ pub trait Sanitizer: Send + Sync {
 }
 
 pub trait AuditLog: Send + Sync {
-    fn append(&self, action: crate::model::enums::AuditAction, summary: &str) -> Result<(), CopilotError>;
+    fn append(
+        &self,
+        action: crate::model::enums::AuditAction,
+        summary: &str,
+    ) -> Result<(), CopilotError>;
 
     /// 校验哈希链，返回首个不一致的审计 ID。
     fn verify(&self) -> Result<Option<crate::vo::AuditId>, CopilotError>;
@@ -102,7 +106,7 @@ pub trait Presenter: Send + Sync {
 mod tests {
     use super::*;
     use crate::model::card::DedupeKey;
-    use crate::model::enums::{ProviderKind, ProviderHealth, EnabledState};
+    use crate::model::enums::{EnabledState, ProviderHealth, ProviderKind};
     use crate::model::provider::{ProviderTimeout, RateLimit, Weight};
     use crate::vo::ProviderId;
 
@@ -146,9 +150,10 @@ mod tests {
                 per_minute: 10,
                 per_day: 1_000,
             },
-            blocked_domains: vec![
-                crate::model::provider::DomainPattern::new("*.internal.example.com").expect("pattern"),
-            ],
+            blocked_domains: vec![crate::model::provider::DomainPattern::new(
+                "*.internal.example.com",
+            )
+            .expect("pattern")],
             health: ProviderHealth::Healthy,
             endpoint_ref: None,
         };

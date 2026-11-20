@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::CopilotError;
-use crate::model::enums::{
-    ChannelPreference, ConsentMode, Platform, SessionState,
-};
+use crate::model::enums::{ChannelPreference, ConsentMode, Platform, SessionState};
 use crate::vo::{SessionId, WallClock};
 
 /// 会话聚合根。状态只能通过 [`Session::transition`] 迁移。
@@ -86,8 +84,16 @@ fn allowed_transitions(from: SessionState) -> &'static [SessionState] {
             SessionState::Ended,
             SessionState::Deleted,
         ],
-        SessionState::Paused => &[SessionState::Listening, SessionState::Ended, SessionState::Deleted],
-        SessionState::Silent => &[SessionState::Listening, SessionState::Ended, SessionState::Deleted],
+        SessionState::Paused => &[
+            SessionState::Listening,
+            SessionState::Ended,
+            SessionState::Deleted,
+        ],
+        SessionState::Silent => &[
+            SessionState::Listening,
+            SessionState::Ended,
+            SessionState::Deleted,
+        ],
         SessionState::Ended => &[SessionState::Deleted],
         SessionState::Deleted => &[],
     }
@@ -139,9 +145,7 @@ mod tests {
 
     #[test]
     fn legal_transition_succeeds() {
-        let listening = session()
-            .transition(SessionState::Listening)
-            .expect("合法");
+        let listening = session().transition(SessionState::Listening).expect("合法");
         assert!(listening.is_eligible_for_capture());
     }
 
@@ -152,9 +156,7 @@ mod tests {
 
     #[test]
     fn deleted_is_terminal() {
-        let deleted = session()
-            .transition(SessionState::Deleted)
-            .expect("合法");
+        let deleted = session().transition(SessionState::Deleted).expect("合法");
         assert!(deleted.transition(SessionState::Listening).is_err());
     }
 

@@ -71,7 +71,9 @@ mod tests {
     fn audio_clock_add_overflow_is_none() {
         assert_eq!(AudioClock::from_millis(u64::MAX).checked_add(1), None);
         assert_eq!(
-            AudioClock::ZERO.checked_add(1500).map(AudioClock::as_millis),
+            AudioClock::ZERO
+                .checked_add(1500)
+                .map(AudioClock::as_millis),
             Some(1500)
         );
     }

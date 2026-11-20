@@ -102,9 +102,11 @@ impl AuditChain {
         record.self_hash = digest(&record.prev_hash, &canonical(&record));
         self.records.push(record);
 
-        if self.records.len() % self.anchor_interval == 0 {
+        if self.records.len().is_multiple_of(self.anchor_interval) {
             let anchor = digest(
-                self.records.last().map_or(GENESIS_HASH, |r| r.self_hash.as_str()),
+                self.records
+                    .last()
+                    .map_or(GENESIS_HASH, |r| r.self_hash.as_str()),
                 "anchor",
             );
             self.anchors.push(anchor);
@@ -157,10 +159,7 @@ mod tests {
         let mut chain = AuditChain::new();
         append_n(&mut chain, 10);
         chain.records[4].summary = "被篡改".to_owned();
-        assert_eq!(
-            chain.verify(),
-            Some(AuditId::new("audit-4").expect("id"))
-        );
+        assert_eq!(chain.verify(), Some(AuditId::new("audit-4").expect("id")));
     }
 
     #[test]

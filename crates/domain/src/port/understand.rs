@@ -4,7 +4,9 @@ use crate::model::enums::{InsightKind, TrustTier};
 use crate::model::governance::EffectivePolicy;
 use crate::model::insight::{InsightFields, RollingSummary};
 use crate::model::utterance::Utterance;
-use crate::vo::{CardRef, ConclusionText, Confidence, InsightRef, SessionId, ShortText, TitleText, UtteranceRef};
+use crate::vo::{
+    CardRef, ConclusionText, Confidence, InsightRef, SessionId, ShortText, TitleText, UtteranceRef,
+};
 
 /// 转写事件：部分结果、最终结果、修订。
 #[derive(Debug, Clone, PartialEq)]
@@ -63,8 +65,10 @@ pub struct LlmResponse {
 }
 
 pub trait Transcriber: Send + Sync {
-    fn transcribe(&self, chunk: &crate::port::capture::AudioChunk)
-        -> Result<Vec<TranscriptEvent>, CopilotError>;
+    fn transcribe(
+        &self,
+        chunk: &crate::port::capture::AudioChunk,
+    ) -> Result<Vec<TranscriptEvent>, CopilotError>;
 }
 
 pub trait RollingSummarizer: Send + Sync {

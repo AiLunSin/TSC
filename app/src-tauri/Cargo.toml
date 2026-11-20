@@ -10,7 +10,7 @@ description = "Tauri 2 桌面壳与 IPC 注册入口。"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-meeting-copilot-ui-bridge = { path = "../../crates/ui-bridge" }
+meeting-copilot-ui-bridge = { version = "0.1.0", path = "../../crates/ui-bridge" }
 tauri = { version = "2", features = [] }
 tracing.workspace = true
 

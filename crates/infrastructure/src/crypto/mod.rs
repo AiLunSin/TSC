@@ -167,7 +167,9 @@ mod tests {
         let master = generate_master();
         let key = derive_l1(&master, "com.meetingcopilot.desktop", b"device-salt").expect("派生");
         let envelope = encrypt_field(&key, "sess-1", "确认下周灰度".as_bytes()).expect("加密");
-        assert!(!envelope.windows(4).any(|window| window == "确认".as_bytes()));
+        assert!(!envelope
+            .windows(4)
+            .any(|window| window == "确认".as_bytes()));
         let plaintext = decrypt_field(&key, "sess-1", &envelope).expect("解密");
         assert_eq!(plaintext, "确认下周灰度".as_bytes());
     }

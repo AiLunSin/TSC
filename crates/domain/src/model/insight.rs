@@ -113,7 +113,9 @@ impl Insight {
         if self.status == InsightStatus::Deleted {
             return Err(InsightError::Deleted);
         }
-        self.mention_count = self.mention_count.saturating_add(other.mention_count.max(1));
+        self.mention_count = self
+            .mention_count
+            .saturating_add(other.mention_count.max(1));
         if !self.manual_locked {
             for source in &other.sources {
                 if !self.sources.contains(source) {

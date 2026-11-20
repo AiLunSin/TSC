@@ -13,8 +13,8 @@
 | MSVC | VS 18 Community（VC Tools x86/x64） | 已具备 |
 | WebView2 | 157.0.4341.60 | Tauri 运行依赖 |
 | clippy | 0.1.100 | `-D warnings` 通过 |
-| rusqlite | 0.32 + bundled SQLite + FTS5(trigram) | 编译通过 |
-| rustfmt | **缺失** | rustup 组件下载被系统拒绝（`os error 5`） |
+| rusqlite | 0.41 + bundled SQLite 3.54.1 + FTS5(trigram) | 编译通过（含 RUSTSEC-2026-0459 修复） |
+| rustfmt | 可用 | 已通过 rustup 安装，`cargo fmt --all --check` 通过 |
 | NASM | **安装失败** | winget 显示成功但注册表与磁盘均无落地，SQLCipher 构建链不可用 |
 
 ## 2. 子任务状态
@@ -53,11 +53,11 @@
 | 前端构建 | `npm run build` | 通过 |
 | 前端规范 | `npm run lint` / `typecheck` | 0 error |
 | Rust 构建 | `cargo build --workspace` | 通过 |
-| Rust 测试 | `cargo test --workspace` | 通过，**78 个测试** |
+| Rust 测试 | `cargo test --workspace` | 通过，**80 个测试** |
 | Rust 静态检查 | `cargo clippy --workspace --all-targets -- -D warnings` | 通过 |
 | 桌面空壳启动 | 运行 `meeting-copilot-desktop.exe` | 进程存活 5 秒，窗口正常 |
 | 密钥扫描 | `scripts/scan-secrets.sh` | 0 命中 |
-| 格式检查 | `cargo fmt --all --check` | **未执行**（rustfmt 不可用） |
+| 格式检查 | `cargo fmt --all --check` | 通过 |
 
 ## 4. 关键偏差：SQLCipher 未启用
 
@@ -70,7 +70,7 @@
 **切换方式（在具备 NASM 的构建机上）**：
 
 ```toml
-rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"] }
+rusqlite = { version = "0.41", features = ["bundled-sqlcipher-vendored-openssl"] }
 ```
 
 切换后需在 `SqliteStore::open` 中执行 `PRAGMA key`（由 L1 派生密钥的十六进制字面量传入），并补 v0→v1 回放测试。
@@ -79,6 +79,6 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher-vendored-openssl"]
 
 1. **macOS 两 target 编译与空壳启动**：需要 mac 机器或 CI runner。
 2. **SQLCipher 页级加密**：需要可用的 NASM/OpenSSL 构建链。
-3. **rustfmt 格式门禁**：本机组件不可用，交 CI。
+3. **rustfmt 格式门禁**：已在本机安装并通过 `cargo fmt --all --check`。
 4. **TS 绑定生成**（1.3）：`pnpm gen:bindings` 对应的生成脚本未落地。
 5. **v0→v1 迁移回放测试**（5.1）。

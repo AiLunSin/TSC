@@ -30,21 +30,9 @@ allow = [
   "CC0-1.0",
   "BSL-1.0",
 ]
-# 强著佐权许可证一律拒绝链接与分发。
-deny = [
-  "AGPL-3.0",
-  "AGPL-3.0-only",
-  "AGPL-3.0-or-later",
-  "GPL-2.0",
-  "GPL-2.0-only",
-  "GPL-2.0-or-later",
-  "GPL-3.0",
-  "GPL-3.0-only",
-  "GPL-3.0-or-later",
-  "SSPL-1.0",
-  "OSL-3.0",
-  "EUPL-1.2",
-]
+# 白名单之外的许可证一律拒绝；AGPL/GPL/SSPL/OSL/EUPL 均不在允许列表内，因此默认被拒绝。
+# 注意：cargo-deny 已移除 [licenses] 的 deny 键（见 EmbarkStudios/cargo-deny#611），
+# 这里依赖 allow 白名单的默认拒绝语义，不要再添加 deny 字段。
 exceptions = []
 
 [bans]

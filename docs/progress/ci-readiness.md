@@ -67,8 +67,26 @@
 | TS 绑定生成 | 已落地手写 `types.ts` + `schema.json` + 双向契约测试 | 后续可替换为 `ts-rs`/`tauri-specta` 自动生成，契约测试保留 |
 | v0→v1 迁移回放 | 已补测试：旧行保留、版本升至 1 | — |
 
-## 5. 推送后的首轮 CI 预期
+## 5. 推送后的首轮 CI 结果
 
-- web 与 compliance 预计一次通过；
-- rust 三 target 首次运行需拉取 Tauri 依赖，耗时可能接近 15 分钟上限，建议观察首个 run 后再决定是否提高 `timeout-minutes`；
-- 若 `cargo deny` 对 `MPL-2.0` 之外的传递依赖报未识别许可证，按实际报错逐项加入 `allow` 或替换依赖。
+| Job | 结果 | 原因 |
+|---|---|---|
+| web | 通过 | — |
+| rust (x86_64-pc-windows-msvc) | 未完成 | 首轮排队超时/被取消 |
+| rust (aarch64-apple-darwin) | 取消 | 1s 内未启动，疑与 run 取消有关 |
+| rust (x86_64-apple-darwin) | 取消 | 同上 |
+| compliance | **失败** | `deny.toml` 使用了 cargo-deny 已移除的 `[licenses] deny` 键 |
+
+## 6. 第二轮修复（针对实际 CI 失败）
+
+| 问题 | 根因 | 修复 |
+|---|---|---|
+| compliance 失败 | cargo-deny 0.22 已移除 `[licenses] deny`（PR #611），配置校验直接报错 | 删除该键，改为依赖 `allow` 白名单的默认拒绝语义 |
+| compliance 失败（潜在） | `bans.wildcards = deny` 命中 3 个工作区 path 依赖 | 为 path 依赖补 `version = "0.1.0"` |
+| compliance 失败（潜在） | `cargo deny advisories` 命中 `libsqlite3-sys 0.30.1`（RUSTSEC-2026-0459，CVE-2026-119375） | `rusqlite` 升级到 0.41（内置 SQLite 3.54.1），`rust-version` 提至 1.89 |
+| compliance 失败（潜在） | `sbom.sh` 使用了不存在的 `cargo cyclonedx --output-cdx` 参数 | 改为 `--format json --spec-version 1.5`，输出名由工具默认生成 |
+| rust 失败（潜在） | 41 个文件未通过 `cargo fmt --check` | 全量 `cargo fmt --all` |
+| rust 超时风险 | Tauri 冷缓存编译耗时长 | `timeout-minutes` 15 → 30 |
+| 仓库噪音 | 跟踪了 `tsconfig.tsbuildinfo`、`src-tauri/gen/schemas` 等生成物 | 移出版本库并加入 `.gitignore` |
+
+本地复验：`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`（80 个测试）、`cargo deny check licenses bans sources advisories`（四项全 ok）、`scripts/check-layering.sh`、`scripts/scan-secrets.sh`、`scripts/sbom.sh ci` 均通过。
