@@ -132,3 +132,16 @@ error: proc macro panicked
 | rust (x86_64-apple-darwin) | ⏹ Cancelled after 1s |
 
 mac 两个 job 在 1 秒内被取消，属 runner 标签无法分配（`macos-14` 已不可用），与代码无关。修复：改用 `macos-latest` 承载两个 target，x86_64 采用交叉编译。
+
+## 9. 第四轮 CI 修复（2026-11-20）
+
+macOS job 已能分配到 runner，但 `clippy` 报：
+
+```
+error: proc macro panicked
+= help: message: failed to open icon app/src-tauri/icons/icon.png: No such file or directory
+```
+
+原因：Windows 构建使用 `icon.ico`，macOS 构建要求 `icon.png`。
+
+修复：`scripts/gen-icon.py` 同时生成 `icon.ico`（32×32）与 `icon.png`（128×128 RGBA），已纳入版本控制。
