@@ -78,6 +78,16 @@ jobs:
           key: ${{ matrix.target }}
           cache-on-failure: true
           workspaces: ". -> target"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: web-assets
+        working-directory: app
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - name: fmt
         run: cargo fmt --all --check
       - name: clippy

@@ -104,3 +104,19 @@
 本地复验：layering PASS、secrets 0 命中、`cargo deny` 四项 OK、SBOM 生成 **705 个组件**（176 KB）。
 
 mac 任务的 `cancelled` 属于同分支并发推送取消旧 run，待下次推送观察。
+
+## 7. 第二轮 CI 修复（2026-11-20）
+
+失败点：`rust (x86_64-pc-windows-msvc)` 的 `clippy` 步骤，27s 失败。
+
+日志关键行：
+
+```
+error: proc macro panicked
+--> app/src-tauri\src\main.rs:20:14
+= help: message: The 'frontendDist' configuration is set to "../dist" but this path doesn't exist
+```
+
+原因：`tauri::generate_context!()` 在编译期读取 `frontendDist`，Rust job 未构建前端，`app/dist` 不存在。
+
+修复：Rust matrix 三个 target 在 `fmt/clippy/build/test` 前增加 `web-assets` 步骤（`npm ci` + `npm run build`），确保 `app/dist` 存在。
