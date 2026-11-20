@@ -1,0 +1,11 @@
+node_modules/
+dist/
+target/
+*.log
+.env
+.env.*
+.DS_Store
+.vscode/
+.idea/
+docs/compliance/sbom/*.json
+!docs/compliance/sbom/.gitkeep

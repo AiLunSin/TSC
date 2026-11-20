@@ -1,0 +1,117 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  web:
+    name: web (lint + typecheck + bindings + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: install
+        working-directory: app
+        run: npm ci --no-audit --no-fund
+      - name: lint
+        working-directory: app
+        run: npm run lint
+      - name: typecheck
+        working-directory: app
+        run: npm run typecheck
+      - name: bindings-contract
+        working-directory: app
+        run: npm run check:bindings
+      - name: build
+        working-directory: app
+        run: npm run build
+      - name: bundle-size-budget
+        working-directory: app
+        shell: bash
+        run: |
+          set -euo pipefail
+          total=0
+          while IFS= read -r -d '' file; do
+            size=$(gzip -9 -c "$file" | wc -c)
+            total=$((total + size))
+          done < <(find dist/assets -type f \( -name '*.js' -o -name '*.css' \) -print0)
+          echo "gzip total = ${total} bytes"
+          test "${total}" -le 819200
+
+  rust:
+    name: rust (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-14
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+          cache-on-failure: true
+          workspaces: ". -> target"
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --target ${{ matrix.target }} -- -D warnings
+      - name: build
+        run: cargo build --workspace --target ${{ matrix.target }}
+      - name: test
+        run: cargo test --workspace --target ${{ matrix.target }}
+
+  compliance:
+    name: compliance (licenses + sbom + secrets + layering)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-cyclonedx
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: layering
+        run: bash scripts/check-layering.sh
+      - name: secrets
+        run: bash scripts/scan-secrets.sh
+      - name: licenses
+        run: cargo deny check licenses bans sources advisories
+      - name: sbom
+        run:
+          npm i -g @cyclonedx/cyclonedx-npm && bash scripts/sbom.sh ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: docs/compliance/sbom/*.json
+          if-no-files-found: error

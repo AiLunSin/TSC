@@ -1,0 +1,19 @@
+[package]
+name = "meeting-copilot-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Tauri 2 桌面壳与 IPC 注册入口。"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+meeting-copilot-ui-bridge = { path = "../../crates/ui-bridge" }
+tauri = { version = "2", features = [] }
+tracing.workspace = true
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

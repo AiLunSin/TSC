@@ -1,0 +1,12 @@
+[package]
+name = "meeting-copilot-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "应用层：会话编排、要点服务、主动提示管线。"
+
+[dependencies]
+meeting-copilot-domain = { path = "../domain" }
+serde.workspace = true
+thiserror.workspace = true

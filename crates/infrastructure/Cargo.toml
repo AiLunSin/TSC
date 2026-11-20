@@ -1,0 +1,17 @@
+[package]
+name = "meeting-copilot-infrastructure"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "基础设施层：加密存储、审计链、检索抓取、LLM 网关、度量。"
+
+[dependencies]
+aes-gcm = "0.10"
+hkdf = "0.12"
+meeting-copilot-domain = { path = "../domain" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde_json.workspace = true
+serde.workspace = true
+sha2 = "0.10"
+thiserror.workspace = true

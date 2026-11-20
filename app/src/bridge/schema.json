@@ -1,0 +1,14 @@
+{
+  "SessionSummaryDto": ["sessionId", "platform", "state", "startedAtMs", "channel"],
+  "ChannelStatusDto": ["name", "state", "detail"],
+  "SuggestionCardDto": [
+    "cardId",
+    "kind",
+    "title",
+    "conclusion",
+    "trust",
+    "sourceLabel",
+    "shownAtMs"
+  ],
+  "IpcErrorDto": ["code", "message", "retryable"]
+}

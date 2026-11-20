@@ -1,0 +1,9 @@
+[package]
+name = "meeting-copilot-platform-win"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Windows 平台：WASAPI 环回、UI Automation 字幕读取、Windows.Media.Ocr。"
+
+[dependencies]

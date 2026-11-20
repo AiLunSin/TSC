@@ -1,0 +1,14 @@
+[package]
+name = "meeting-copilot-ui-bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "IPC DTO 与 serde/TS 绑定生成。"
+
+[dependencies]
+serde.workspace = true
+
+
+[dev-dependencies]
+serde_json.workspace = true

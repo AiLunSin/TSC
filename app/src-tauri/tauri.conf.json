@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Meeting Copilot",
+  "version": "0.1.0",
+  "identifier": "com.meetingcopilot.desktop",
+  "build": {
+    "beforeDevCommand": "npm --prefix .. run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm --prefix .. run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "会议副驾 Meeting Copilot",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "center": true,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "会议实时要点与联网补全助手"
+  }
+}

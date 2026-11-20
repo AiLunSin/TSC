@@ -1,0 +1,15 @@
+[package]
+name = "meeting-copilot-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "领域层：模型、值对象、端口 trait、Guardrail 纯函数。禁止依赖平台与网络实现。"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest = "1"
+serde_json.workspace = true

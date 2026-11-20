@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+  "app/src-tauri",
+  "crates/domain",
+  "crates/application",
+  "crates/infrastructure",
+  "crates/platform-win",
+  "crates/platform-mac",
+  "crates/ui-bridge",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
