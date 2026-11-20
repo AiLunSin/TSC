@@ -194,3 +194,30 @@ SQLCipher 模式下 `SqliteStore::open_in_memory()` 仍以 `key = None` 调用 `
 - `taiki-e/install-action` 的 `cargo-deny` 锁定为 `0.22.0`（本地 `licenses ok` 的版本）。
 
 本地限制：rustfmt 独立二进制在当前环境被系统拦截（exit 127），无法本地复跑 `fmt --check`。
+
+## 12. 第七轮修复：fmt 与 SQLCipher CVE（2026-11-20）
+
+### 失败 1：Rust 三个 job 的 `fmt`
+
+原因：`open_in_memory` 新增代码在 `impl` 内缺少 4 空格缩进（注释与函数签名首行）。已用工具链自带 `rustfmt 1.11.0` 修正，`cargo fmt --all --check` 0 差异。
+
+### 失败 2：compliance 的 `advisories`
+
+`licenses ok`，实际失败项为 `advisories`：`sqlcipher-src 419.0.6` 命中 **RUSTSEC-2026-0502**（CVE-2026-119375，SQLite WAL 读取帧漏洞）。
+
+修复：升级 `rusqlite 0.41.1 → 0.43.0`，依赖随之更新：
+
+| 依赖 | 旧 | 新 |
+|---|---|---|
+| rusqlite | 0.41.1 | 0.43.0 |
+| libsqlite3-sys | 0.39.1 | 0.40.0 |
+| sqlcipher-src | 419.0.6（受影响） | **420.0.0（含修复）** |
+
+### 本地复验
+
+- `cargo test --workspace` → 80 passed, 0 failed
+- `cargo clippy -p infrastructure -D warnings` → 通过
+- `cargo deny check advisories` → `advisories ok`
+- `cargo fmt --all --check` → 0 差异
+
+SQLCipher feature 的实际编译仍需 Ubuntu CI 验证（本地 Perl 缺少 `Locale::Maketext::Simple`）。

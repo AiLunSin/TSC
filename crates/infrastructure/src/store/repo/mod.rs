@@ -94,19 +94,13 @@ impl SqliteStore {
         Self::prepare(conn, config.wal_enabled, key)
     }
 
-/// 内存库不落盘。SQLCipher 模式下仍需密钥才能启用加密引擎，
-/// 因此此处生成一次性随机密钥；库销毁后密钥随之丢失。
-pub fn open_in_memory() -> Result<Self, StoreError> {
-    let conn = Connection::open_in_memory().map_err(sql_error)?;
-    #[cfg(feature = "sqlcipher")]
-    let prepared = {
-        let key = StoreKey::new(crate::crypto::generate_master());
-        Self::prepare(conn, false, Some(&key))
-    };
-    #[cfg(not(feature = "sqlcipher"))]
-    let prepared = Self::prepare(conn, false, None);
-    prepared
-}
+    /// 内存库不落盘。SQLCipher 模式下仍需密钥才能启用加密引擎，
+    /// 因此此处生成一次性随机密钥；库销毁后密钥随之丢失。
+    pub fn open_in_memory() -> Result<Self, StoreError> {
+        let conn = Connection::open_in_memory().map_err(sql_error)?;
+        let key = memory_key();
+        Self::prepare(conn, false, key.as_ref())
+    }
 
     fn prepare(
         conn: Connection,
@@ -216,6 +210,16 @@ pub fn open_in_memory() -> Result<Self, StoreError> {
             .map_err(sql_error)?;
         usize::try_from(count).map_err(|_| StoreError::Sqlite("count 溢出".into()))
     }
+}
+
+#[cfg(feature = "sqlcipher")]
+fn memory_key() -> Option<StoreKey> {
+    Some(StoreKey::new(crate::crypto::generate_master()))
+}
+
+#[cfg(not(feature = "sqlcipher"))]
+fn memory_key() -> Option<StoreKey> {
+    None
 }
 
 /// 在读取任何数据页之前下发 SQLCipher 原始密钥，并用一次元数据读取校验密钥。

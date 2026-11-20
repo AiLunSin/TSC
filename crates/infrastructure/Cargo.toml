@@ -17,7 +17,7 @@ sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
 aes-gcm = "0.10"
 hkdf = "0.12"
 meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
-rusqlite = { version = "0.41" }
+rusqlite = { version = "0.43" }
 serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"
