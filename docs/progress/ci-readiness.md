@@ -184,3 +184,13 @@ SQLCipher 模式下 `SqliteStore::open_in_memory()` 仍以 `key = None` 调用 `
 - `cargo deny check licenses` → `licenses ok`
 - `cargo test -p meeting-copilot-infrastructure` → 24 passed
 - `cargo clippy -p meeting-copilot-infrastructure --all-targets -D warnings` → 通过
+
+## 11. 第六轮：工具链版本锁定（2026-11-20）
+
+最新一轮三个 Rust job 在 23s–1m 内失败，compliance 16s 失败，均未进入有效编译阶段。本地 `check-layering`、`scan-secrets`、`cargo deny licenses` 均为通过，判断为 **stable 工具链漂移**：`@stable` 已解析到新版本，新版 rustfmt/clippy 会使原本通过的代码失败。
+
+修复：
+- 所有 `dtolnay/rust-toolchain@stable` 锁定为 `@1.100.0`（与本地验证版本一致）；
+- `taiki-e/install-action` 的 `cargo-deny` 锁定为 `0.22.0`（本地 `licenses ok` 的版本）。
+
+本地限制：rustfmt 独立二进制在当前环境被系统拦截（exit 127），无法本地复跑 `fmt --check`。
