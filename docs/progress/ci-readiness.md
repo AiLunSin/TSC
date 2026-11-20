@@ -90,3 +90,17 @@
 | 仓库噪音 | 跟踪了 `tsconfig.tsbuildinfo`、`src-tauri/gen/schemas` 等生成物 | 移出版本库并加入 `.gitignore` |
 
 本地复验：`cargo fmt --all --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`（80 个测试）、`cargo deny check licenses bans sources advisories`（四项全 ok）、`scripts/check-layering.sh`、`scripts/scan-secrets.sh`、`scripts/sbom.sh ci` 均通过。
+## 6. 首轮 CI 结果与修复（2026-11-20）
+
+首轮结果（AiLunSin/TSC）：web 通过（22s）；compliance 失败（32s）；rust 矩阵中 mac 两个任务被并发取消，windows 进行中。
+
+| 问题 | 修复 |
+|---|---|
+| `taiki-e/install-action` 不支持 `cargo-cyclonedx`，安装步骤可能直接失败 | 仅保留 `cargo-deny` |
+| `cyclonedx-npm` 扫描 `node_modules` 长时间不返回 | 改为零依赖锁文件生成 `scripts/gen-sbom.mjs` |
+| `sbom.sh` 使用 `timeout`，在 Windows 上解析到 `TIMEOUT.EXE` 导致挂起 | 移除 timeout 包装 |
+| `cargo-cyclonedx` 安装耗时且非必需 | 移除，Rust 组件直接从 `Cargo.lock` 解析 |
+
+本地复验：layering PASS、secrets 0 命中、`cargo deny` 四项 OK、SBOM 生成 **705 个组件**（176 KB）。
+
+mac 任务的 `cancelled` 属于同分支并发推送取消旧 run，待下次推送观察。

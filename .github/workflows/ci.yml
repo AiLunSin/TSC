@@ -97,10 +97,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-deny,cargo-cyclonedx
+          tool: cargo-deny
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: layering
         run: bash scripts/check-layering.sh
       - name: secrets
@@ -108,8 +109,7 @@ jobs:
       - name: licenses
         run: cargo deny check licenses bans sources advisories
       - name: sbom
-        run:
-          npm i -g @cyclonedx/cyclonedx-npm && bash scripts/sbom.sh ci
+        run: bash scripts/sbom.sh ci
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
