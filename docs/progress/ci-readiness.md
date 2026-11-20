@@ -120,3 +120,15 @@ error: proc macro panicked
 原因：`tauri::generate_context!()` 在编译期读取 `frontendDist`，Rust job 未构建前端，`app/dist` 不存在。
 
 修复：Rust matrix 三个 target 在 `fmt/clippy/build/test` 前增加 `web-assets` 步骤（`npm ci` + `npm run build`），确保 `app/dist` 存在。
+
+## 8. 第三轮 CI 结果与修复（2026-11-20）
+
+| 任务 | 结果 |
+|---|---|
+| web | ✅ 18s |
+| compliance | ✅ 16s |
+| rust (x86_64-pc-windows-msvc) | ✅ 4m |
+| rust (aarch64-apple-darwin) | ⏹ Cancelled after 1s |
+| rust (x86_64-apple-darwin) | ⏹ Cancelled after 1s |
+
+mac 两个 job 在 1 秒内被取消，属 runner 标签无法分配（`macos-14` 已不可用），与代码无关。修复：改用 `macos-latest` 承载两个 target，x86_64 采用交叉编译。
