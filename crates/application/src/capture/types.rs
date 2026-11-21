@@ -96,6 +96,24 @@ pub enum CaptureAvailability {
     Unavailable { reason: GapReason, code: ErrorCode },
 }
 
+/// 汇总可用性事件（AC-B2-OC-C07/C08/D08）：字段白名单恰 4 项。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CaptureAvailabilityEvent {
+    pub availability: CaptureAvailability,
+    pub gap_reason: Option<GapReason>,
+    pub code: Option<ErrorCode>,
+    pub sequence: u64,
+}
+
+/// 状态推送投递单元：通道事件与汇总事件共用会话序号流。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureStatusDelivery {
+    pub session: SessionId,
+    pub channel: Option<ChannelStatusEvent>,
+    pub availability: Option<CaptureAvailabilityEvent>,
+    pub determined_at: MonoMillis,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelSwitchRecord {
     pub session: SessionId,
@@ -187,6 +205,12 @@ pub struct CapturePolicy {
     pub gap_tolerance_ms: u64,
     pub backfill_max_ms: u64,
     pub validation_interval_ms: u64,
+    pub gap_reopen_merge_ms: u64,
+    pub status_queue_capacity: u64,
+    pub status_handler_timeout_ms: u64,
+    pub status_latency_ring: u64,
+    pub seq_upper_bound_margin: u64,
+    pub boundary_contact_max_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -214,6 +238,12 @@ impl Default for CapturePolicy {
             gap_tolerance_ms: 400,
             backfill_max_ms: 8_000,
             validation_interval_ms: 10_000,
+            gap_reopen_merge_ms: 1_000,
+            status_queue_capacity: 64,
+            status_handler_timeout_ms: 50,
+            status_latency_ring: 256,
+            seq_upper_bound_margin: 4_096,
+            boundary_contact_max_ms: 400,
         }
     }
 }
@@ -254,6 +284,42 @@ impl CapturePolicy {
             return Err(CapturePolicyError::OutOfRange {
                 field: "validation_interval_ms",
                 value: self.validation_interval_ms,
+            });
+        }
+        if !(1..=2_000).contains(&self.gap_reopen_merge_ms) {
+            return Err(CapturePolicyError::OutOfRange {
+                field: "gap_reopen_merge_ms",
+                value: self.gap_reopen_merge_ms,
+            });
+        }
+        if self.status_queue_capacity != 64 {
+            return Err(CapturePolicyError::OutOfRange {
+                field: "status_queue_capacity",
+                value: self.status_queue_capacity,
+            });
+        }
+        if !(1..=500).contains(&self.status_handler_timeout_ms) {
+            return Err(CapturePolicyError::OutOfRange {
+                field: "status_handler_timeout_ms",
+                value: self.status_handler_timeout_ms,
+            });
+        }
+        if self.status_latency_ring < 256 {
+            return Err(CapturePolicyError::OutOfRange {
+                field: "status_latency_ring",
+                value: self.status_latency_ring,
+            });
+        }
+        if self.seq_upper_bound_margin == 0 {
+            return Err(CapturePolicyError::OutOfRange {
+                field: "seq_upper_bound_margin",
+                value: 0,
+            });
+        }
+        if self.boundary_contact_max_ms > 1_000 {
+            return Err(CapturePolicyError::OutOfRange {
+                field: "boundary_contact_max_ms",
+                value: self.boundary_contact_max_ms,
             });
         }
         Ok(())
@@ -328,5 +394,94 @@ mod tests {
             ..Default::default()
         };
         assert!(numerator_too_large.validate().is_err());
+    }
+
+    /// AC-B2-OC-C01/C08/C09/D04/D05/D07：新增字段默认值不改变既有取值。
+    #[test]
+    fn policy_default_keeps_existing_values() {
+        let policy = CapturePolicy::default();
+        assert_eq!(policy.gap_min_ms, 1_000);
+        assert_eq!(policy.gap_tolerance_ms, 400);
+        assert_eq!(policy.backfill_max_ms, 8_000);
+        assert_eq!(policy.gap_reopen_merge_ms, 1_000);
+        assert_eq!(policy.status_queue_capacity, 64);
+        assert_eq!(policy.status_handler_timeout_ms, 50);
+        assert_eq!(policy.status_latency_ring, 256);
+        assert_eq!(policy.seq_upper_bound_margin, 4_096);
+        assert_eq!(policy.boundary_contact_max_ms, 400);
+        assert!(policy.validate().is_ok());
+    }
+
+    /// AC-B2-OC-C01/D04/D05/D07：6 个新字段越界各判 1 次（表驱动）。
+    #[test]
+    fn policy_rejects_out_of_range_new_fields() {
+        let cases: [(CapturePolicy, &str); 8] = [
+            (
+                CapturePolicy {
+                    gap_reopen_merge_ms: 0,
+                    ..Default::default()
+                },
+                "gap_reopen_merge_ms",
+            ),
+            (
+                CapturePolicy {
+                    gap_reopen_merge_ms: 2_001,
+                    ..Default::default()
+                },
+                "gap_reopen_merge_ms",
+            ),
+            (
+                CapturePolicy {
+                    status_queue_capacity: 63,
+                    ..Default::default()
+                },
+                "status_queue_capacity",
+            ),
+            (
+                CapturePolicy {
+                    status_handler_timeout_ms: 0,
+                    ..Default::default()
+                },
+                "status_handler_timeout_ms",
+            ),
+            (
+                CapturePolicy {
+                    status_handler_timeout_ms: 501,
+                    ..Default::default()
+                },
+                "status_handler_timeout_ms",
+            ),
+            (
+                CapturePolicy {
+                    status_latency_ring: 255,
+                    ..Default::default()
+                },
+                "status_latency_ring",
+            ),
+            (
+                CapturePolicy {
+                    seq_upper_bound_margin: 0,
+                    ..Default::default()
+                },
+                "seq_upper_bound_margin",
+            ),
+            (
+                CapturePolicy {
+                    boundary_contact_max_ms: 1_001,
+                    ..Default::default()
+                },
+                "boundary_contact_max_ms",
+            ),
+        ];
+        for (policy, field) in cases {
+            let result = policy.validate();
+            assert!(
+                matches!(
+                    result,
+                    Err(CapturePolicyError::OutOfRange { field: hit, .. }) if hit == field
+                ),
+                "{field} 应拒绝，实际 {result:?}"
+            );
+        }
     }
 }

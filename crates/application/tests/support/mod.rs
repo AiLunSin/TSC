@@ -1,6 +1,22 @@
 #![allow(dead_code)]
 
-//! 应用层测试替身：可手动推进的时钟。禁止读取系统时间。
+//! 应用层测试替身：可手动推进的时钟与全替身离线装配。
+
+pub mod fakes;
+
+#[allow(unused_imports)]
+pub use self::fakes::{
+    ConnectCounter, CountingAsrDelivery, CountingAudit, CountingInsight, MemoryGapLog,
+    MemorySwitchLog, MonotonicSystemClock, RecordingStatusSink, SentinelRepos,
+};
+
+use std::sync::Arc;
+
+use meeting_copilot_application::capture::{
+    CaptureChannelService, CapturePolicy, CountingDiagnostics, SessionContextView,
+};
+use meeting_copilot_domain::model::{ChannelPreference, Platform, SessionState};
+use meeting_copilot_domain::vo::SessionId;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -68,5 +84,64 @@ impl CaptureClock for ManualClock {
         Ok(WallClock::from_unix_millis(
             self.wall_base.as_unix_millis().saturating_add(offset),
         ))
+    }
+}
+/// 单一全替身装配：≥4 个测试文件复用（AC-B2-OC-E06）。
+pub struct OfflineHarness {
+    pub service: CaptureChannelService,
+    pub clock: Arc<ManualClock>,
+    pub gaps: Arc<MemoryGapLog>,
+    pub switches: Arc<MemorySwitchLog>,
+    pub asr: Arc<CountingAsrDelivery>,
+    pub insight: Arc<CountingInsight>,
+    pub diagnostics: Arc<CountingDiagnostics>,
+    pub audit: Arc<CountingAudit>,
+    pub connections: Arc<ConnectCounter>,
+    pub sentinel: Arc<SentinelRepos>,
+    pub status_sink: Arc<RecordingStatusSink>,
+}
+
+pub fn build_offline_capture(policy: CapturePolicy) -> OfflineHarness {
+    let clock = Arc::new(ManualClock::new(WallClock::from_unix_millis(0)));
+    let gaps = Arc::new(MemoryGapLog::default());
+    let switches = Arc::new(MemorySwitchLog::default());
+    let asr = Arc::new(CountingAsrDelivery::default());
+    let insight = Arc::new(CountingInsight::default());
+    let diagnostics = Arc::new(CountingDiagnostics::new());
+    let audit = Arc::new(CountingAudit::default());
+    let connections = Arc::new(ConnectCounter::default());
+    let sentinel = Arc::new(SentinelRepos::default());
+    let status_sink = Arc::new(RecordingStatusSink::default());
+    let service = CaptureChannelService::with_offline_ports(
+        clock.clone(),
+        switches.clone(),
+        gaps.clone(),
+        status_sink.clone(),
+        asr.clone(),
+        insight.clone(),
+        diagnostics.clone(),
+        policy,
+    );
+    OfflineHarness {
+        service,
+        clock,
+        gaps,
+        switches,
+        asr,
+        insight,
+        diagnostics,
+        audit,
+        connections,
+        sentinel,
+        status_sink,
+    }
+}
+
+pub fn offline_view(session: &str) -> SessionContextView {
+    SessionContextView {
+        session: SessionId::new(session).expect("session"),
+        platform: Platform::TencentMeeting,
+        channel_preference: ChannelPreference::SubtitleFirst,
+        session_state: SessionState::Listening,
     }
 }

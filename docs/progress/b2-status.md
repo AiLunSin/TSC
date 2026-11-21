@@ -30,6 +30,7 @@
 ### 验证
 
 - `cargo test -p meeting-copilot-application`：**48 passed / 0 failed**
+  > 已过期，以 b2-offline-closure 实测为准（399 passed / 0 failed / 8 ignored）。
   - lib 29
   - `capture_channel_state` 10
   - `capture_service` 5
@@ -37,13 +38,18 @@
 - clippy（application，all targets）：0
 - fmt：0
 - 既有 workspace 265 测试基线未回退（本轮未重跑全量）
+  > 已过期，以 b2-offline-closure 实测为准（399 passed / 0 failed）。
 
 ### 未完成
 
 - 阶段 C：双通道失效保护的完整缺口合并与“要点不丢”承接
+  > 已过期：阶段 C 已在 b2-offline-closure 完成并判定。
 - 阶段 D：状态推送订阅、p99 ≤5s 的离线测量、快照强一致
+  > 已过期：阶段 D 已在 b2-offline-closure 完成并判定。
 - 阶段 E：替身装配、契约冻结、G2 扫描脚本
+  > 已过期：阶段 E 已在 b2-offline-closure 完成并判定。
 - 阶段 F：总门禁（≥320）
+  > 已过期，阈值收紧为 ≥360（实测 399）。
 - 同毫秒合并尚未接入真实写入路径
 - `advance_to` 仅实现 5s 回退子集
 

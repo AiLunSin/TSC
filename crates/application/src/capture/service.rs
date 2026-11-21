@@ -1,10 +1,10 @@
-//! 采集通道服务门面（B2.23.5.1 的最小子集）。
+//! 采集通道服务门面（B2.23.5.1 的最小子集 + B2 离线闭环接线）。
 //!
-//! 已装配：注册表、仲裁决策、切换记录、gap/status/asr 端口。
-//! 尚未：同毫秒合并进入真实写入、完整 `advance_to`、推送订阅。
+//! `observe` 副作用顺序（契约）：
+//! 状态机 → 通道事件发布 → 仲裁/切换记录 → 汇总事件发布 → 守卫缺口判定 → 回补投递。
+//! 任何新副作用只能追加在末位。
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use meeting_copilot_domain::error::ErrorCode;
@@ -17,14 +17,19 @@ use meeting_copilot_domain::vo::{MonoMillis, SessionId, WallClock};
 
 use super::capture_budget::AsrBudget;
 use super::capture_ports::{
-    AsrDeliverySink, ChannelGapLog, ChannelStatusSink, NoopAsrDelivery, NoopGapLog, NoopStatusSink,
+    AsrDeliverySink, ChannelGapLog, ChannelStatusSink, DiagnosticsSink, InsightInvariantPort,
+    NoopAsrDelivery, NoopDiagnostics, NoopGapLog, NoopInsight, NoopStatusSink,
 };
 use super::capture_resume::CaptureResumeLedger;
 use super::channel_arbiter::{decide, subtitle_fallback_due, Decision};
 use super::channel_state::ChannelStateRegistry;
+use super::degraded_guard::{DegradedGuard, GapCloseOutcome, GuardTransition};
+use super::diagnostics::DiagnosticCounter;
+use super::status_publisher::StatusPublisher;
+use super::subscriptions::{DrainReport, StatusHandler, SubscriptionHandle};
 use super::switch_log::{ChannelSwitchLog, SwitchTracker};
 use super::types::{
-    ActiveChannel, AsrIntent, AsrIntentKind, CaptureAvailability, CaptureGapRecord, CapturePolicy,
+    ActiveChannel, AsrIntentKind, CaptureAvailability, CaptureAvailabilityEvent, CapturePolicy,
     ChannelObservation, ChannelSnapshot, ChannelStatusEvent, ObservationOutcome,
     ObservationPayload, RejectReason, SessionContextView,
 };
@@ -40,8 +45,9 @@ pub struct CaptureChannelService {
     gap_log: Arc<dyn ChannelGapLog>,
     status_sink: Arc<dyn ChannelStatusSink>,
     asr_sink: Arc<dyn AsrDeliverySink>,
-    status_seq: AtomicU64,
-    gap_start: Mutex<HashMap<SessionId, (MonoMillis, GapReason)>>,
+    diagnostics: Arc<dyn DiagnosticsSink>,
+    publisher: Arc<StatusPublisher>,
+    guard: Arc<DegradedGuard>,
     policy: CapturePolicy,
 }
 
@@ -69,7 +75,42 @@ impl CaptureChannelService {
         asr_sink: Arc<dyn AsrDeliverySink>,
         policy: CapturePolicy,
     ) -> Self {
+        Self::with_offline_ports(
+            clock,
+            switch_log,
+            gap_log,
+            status_sink,
+            asr_sink,
+            Arc::new(NoopInsight),
+            Arc::new(NoopDiagnostics),
+            policy,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_offline_ports(
+        clock: Arc<dyn CaptureClock>,
+        switch_log: Arc<dyn ChannelSwitchLog>,
+        gap_log: Arc<dyn ChannelGapLog>,
+        status_sink: Arc<dyn ChannelStatusSink>,
+        asr_sink: Arc<dyn AsrDeliverySink>,
+        insight: Arc<dyn InsightInvariantPort>,
+        diagnostics: Arc<dyn DiagnosticsSink>,
+        policy: CapturePolicy,
+    ) -> Self {
         let registry_clock = clock.clone();
+        let publisher = Arc::new(StatusPublisher::with_diagnostics(
+            clock.clone(),
+            status_sink.clone(),
+            policy,
+            diagnostics.clone(),
+        ));
+        let guard = Arc::new(DegradedGuard::new(
+            clock.clone(),
+            insight,
+            diagnostics.clone(),
+            policy,
+        ));
         Self {
             clock,
             registry: Mutex::new(ChannelStateRegistry::new(registry_clock)),
@@ -81,14 +122,19 @@ impl CaptureChannelService {
             gap_log,
             status_sink,
             asr_sink,
-            status_seq: AtomicU64::new(0),
-            gap_start: Mutex::new(HashMap::new()),
+            diagnostics,
+            publisher,
+            guard,
             policy,
         }
     }
 
     pub fn policy(&self) -> CapturePolicy {
         self.policy
+    }
+
+    pub fn diagnostics(&self) -> super::diagnostics::DiagnosticsSnapshot {
+        self.diagnostics.snapshot()
     }
 
     pub fn attach_session(&self, context: SessionContextView) -> Result<(), ChannelStateError> {
@@ -119,22 +165,8 @@ impl CaptureChannelService {
     }
 
     pub fn detach_session(&self, session: &SessionId) {
-        if let Some((start, reason)) = self
-            .gap_start
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
-            .remove(session)
-        {
-            let end = self.clock.mono_now().unwrap_or(MonoMillis::ZERO);
-            let record = CaptureGapRecord {
-                session: session.clone(),
-                start,
-                end,
-                reason,
-                backfilled: false,
-            };
-            let _ = self.gap_log.append(&record);
-        }
+        self.flush_gaps(session);
+        self.publisher.detach(session);
         self.registry
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
@@ -190,11 +222,8 @@ impl CaptureChannelService {
                 .lock()
                 .unwrap_or_else(|poison| poison.into_inner());
             (
-                registry.state(
-                    session,
-                    meeting_copilot_domain::model::ChannelKind::Subtitle,
-                ),
-                registry.state(session, meeting_copilot_domain::model::ChannelKind::Audio),
+                registry.state(session, ChannelKind::Subtitle),
+                registry.state(session, ChannelKind::Audio),
             )
         };
         let Some(subtitle) = subtitle else {
@@ -223,8 +252,60 @@ impl CaptureChannelService {
             wall_at,
             self.switch_log.as_ref(),
         );
-        self.handle_gap(session, decision, observation.at);
+        drop(trackers);
+        self.publish_availability(session, decision, observation.at);
+        let transition =
+            self.guard
+                .on_availability(session, availability_of(decision), observation.at);
+        if let Ok(transition) = transition {
+            self.apply_transition(session, &transition);
+        }
         outcome
+    }
+
+    fn publish_availability(&self, session: &SessionId, decision: Decision, at: MonoMillis) {
+        let availability = availability_of(decision);
+        let (gap_reason, code) = match availability {
+            CaptureAvailability::Unavailable { reason, code } => (Some(reason), Some(code)),
+            CaptureAvailability::Available { .. } => (None, None),
+        };
+        self.publisher.publish_availability(
+            CaptureAvailabilityEvent {
+                availability,
+                gap_reason,
+                code,
+                sequence: 0,
+            },
+            session,
+        );
+        let _ = at;
+    }
+
+    fn apply_transition(&self, session: &SessionId, transition: &GuardTransition) {
+        let GuardTransition::Closed { outcome } = transition else {
+            return;
+        };
+        let GapCloseOutcome::Persisted { record, intent, .. } = outcome else {
+            return;
+        };
+        let active = self.active_channel(session);
+        let allowed = self
+            .asr_budget
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .entry(session.clone())
+            .or_insert_with(AsrBudget::with_default_interval)
+            .try_issue(active, AsrIntentKind::GapBackfill, record.end);
+        if allowed {
+            if let Some(intent) = intent {
+                let _ = self.asr_sink.deliver(intent);
+            }
+        } else {
+            self.diagnostics.bump(DiagnosticCounter::BackfillBlocked, 1);
+        }
+        let mut persisted = record.clone();
+        persisted.backfilled = allowed;
+        let _ = self.gap_log.append(&persisted);
     }
 
     fn publish_status(&self, observation: &ChannelObservation) {
@@ -241,7 +322,6 @@ impl CaptureChannelService {
                 .map(|instance| (instance.state, instance.reason))
                 .unwrap_or((ChannelState::Probing, None))
         };
-        let sequence = self.status_seq.fetch_add(1, Ordering::SeqCst);
         let wall_at = self
             .clock
             .wall_now()
@@ -250,70 +330,17 @@ impl CaptureChannelService {
             key: ChannelKey::new(observation.platform, observation.kind),
             state,
             reason: reason.unwrap_or(StateReason::ProbeCompleted),
-            sequence,
+            sequence: 0,
             determined_at: observation.at,
             wall_at,
         };
-        let _ = self.status_sink.publish(&event);
+        self.publisher.publish_channel(event, session);
     }
 
-    fn handle_gap(&self, session: &SessionId, decision: Decision, at: MonoMillis) {
-        let mut gaps = self
-            .gap_start
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
-        if decision.active == ActiveChannel::None {
-            if let Some(reason) = decision.gap {
-                gaps.entry(session.clone()).or_insert((at, reason));
-                self.resume
-                    .lock()
-                    .unwrap_or_else(|poison| poison.into_inner())
-                    .entry(session.clone())
-                    .or_default()
-                    .begin_gap(at);
-            }
-            return;
-        }
-        if let Some((start, reason)) = gaps.remove(session) {
-            let allowed = self
-                .asr_budget
-                .lock()
-                .unwrap_or_else(|poison| poison.into_inner())
-                .entry(session.clone())
-                .or_insert_with(AsrBudget::with_default_interval)
-                .try_issue(decision.active, AsrIntentKind::GapBackfill, at);
-            if allowed {
-                let chunk_count = u32::try_from(
-                    at.as_millis()
-                        .saturating_sub(start.as_millis())
-                        .div_ceil(400)
-                        .max(1),
-                )
-                .unwrap_or(u32::MAX);
-                let intent = AsrIntent {
-                    session: session.clone(),
-                    kind: AsrIntentKind::GapBackfill,
-                    window_start: start,
-                    window_end: at,
-                    chunk_count,
-                };
-                let _ = self.asr_sink.deliver(&intent);
-            }
-            let record = CaptureGapRecord {
-                session: session.clone(),
-                start,
-                end: at,
-                reason,
-                backfilled: allowed,
-            };
-            let _ = self.gap_log.append(&record);
-            self.resume
-                .lock()
-                .unwrap_or_else(|poison| poison.into_inner())
-                .entry(session.clone())
-                .or_default()
-                .end_gap();
-        }
+    pub fn flush_gaps(&self, session: &SessionId) {
+        let at = self.clock.mono_now().unwrap_or(MonoMillis::ZERO);
+        let transition = self.guard.force_close(session, at);
+        self.apply_transition(session, &transition);
     }
 
     pub fn record_point(&self, session: &SessionId, point_id: &str, at: MonoMillis) -> bool {
@@ -453,15 +480,44 @@ impl CaptureChannelService {
             return CaptureAvailability::Available { channel: active };
         }
         let reason = self
-            .gap_start
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
-            .get(session)
-            .map_or(GapReason::BothChannelsUnavailable, |(_, reason)| *reason);
+            .guard
+            .open_reason(session)
+            .unwrap_or(GapReason::BothChannelsUnavailable);
         CaptureAvailability::Unavailable {
             reason,
             code: ErrorCode::AudioCaptureFailed,
         }
+    }
+
+    /// 汇总可用性事件（新类型，既有 `availability` 返回类型不变）。
+    pub fn availability_event(&self, session: &SessionId) -> CaptureAvailabilityEvent {
+        let availability = self.availability(session);
+        let (gap_reason, code) = match availability {
+            CaptureAvailability::Unavailable { reason, code } => (Some(reason), Some(code)),
+            CaptureAvailability::Available { .. } => (None, None),
+        };
+        CaptureAvailabilityEvent {
+            availability,
+            gap_reason,
+            code,
+            sequence: self.publisher.current_sequence(session),
+        }
+    }
+
+    pub fn snapshot_for(&self, session: &SessionId) -> ChannelSnapshot {
+        self.publisher.snapshot_for(session)
+    }
+
+    pub fn drain_status(&self, now: MonoMillis) -> DrainReport {
+        self.publisher.drain(now)
+    }
+
+    pub fn subscribe_status(&self, handler: StatusHandler) -> SubscriptionHandle {
+        self.publisher.subscribe(handler)
+    }
+
+    pub fn latency(&self) -> super::status_publisher::LatencyStats {
+        self.publisher.latency()
     }
 
     pub fn active_channel(&self, session: &SessionId) -> ActiveChannel {
@@ -472,11 +528,29 @@ impl CaptureChannelService {
             .map_or(ActiveChannel::None, SwitchTracker::active)
     }
 
+    /// 快照：注册表为基准，已发布条目按 key 覆盖（既有契约不回退）。
     pub fn snapshot(&self) -> ChannelSnapshot {
-        self.registry
+        let published = self.publisher.snapshot();
+        let mut merged: Vec<super::types::ChannelSnapshotEntry> = self
+            .registry
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
             .snapshot()
+            .entries;
+        for entry in published.entries {
+            match merged
+                .iter_mut()
+                .find(|candidate| candidate.key == entry.key)
+            {
+                Some(existing) => *existing = entry,
+                None => merged.push(entry),
+            }
+        }
+        merged.sort_by_key(|entry| entry.key);
+        ChannelSnapshot {
+            entries: merged,
+            generated_at: published.generated_at,
+        }
     }
 
     pub fn record_missing(&self, session: &SessionId) -> u64 {
@@ -485,6 +559,28 @@ impl CaptureChannelService {
             .unwrap_or_else(|poison| poison.into_inner())
             .get(session)
             .map_or(0, SwitchTracker::record_missing)
+    }
+
+    pub fn status_sink(&self) -> &Arc<dyn ChannelStatusSink> {
+        &self.status_sink
+    }
+
+    /// 只读发布器句柄（测试与装配观察用，不改变既有方法签名）。
+    pub fn publisher(&self) -> &Arc<StatusPublisher> {
+        &self.publisher
+    }
+}
+
+fn availability_of(decision: Decision) -> CaptureAvailability {
+    if decision.active == ActiveChannel::None {
+        CaptureAvailability::Unavailable {
+            reason: decision.gap.unwrap_or(GapReason::BothChannelsUnavailable),
+            code: ErrorCode::AudioCaptureFailed,
+        }
+    } else {
+        CaptureAvailability::Available {
+            channel: decision.active,
+        }
     }
 }
 

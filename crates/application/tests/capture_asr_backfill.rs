@@ -86,20 +86,21 @@ fn produce_gap(service: &CaptureChannelService, session: &SessionId, start: u64,
     service.observe(&observation(session, end, probe(true)));
 }
 
+/// 门限口径收紧（D12）：缺口需 >=1000ms 才投递回补意图。
 #[test]
 fn gap_end_delivers_gap_backfill_intent() {
     let (service, asr) = service();
     let context = view("s1");
     service.attach_session(context.clone()).expect("attach");
     service.observe(&observation(&context.session, 100, probe(true)));
-    produce_gap(&service, &context.session, 200, 310);
+    produce_gap(&service, &context.session, 200, 1_310);
 
     let intents = asr.intents.lock().expect("lock");
     assert_eq!(intents.len(), 1);
     assert_eq!(intents[0].kind, AsrIntentKind::GapBackfill);
     assert_eq!(intents[0].window_start.as_millis(), 200);
-    assert_eq!(intents[0].window_end.as_millis(), 310);
-    assert_eq!(intents[0].chunk_count, 1);
+    assert_eq!(intents[0].window_end.as_millis(), 1_310);
+    assert_eq!(intents[0].chunk_count, 3);
 }
 
 #[test]
@@ -108,8 +109,8 @@ fn second_gap_within_ten_seconds_is_budget_suppressed() {
     let context = view("s1");
     service.attach_session(context.clone()).expect("attach");
     service.observe(&observation(&context.session, 100, probe(true)));
-    produce_gap(&service, &context.session, 200, 310);
-    produce_gap(&service, &context.session, 400, 510);
+    produce_gap(&service, &context.session, 200, 1_310);
+    produce_gap(&service, &context.session, 1_400, 2_510);
 
     let intents = asr.intents.lock().expect("lock");
     assert_eq!(intents.len(), 1);
