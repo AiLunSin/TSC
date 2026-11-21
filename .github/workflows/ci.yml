@@ -96,6 +96,109 @@ jobs:
         run: cargo build --workspace --target ${{ matrix.target }}
       - name: test
         run: cargo test --workspace --target ${{ matrix.target }}
+      - name: llm-https-compile (C2)
+        timeout-minutes: 15
+        shell: bash
+        env:
+          LLM_HTTPS_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          base_list="$(cargo test -p meeting-copilot-infrastructure --features llm-https \
+            --test llm_live_baseline --target "${LLM_HTTPS_TARGET}" -- --list)"
+          printf '%s\n' "${base_list}" | grep -qE '^baseline_30_samples_per_task: test$'
+          collected="$(printf '%s\n' "${base_list}" | grep -cE ': test$' || true)"
+          live_ignored="$(cargo test -p meeting-copilot-infrastructure --features llm-https \
+            --test llm_live --target "${LLM_HTTPS_TARGET}" -- --list --ignored)"
+          live_count="$(printf '%s\n' "${live_ignored}" | grep -cE ': test$' || true)"
+          test "${live_count}" -ge 8
+          base_ignored="$(cargo test -p meeting-copilot-infrastructure --features llm-https \
+            --test llm_live_baseline --target "${LLM_HTTPS_TARGET}" -- --list --ignored)"
+          base_count="$(printf '%s\n' "${base_ignored}" | grep -cE ': test$' || true)"
+          test "${base_count}" -ge 1
+          echo "llm-https: compiled=1 platform=${LLM_HTTPS_TARGET} collected=${collected} ignored_live=${live_count} ignored_baseline=${base_count}"
+          {
+            printf 'llm-https: compiled=1 platform=%s feature=llm-https collected=%s ignored_live=%s ignored_baseline=%s\n' \
+              "${LLM_HTTPS_TARGET}" "${collected}" "${live_count}" "${base_count}"
+            printf 'collect: meeting-copilot-infrastructure::llm_live_baseline::baseline_30_samples_per_task: test\n'
+          } > "${RUNNER_TEMP}/llm-https-coverage-${LLM_HTTPS_TARGET}.txt"
+      - name: llm-https-coverage-upload (C2)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-https-coverage-${{ matrix.target }}
+          path: ${{ runner.temp }}/llm-https-coverage-*.txt
+          if-no-files-found: warn
+
+  test-name-inventory:
+    name: test-name-inventory (C3)
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.100.0
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: inventory-x86_64-pc-windows-msvc
+          workspaces: ". -> target"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: web-assets
+        shell: bash
+        working-directory: app
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: baseline-presence (C3)
+        timeout-minutes: 2
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/progress/test-names-before.txt
+          echo "baseline: path=docs/progress/test-names-before.txt lines=$(wc -l < docs/progress/test-names-before.txt | tr -d ' ')"
+      - name: test-name-inventory-diff (C3)
+        timeout-minutes: 40
+        shell: bash
+        env:
+          INVENTORY_PLATFORM: x86_64-pc-windows-msvc
+          INVENTORY_BASELINE_PLATFORM: x86_64-pc-windows-msvc
+        run: bash scripts/test-name-inventory.sh --diff docs/progress/test-names-before.txt
+
+  feature-coverage:
+    name: feature-coverage (C2)
+    needs: rust
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: llm-https-coverage-*
+          path: coverage
+          merge-multiple: true
+      - name: assert-feature-coverage (C2)
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(coverage/llm-https-coverage-*.txt)
+          test "${#files[@]}" -ge 1
+          for triple in x86_64-pc-windows-msvc aarch64-apple-darwin x86_64-apple-darwin; do
+            grep -hq "platform=${triple} " "${files[@]}" || {
+              echo "llm-https: missing platform=${triple}"; exit 1; }
+          done
+          test "$(grep -h 'compiled=1' "${files[@]}" | wc -l | tr -d ' ')" -ge 1
+          grep -hq '^collect: .*::baseline_30_samples_per_task: test$' "${files[@]}"
+          cat "${files[@]}"
+      - name: llm-https-linux-not-applicable (C2)
+        timeout-minutes: 1
+        run: 'echo "llm-https: compiled=0 platform=x86_64-unknown-linux-gnu 不适用 reason=no_linux_runner_in_matrix"'
 
   compliance:
     name: compliance (licenses + sbom + secrets + layering)
@@ -103,6 +206,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
@@ -116,6 +221,15 @@ jobs:
         run: bash scripts/check-layering.sh
       - name: secrets
         run: bash scripts/scan-secrets.sh
+      - name: capture-offline (C1)
+        timeout-minutes: 5
+        run: bash scripts/check-capture-offline.sh --all
+      - name: g2-claims (C1)
+        timeout-minutes: 5
+        run: bash scripts/check-g2-claims.sh
+      - name: secrets-docs (C1)
+        timeout-minutes: 5
+        run: bash scripts/scan-secrets-docs.sh --all-md
       - name: licenses
         run: cargo deny check licenses bans sources advisories
       - name: sbom

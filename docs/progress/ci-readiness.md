@@ -260,7 +260,7 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 
 `scripts/test-name-inventory.sh` 支持 `CARGO` 环境变量覆盖，CI 中无需修改脚本本身。
 
-### 13.3 待决的 CI 配置缺口（尚未修改 `ci.yml`）
+### 13.3 已修复的 CI 配置缺口（2026-11-21 已落地，见第 14 节）
 
 | 编号 | 缺口 | 影响 |
 |---|---|---|
@@ -268,3 +268,53 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 | C2 | `rust` job 未编译 `--features llm-https` | `llm_live_baseline.rs` 等仅在该 feature 下编译，存在特性组合漂移风险 |
 | C3 | `test-name-inventory.sh --diff` 未纳入 CI | 用例被删除时无自动拦截 |
 | C4 | `test-name-inventory.sh` 在 `cargo` 不可用时静默吞错，把"抓取失败"报成"removed 全量" | 本地实测：shim 损坏时误报 365 条 removed、退出码 1；应改为退出 2（扫描面缺失） |
+## 14. CI 门禁加固（C1~C4）本地执行记录（2026-11-21 · AC-CI-26 本地侧）
+
+> 口径声明：本节只记录**本地可判定**结果。远端 Actions 结论必须由推送后的运行日志取得（见 14.3），本地模拟不得记为"远端通过"。
+
+### 14.1 本地实测结果
+
+| 阶段 | 判据 | 结果 |
+|---|---|---|
+| P0 / C4 | `--self-test` | 退出 0，`SELF-TEST: 6/6 ok`，耗时 19.5s，不联网、不调用真实 cargo |
+| P0 / C4 | 127 桩 `--diff`（连跑 3 次） | 均退出 2；首行匹配 `^.+:[0-9]+(:| )`；`removed=` 计数 0 |
+| P0 / C4 | 真实 `--diff`（连跑 3 次） | 均退出 0；`removed=0`；新增 42 条；`baseline_drift=42` |
+| P0 / C4 | 真 removed 场景 | 退出 1；首行 `...:0 出现 removed 用例`；明细含 `ghost_case`；`removed=` 计数 0 |
+| P0 / C4 | 空仓库面 / 基线缺失 / 基线逆序 / 空基线 / 平台不可比 | 均退出 2；首行标记串分别为 `manifests=0` / `baseline_missing` / `baseline_unsorted` / `baseline_missing reason=empty` / `不可比` |
+| P0 / C4 | 未知参数 | 退出 2，首行 `未知参数 ... usage_error` |
+| P1 / C1 | `check-capture-offline.sh` 移除 `fakes.rs` | 退出 2，首行 `...:0 扫描面缺失 [fakes]` |
+| P1 / C1 | `check-g2-claims.sh` 移除 `README.md` / `docs/progress` | 均退出 2，首行为对应缺失面 |
+| P1 / C1 | 三脚本正常态与 `--self-test` | `capture`/`g2` 自检仍退 1、正常态 0；`scan-secrets-docs` 自检 0、正常态 0 |
+| P2 / C2 | 本机 cargo 断言（连跑 3 次） | `collected=1` / `ignored_live=8` / `ignored_baseline=1` |
+| P2 / C2 | `ci.yml` 静态审计 | `all-features=0`、`run-llm-live=0`、`LLM_*` 联调变量=0、`compiled=1` 出现 3 次 |
+| P3 / C3 | `ci.yml` 编排 | 6 个 job 均有 `timeout-minutes`；`continue-on-error=0`；`shell: bash`=6；`emit-baseline=0`；差集调用=1 |
+| 回归 | Rust 门禁 | `fmt=0` / `clippy=0`（`-D warnings`）/ `build=0` / `test` 38 targets、399 passed、0 failed、8 ignored |
+| 回归 | 静态门禁 | `layering=0` / `secrets=0` / `deny=0`（licenses+bans+sources+advisories）/ `capture-offline=0` / `g2-claims=0` / `secrets-docs=0` |
+| 回归 | 用例名差集 | 退出 0，`removed=0`，新增 42；基线仍 365 行、未改动 |
+| 回归 | `ci.yml` 边界 | `git diff -U0` 无删除行；`docs/sdd/**` 零改动 |
+
+### 14.2 实施偏差登记
+
+| 编号 | 偏差 | 处理 |
+|---|---|---|
+| D-CI-1 | `app/src-tauri` 是 binary crate，`cargo test --lib` 必然返回 101；原脚本靠 `2>/dev/null` 吞掉 | 改造后仅对存在 `src/lib.rs` 或声明 `[lib]` 的包抓 lib 面；"无 lib 面"不算抓取失败。真实抓取恢复 0/1 语义 |
+| D-CI-2 | 任务证据串期望 `grep -c 'runs-on: windows-2022'`=2；实际 `rust` 用 `${{ matrix.os }}` | 采用等价口径 `grep -c 'windows-2022'`=2（矩阵 include 1 处 + C3 `runs-on` 1 处）；C3 的 `runs-on` 仍为 `windows-2022` |
+| D-CI-3 | 工作区 `ci.yml` 原为 CRLF，`.gitattributes` 要求 LF | 统一转 LF，内容零变化；转换后 `git diff -U0` 无删除行 |
+| D-CI-4 | `feature-coverage` 的 `if: always()` 为 job 级汇总语义 | 不视为 C3 差集步骤的吞错修饰；差集步骤块内无 `|| true` / `continue-on-error` / `set +e` / `if: false` |
+
+### 14.3 仍只能由远端判定的项（待推送后观测）
+
+| 编号 | 待观测 | 证据位置 |
+|---|---|---|
+| L3-1 | 6 个 job 在 Actions 上结论为绿 | Runs 列表 / job 徽标 |
+| L3-2 | `compliance` 三条 C1 步骤真实跑通 | compliance 日志中三步骤通过标记 |
+| L3-3 | `fetch-depth: 0` 后 `git log` 可扫满 | g2-claims 步骤日志 |
+| L3-4 | macOS 两矩阵 `llm-https` 编译成功 | `rust (aarch64-apple-darwin)` / `rust (x86_64-apple-darwin)` 的 `compiled=1` |
+| L3-5 | artifact 上传与跨 job 合并 | Artifacts 面板 + `assert-feature-coverage` 日志 |
+| L3-6 | Linux"不适用"行可见 | `feature-coverage` 日志 |
+| L3-7 | C3 全量编译 + 差集耗时不超过 40 分钟 | `test-name-inventory-diff (C3)` 步骤耗时 |
+| L3-8 | `windows-2022` 上 `shell: bash` 的 `set -e` 语义 | `web-assets` 日志与失败传播 |
+| L3-9 | `feature-coverage` 在 rust 失败时仍执行 | job 关系图 |
+| L3-10 | CI 分钟成本与缓存命中率 | 计费面板 / 步骤耗时 |
+
+**结论**：本地判定项全部达成；**不宣称远端 CI 通过**，G2 与三平台稳定性结论不变。

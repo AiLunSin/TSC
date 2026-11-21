@@ -8,14 +8,19 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 
 FAIL=0
+MISSING=0
 PATTERN='三平台稳定运行已验证|真实 5 秒回退已实测|真实去重已验证|G2 门禁通过|G2 已通过|B2 已完成'
+
+missing() {
+  echo "$1" >&2
+  MISSING=1
+}
 
 scan() {
   local label="$1"
   local target="$2"
   if [[ ! -e "${target}" ]]; then
-    echo "${target}:0 扫描面缺失 [${label}]" >&2
-    FAIL=1
+    missing "${target}:0 扫描面缺失 [${label}]"
     return
   fi
   while IFS= read -r hit; do
@@ -51,6 +56,11 @@ if command -v git >/dev/null 2>&1; then
       FAIL=1
     fi
   done < <(git log --format=%s -20 2>/dev/null || true)
+fi
+
+if [[ "${MISSING}" -ne 0 ]]; then
+  echo "SCAN-MISSING: G2 宣称扫描面缺失" >&2
+  exit 2
 fi
 
 if [[ "${FAIL}" -ne 0 ]]; then

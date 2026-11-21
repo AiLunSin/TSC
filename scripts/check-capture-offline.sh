@@ -10,10 +10,16 @@ cd "${ROOT}"
 CAPTURE_SRC="crates/application/src/capture"
 TESTS_DIR="crates/application/tests"
 FAIL=0
+MISSING=0
 
 fail() {
   echo "$1" >&2
   FAIL=1
+}
+
+missing() {
+  echo "$1" >&2
+  MISSING=1
 }
 
 scan() {
@@ -21,7 +27,7 @@ scan() {
   local pattern="$2"
   local target="$3"
   if [[ ! -e "${target}" ]]; then
-    fail "${target}:0 扫描面缺失 [${label}]"
+    missing "${target}:0 扫描面缺失 [${label}]"
     return
   fi
   while IFS= read -r hit; do
@@ -109,6 +115,11 @@ case "${1:-}" in
     exit 2
     ;;
 esac
+
+if [[ "${MISSING}" -ne 0 ]]; then
+  echo "SCAN-MISSING: 采集离线门禁扫描面缺失" >&2
+  exit 2
+fi
 
 if [[ "${FAIL}" -ne 0 ]]; then
   echo "FAIL: 采集离线门禁命中违规" >&2
