@@ -50,13 +50,17 @@ pub fn build_merged(
     };
 
     let cap = f64::from(policy.confidence_cap_milli) / 1000.0;
-    let raw = subtitle.confidence.value().max(asr.confidence.value()).min(cap);
+    let raw = subtitle
+        .confidence
+        .value()
+        .max(asr.confidence.value())
+        .min(cap);
     let confidence = Confidence::new(raw).ok()?;
 
     let utterance = Utterance {
         reference: subtitle.reference.clone(),
-        span: asr.span.clone(),
-        wall_clock: subtitle.wall_clock.clone(),
+        span: asr.span,
+        wall_clock: subtitle.wall_clock,
         text: subtitle.text.clone(),
         speaker,
         confidence,
@@ -72,13 +76,15 @@ pub fn build_merged(
             basis,
             subtitle_ref: subtitle.reference.clone(),
             asr_ref: asr.reference.clone(),
-            subtitle_span: subtitle.span.clone(),
+            subtitle_span: subtitle.span,
             subtitle_estimated: false,
         },
     })
 }
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
+
     use super::*;
     use crate::model::enums::{Platform, ReadingMode};
     use crate::vo::{UtteranceText, WallClock};
@@ -110,20 +116,58 @@ mod tests {
 
     #[test]
     fn merged_span_uses_asr_precise_bounds() {
-        let subtitle = utt("sub-1", 1_000, 2_000, "确认下周灰度上线", SpeakerRef::unknown(), 0.9);
-        let asr = utt("asr-1", 1_200, 1_900, "确认下周灰度上线", SpeakerRef::unknown(), 0.9);
-        let merged = build_merged(&subtitle, &asr, &MergePolicy::default(), PairBasis::Identical)
-            .expect("merged");
+        let subtitle = utt(
+            "sub-1",
+            1_000,
+            2_000,
+            "确认下周灰度上线",
+            SpeakerRef::unknown(),
+            0.9,
+        );
+        let asr = utt(
+            "asr-1",
+            1_200,
+            1_900,
+            "确认下周灰度上线",
+            SpeakerRef::unknown(),
+            0.9,
+        );
+        let merged = build_merged(
+            &subtitle,
+            &asr,
+            &MergePolicy::default(),
+            PairBasis::Identical,
+        )
+        .expect("merged");
         assert_eq!(merged.utterance.span, asr.span);
         assert!(merged.utterance.dual_channel);
     }
 
     #[test]
     fn confidence_is_capped() {
-        let subtitle = utt("sub-1", 1_000, 2_000, "确认下周灰度上线", SpeakerRef::unknown(), 0.95);
-        let asr = utt("asr-1", 1_000, 2_000, "确认下周灰度上线", SpeakerRef::unknown(), 0.99);
-        let merged = build_merged(&subtitle, &asr, &MergePolicy::default(), PairBasis::Identical)
-            .expect("merged");
+        let subtitle = utt(
+            "sub-1",
+            1_000,
+            2_000,
+            "确认下周灰度上线",
+            SpeakerRef::unknown(),
+            0.95,
+        );
+        let asr = utt(
+            "asr-1",
+            1_000,
+            2_000,
+            "确认下周灰度上线",
+            SpeakerRef::unknown(),
+            0.99,
+        );
+        let merged = build_merged(
+            &subtitle,
+            &asr,
+            &MergePolicy::default(),
+            PairBasis::Identical,
+        )
+        .expect("merged");
         assert!(merged.utterance.confidence.value() <= 0.950);
 
         let mut capped = MergePolicy::default();
@@ -139,10 +183,29 @@ mod tests {
             label: "张三".into(),
             identified: true,
         };
-        let subtitle = utt("sub-1", 1_000, 2_000, "确认下周灰度上线", muted.clone(), 0.9);
-        let asr = utt("asr-1", 1_000, 2_000, "确认下周灰度上线", named.clone(), 0.9);
-        let merged = build_merged(&subtitle, &asr, &MergePolicy::default(), PairBasis::Identical)
-            .expect("merged");
+        let subtitle = utt(
+            "sub-1",
+            1_000,
+            2_000,
+            "确认下周灰度上线",
+            muted.clone(),
+            0.9,
+        );
+        let asr = utt(
+            "asr-1",
+            1_000,
+            2_000,
+            "确认下周灰度上线",
+            named.clone(),
+            0.9,
+        );
+        let merged = build_merged(
+            &subtitle,
+            &asr,
+            &MergePolicy::default(),
+            PairBasis::Identical,
+        )
+        .expect("merged");
         assert_eq!(merged.utterance.speaker, named);
     }
 
@@ -158,8 +221,12 @@ mod tests {
         };
         let subtitle = utt("sub-1", 1_000, 2_000, "确认下周灰度上线", first, 0.9);
         let asr = utt("asr-1", 1_000, 2_000, "确认下周灰度上线", second, 0.9);
-        assert!(
-            build_merged(&subtitle, &asr, &MergePolicy::default(), PairBasis::Identical).is_none()
-        );
+        assert!(build_merged(
+            &subtitle,
+            &asr,
+            &MergePolicy::default(),
+            PairBasis::Identical
+        )
+        .is_none());
     }
 }

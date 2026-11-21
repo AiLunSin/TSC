@@ -43,7 +43,7 @@ impl TextEvent {
         AsrTextEvent {
             session: self.session.clone(),
             kind: AsrIntentKind::GapBackfill,
-            span: self.span.clone(),
+            span: self.span,
             text: self.text.clone(),
             speaker: self.speaker.clone(),
             confidence: self.confidence,

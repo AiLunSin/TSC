@@ -6,9 +6,7 @@
 mod support;
 
 use meeting_copilot_application::capture::dedupe_guard::DedupeMergeGuard;
-use meeting_copilot_application::capture::merge_types::{
-    AsrTextEvent, DedupeCounters, MergedUnit,
-};
+use meeting_copilot_application::capture::merge_types::{AsrTextEvent, DedupeCounters, MergedUnit};
 use meeting_copilot_application::capture::{
     validate_merged_set, AsrIntentKind, CaptureGapRecord, MergeSetViolation, MergeSpan,
 };
@@ -18,9 +16,7 @@ use meeting_copilot_domain::model::enums::Platform;
 use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::model::utterance::SpeakerRef;
 use meeting_copilot_domain::model::GapReason;
-use meeting_copilot_domain::vo::{
-    Confidence, MonoMillis, SessionId, UtteranceRef, UtteranceText,
-};
+use meeting_copilot_domain::vo::{Confidence, MonoMillis, SessionId, UtteranceRef, UtteranceText};
 
 fn event(reference: &str, start: u64, end: u64, text: &str) -> AsrTextEvent {
     AsrTextEvent {

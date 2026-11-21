@@ -51,7 +51,7 @@ fn intersection_ms(left: &AsrTextEvent, right: &AsrTextEvent) -> u64 {
 fn to_utterance(event: &AsrTextEvent, side: ChannelKind) -> Utterance {
     Utterance {
         reference: event.reference.clone(),
-        span: event.span.clone(),
+        span: event.span,
         wall_clock: WallClock::from_unix_millis(0),
         text: event.text.clone(),
         speaker: event.speaker.clone(),
@@ -140,12 +140,7 @@ impl DedupeMergeGuard {
         let late = state.pending.iter().any(|pending| {
             pending.event.session == event.session
                 && pending.side != side
-                && pending
-                    .event
-                    .span
-                    .start_ms
-                    .abs_diff(event.span.start_ms)
-                    > window
+                && pending.event.span.start_ms.abs_diff(event.span.start_ms) > window
         });
         if late {
             state.counters.late_unmerged += 1;
@@ -168,12 +163,7 @@ impl DedupeMergeGuard {
                 pending.event.session == event.session
                     && pending.side != side
                     && intersection_ms(&pending.event, &event) > 0
-                    && pending
-                        .event
-                        .span
-                        .start_ms
-                        .abs_diff(event.span.start_ms)
-                        <= window
+                    && pending.event.span.start_ms.abs_diff(event.span.start_ms) <= window
             })
             .map(|(index, _)| index)
             .collect();
@@ -242,7 +232,10 @@ impl DedupeMergeGuard {
             }
             None => {
                 state.counters.merge_rejected += 1;
-                vec![single(subtitle, ChannelKind::Subtitle, false), single(asr, ChannelKind::Audio, false)]
+                vec![
+                    single(subtitle, ChannelKind::Subtitle, false),
+                    single(asr, ChannelKind::Audio, false),
+                ]
             }
         }
     }
