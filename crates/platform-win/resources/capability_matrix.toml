@@ -1,0 +1,32 @@
+version_range = "Windows 10 2004+ / 11 (x64, ARM64)"
+last_verified_at = "2026-11-21"
+
+[[capability]]
+key = "subtitle_readability"
+status = "pending_calibration"
+note = "待真机校准：腾讯/飞书/Zoom 字幕读取"
+
+[[capability]]
+key = "latency"
+status = "pending_calibration"
+note = "待真机校准：字幕与系统音频时延"
+
+[[capability]]
+key = "speaker"
+status = "pending_calibration"
+note = "待真机校准：说话人标识可用性"
+
+[[capability]]
+key = "requires_subtitle"
+status = "pending_calibration"
+note = "待真机校准：客户端是否要求开启字幕"
+
+[[capability]]
+key = "recommended_channel"
+status = "pending_calibration"
+note = "待真机校准：推荐通道（字幕优先，音频回补）"
+
+[[capability]]
+key = "known_limits"
+status = "pending_calibration"
+note = "待真机校准：独占音频与虚拟声卡限制"

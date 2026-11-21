@@ -224,15 +224,19 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 8. macOS 系统音频捕获原型（ScreenCaptureKit）🟢 PAR
 
 - [ ] **8.1 SCStream 音频采集与应用过滤** — `crates/platform-mac/src/audio/proto/sck_stream.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-2a、4.5-1 · DESIGN 2.5.4、1.2.1-2
   - DoD：`SCContentFilter` 按应用过滤后采集到腾讯会议/Zoom 音频；48kHz/2ch → 16kHz mono；macOS 13.4 与 14.x 均连续 30 分钟无中断
 - [ ] **8.2 屏幕录制权限申请与拒绝引导** — `crates/platform-mac/src/audio/proto/permission.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.3-1、5.8.1-3 · DESIGN 1.2.1-2、2.5.4
   - DoD：未授权返回 `E-AUDIO-001` 且不崩溃；提供系统设置深链（`x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture`）；授权后无需重启应用即可采集（或明确记录需重启）
 - [ ] **8.3 静音看门狗与 stream 自动重建** — `crates/platform-mac/src/audio/proto/watchdog.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.3-4、4.4-5 · DESIGN 1.2.1-2、2.5.4
   - DoD：模拟音频流中断（≥3s 静音 + VAD 无活动），2s 内检测并重建 stream；重建次数、时刻、版本写入诊断；重建后 2s 内恢复采集
 - [ ] **8.4 输出 macOS 音频可行性结论** — `docs/m0/mac-audio.md`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.2-7 · DESIGN 2.8.2-M0
   - DoD：记录 13.0/13.4/14.x 差异、首启权限拒绝率、重建频率；明确"不得捆绑 BlackHole"的实现约束已在代码中体现（无 GPL 依赖）
 
@@ -242,6 +246,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 5.8.1-2b、5.8.1-4 · DESIGN 2.5.2、2.5.3-L1
   - DoD：字幕浮窗可被稳定发现（≥3 个客户端版本各验证 1 次）；导出控件树快照（角色/名称/层级/文本属性）；窗口标题正则写入 `SelectorProfile` 草案
 - [ ] **9.2 UIA TextPattern / AX 事件读取** — `.../proto/uia_read.rs`、`crates/platform-mac/src/adapters/tencent/proto/ax_read.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-2b · DESIGN 2.5.3-L2
   - DoD：真实会议（开启字幕）连续 10 分钟读取，字符准确率 ≥90%；输出 `SubtitleEvent` 雏形（text + 观测时间）；事件去抖 250–400ms 有效
 - [ ] **9.3 OCR ROI 兜底最小实现** — `.../proto/ocr_fallback.rs`
@@ -331,7 +336,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 
 **目标**：把 M0 原型工程化为可插拔的 `PlatformAdapter` 与稳定会话主链，达成 M1 前半出口。
 **前置**：B1（G1 通过）。
-**⛔ 出口门禁 G2（M1 前半）**：三平台均可建立会话并稳定运行 30 分钟；通道状态可见且 5s 内更新；字幕失效 5s 内回退音频；双通道不重复计入。
+**⛔ 出口门禁 G2（M1 前半）**：Windows 单平台上腾讯/飞书/Zoom 各自建立会话并稳定运行 30 分钟；通道状态可见且 5s 内更新；字幕失效 5s 内回退音频；双通道不重复计入。
 **并行**：15 与 16 并行；17 先于 18/19/20；21 可与 18–20 并行；25 依赖 15/16；26 依赖 23/24。
 
 > **离线闭环增补（2026-11-21）**：W-00 / W-C / W-D / W-E / W-F 的子任务与验收定义见 `docs/sdd/tasks-b2-offline-closure.md`，实测三态与偏差见 `docs/progress/b2-offline-closure.md`（399 passed / 0 failed / 8 ignored，43 项 AC，结论"部分完成"）。本清单 23.x 的离线部分据此回写；真机项（15~22、24、26/27）未开始。
@@ -354,15 +359,19 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 16. macOS 音频通道工程化 🔴 CP 🟢 PAR
 
 - [ ] **16.1 实现 `AudioSource`（mac）** — `crates/platform-mac/src/audio/source.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-2a · DESIGN 2.2.2-A、2.5.4
   - DoD：通过端口契约测试；`SCContentFilter` 应用过滤生效；13.0/13.4/14.x 三版本各冒烟 10 分钟无中断
 - [ ] **16.2 权限状态机与引导** — `crates/platform-mac/src/audio/permission.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.3-1、5.8.1-4 · DESIGN 2.5.4
   - DoD：四态（未询问/已授权/已拒绝/受限）可区分；拒绝时返回 `E-AUDIO-001` 并给深链；权限中途被回收能在 5s 内感知并停止推流
 - [ ] **16.3 看门狗与重建工程化** — `crates/platform-mac/src/audio/watchdog.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.2-7、4.4-5 · DESIGN 1.2.1-2、2.5.4
   - DoD：每 30s 校验 stream 状态；异常重建 ≤2s 恢复；重建次数/原因进诊断；连续重建 >3 次/小时触发告警并建议切麦克风
 - [ ] **16.4 设备切换与麦克风回退** — `crates/platform-mac/src/audio/devices.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.1.3-2、5.8.3-5 · DESIGN 2.5.4
   - DoD：AVCaptureDevice 麦克风回退可用并标记"仅麦克风"；切换事件与缺口写入会话记录；UI 提示文案正确
 
@@ -372,6 +381,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 5.8.1-2b、4.5-2 · DESIGN 2.5.3-L1、R1
   - DoD：支持窗口标题正则、控件角色、文本属性、容器层级、`versionRange`；配置可从本地文件加载并在会话中热更新（不重启）；非法配置被拒绝并保留上一版；含 3 平台示例配置
 - [ ] **17.2 L2 事件读取抽象** — `crates/infrastructure/src/subtitle/event_reader.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-2b · DESIGN 2.5.3-L2
   - DoD：Windows 侧封装 `UIA_TextPattern` + `StructureChanged`，macOS 侧封装 `AXObserver` + `AXValueChanged`；去抖 250–400ms 可配；同一容器连续变更合并为一次
 - [ ] **17.3 L3 轮询兜底** — `crates/infrastructure/src/subtitle/poller.rs`
@@ -387,6 +397,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 18. 腾讯会议平台适配器 🧩 SPI 🔴 CP
 
 - [ ] **18.1 descriptor（进程/版本）** — `crates/platform-win/src/adapters/tencent/descriptor.rs`、`crates/platform-mac/src/adapters/tencent/descriptor.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-1、6.10-1/2 · DESIGN 2.5.2
   - DoD：识别 `wemeetapp.exe` / `TencentMeeting.app`；版本从文件版本资源 / `CFBundleShortVersionString` 读取；输出 `PlatformDescriptor{platform, version, subtitleAvailable, audioAvailable, capabilityLevel}`
 - [ ] **18.2 字幕适配器（含 OCR 回退）** — `.../adapters/tencent/subtitle.rs`
@@ -402,6 +413,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 19. 飞书 / Lark 平台适配器 🧩 SPI
 
 - [ ] **19.1 descriptor（国内版/国际版分列矩阵）** — `.../adapters/feishu/descriptor.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-1、4.5-2、6.10-2 · DESIGN 2.5.2
   - DoD：识别 `Feishu.exe`/`Lark.exe`/`Feishu.app`/`Lark.app`；国内版与国际版**各自维护**版本矩阵与适配记录；两者 UI 差异以配置区分而非代码分支
 - [ ] **19.2 字幕适配器（OCR 主路径）** — `.../adapters/feishu/subtitle.rs`
@@ -417,6 +429,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 20. Zoom 平台适配器 🧩 SPI
 
 - [ ] **20.1 descriptor（≥5.17）** — `.../adapters/zoom/descriptor.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.5-2、6.10-2 · DESIGN 2.5.2
   - DoD：识别 `Zoom.exe`/`zoom.us.app`；<5.17 返回"版本过低"且字幕 `unavailable`、仅尝试音频；支持范围硬编码为常量并集中维护
 - [ ] **20.2 CC 字幕适配器** — `.../adapters/zoom/subtitle.rs`
@@ -432,6 +445,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 21. OCR 兜底引擎 🟢 PAR
 
 - [ ] **21.1 系统 OCR 封装（Win/mac）** — `crates/platform-win/src/ocr/windows_ocr.rs`、`crates/platform-mac/src/ocr/vision_ocr.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.3-4 · DESIGN 2.4.1、1.2.2-2
   - DoD：Windows.Media.Ocr 与 Apple Vision 均可对 ROI 小图出文本行 + 置信度；无额外运行时依赖（不引入 Tesseract 为默认）；单次识别 ≤150ms（小 ROI）
 - [ ] **21.2 ROI 几何计算与自适应** — `crates/infrastructure/src/ocr/roi.rs`
@@ -447,6 +461,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 22. 平台探测与版本矩阵
 
 - [ ] **22.1 进程与版本探测** — `crates/infrastructure/src/platform/discovery.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.8.1-4、6.10-2 · DESIGN 2.5.2
   - DoD：sysinfo + 文件版本资源 / CFBundle 读取；探测耗时 ≤300ms；不读取平台私有数据目录、不读凭据（代码审计确认）
 - [ ] **22.2 CapabilityMatrix 与适配记录** — `crates/infrastructure/src/platform/matrix.rs`
@@ -850,6 +865,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 5.4.1-9 · DESIGN 2.1.2 表现层、2.2.2-G
   - DoD：卡片流/侧边悬浮窗/角标三形态可切换；切换后提示列表与滚动位置保持；切换耗时 ≤200ms
 - [ ] **44.2 非模态与不抢焦点** — `crates/platform-win/src/window/no_activate.rs`、`crates/platform-mac/src/window/nonactivating_panel.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.4.1-10 · DESIGN 1.1.1（Tauri 托盘/通知行）
   - DoD：Windows 使用 `WS_EX_NOACTIVATE`（必要时 `WS_EX_TOOLWINDOW`），macOS 使用非激活 panel/styleMask；自动化脚本推送 100 次卡片，焦点切换次数 0；输入法/键盘输入不被打断
 - [ ] **44.3 配额合并展示** — `app/src/features/presenter/overflow.tsx`
@@ -928,9 +944,11 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 1.3-6、5.4.1-10 · DESIGN 2.2.2-G
   - DoD：主动提示、留存到期、通道异常三类通知可发；通知不获取键盘焦点（自动化验证）；通知内容经脱敏出口
 - [ ] **49.3 全局快捷键** — `crates/platform-win/src/hotkey.rs`、`crates/platform-mac/src/hotkey.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.7.1-4 · DESIGN 2.4.1
   - DoD：紧急遮蔽、暂停提示、唤起面板三个动作可配；冲突检测并提示；macOS 需辅助功能权限时给出引导
 - [ ] **49.4 开机自启开关** — `app/src-tauri/src/autostart.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 5.7.1-4 · DESIGN 2.4.1
   - DoD：默认关闭；开启后写入系统登录项（Win 注册表/Run 或计划任务、macOS LoginItems）；关闭可完全移除；状态可回读
 
@@ -1222,6 +1240,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 67. 腾讯会议接入验证矩阵 🧩 SPI
 
 - [ ] **67.1 版本 × 通道矩阵** — `docs/test/tencent-matrix.md`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.5-2、5.8.1-1/4 · DESIGN 2.9（验收执行口径 5）
   - DoD：当前主版本及前 2 个主版本 ×（字幕开/关/共享屏幕）×（Win/mac）≤12 组合全部执行并记录；组合不支持的项注明原因
 - [ ] **67.2 会话级验收** — `tests/e2e/platform_tencent.rs`
@@ -1246,6 +1265,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 69. Zoom 接入验证矩阵 🧩 SPI
 
 - [ ] **69.1 版本矩阵（≥5.17）** — `docs/test/zoom-matrix.md`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.5-2、5.8.1-1 · DESIGN 2.5.2
   - DoD：5.17/5.18/6.x ×（CC 开/关/共享屏幕）×（Win/mac）≥12 组合执行；<5.17 明确判"字幕不可用、仅音频"
 - [ ] **69.2 会话级验收** — `tests/e2e/platform_zoom.rs`
@@ -1270,12 +1290,15 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 ### 71. macOS 平台兼容与权限验证
 
 - [ ] **71.1 系统版本与架构矩阵** — `docs/test/mac-os-matrix.md`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.5-1、5.8.1-4 · DESIGN 1.2.1-2
   - DoD：macOS 13.0/13.4/14.x/15.x × Apple Silicon / Intel 验证；SCK 稳定性记录（重建次数）；不支持版本明确拦截
 - [ ] **71.2 屏幕录制与辅助功能权限** — `docs/test/mac-permission.md`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.3-1、5.8.1-2b · DESIGN 2.5.4
   - DoD：屏幕录制（音频）、辅助功能（字幕）两类权限的未授权/拒绝/受限三态行为正确；深链可跳转；授权后采集可恢复
 - [ ] **71.3 休眠/唤醒/多显示器** — `docs/test/mac-lifecycle.md`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.2-7 · DESIGN 1.2.1-2
   - DoD：系统休眠唤醒后 5s 内恢复采集或明确降级；多显示器/切换主屏时 ROI 与悬浮窗位置正确
 
@@ -1330,6 +1353,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 4.5-8 · DESIGN 2.3.1-5
   - DoD：升级→使用→降级读旧版本 三段回放通过；迁移失败可回滚（备份机制）；迁移耗时（10 万片段）≤60s
 - [ ] **75.3 跨架构数据一致性** — `tests/compat/cross_arch.rs`
+  - 平台处置：macOS 不适用（无设备）；Windows 分支保留
   - 追溯 SPEC 4.5-1 · DESIGN 2.4.1
   - DoD：Win x64/ARM64、mac arm64/x64 四架构导出的 JSON 纪要字段一致；SQLCipher 库不可跨架构共用时明确报错而不损坏
 
@@ -1357,20 +1381,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 4.3-3 · DESIGN 2.7.3
   - DoD：程序与数据分离；数据目录权限为当前用户；卸载默认不删会话数据（需显式勾选）；目录内无明文密钥
 
-### 77. macOS 打包与公证
-
-- [ ] **77.1 Universal DMG（arm64 + x86_64）** — `scripts/build-mac.sh`
-  - 追溯 SPEC 4.5-1 · DESIGN 2.4.1
-  - DoD：Universal 二进制（或双架构分发包）；DMG 可挂载安装；最低系统版本声明 13.0；Apple Silicon 与 Intel 真机安装运行通过
-- [ ] **77.2 公证（notarization）与 Gatekeeper** — `docs/release/mac-notarize.md`
-  - 追溯 SPEC 4.5-1 · DESIGN 2.4.1
-  - DoD：公证成功并可 staple；首次打开无"无法验证开发者"；Hardened Runtime 开启且音频/无障碍功能不受影响
-- [ ] **77.3 权限说明与首次引导** — `app/src-tauri/Info.plist`、`app/src/features/onboarding/permissions.tsx`
-  - 追溯 SPEC 4.3-1、5.8.1-4 · DESIGN 2.5.4
-  - DoD：`NSMicrophoneUsageDescription`、屏幕录制与辅助功能引导文案齐备；首次启动引导覆盖三类权限；拒绝后可从设置页重新引导
-- [ ] **77.4 不捆绑 GPL 组件核验** — `docs/release/mac-gpl-check.md`
-  - 追溯 SPEC 1.4-3 · DESIGN 1.2.1-2
-  - DoD：安装包内无 BlackHole 等 GPL 虚拟声卡；SBOM 中无 GPL/AGPL 直接链接；用户自装兼容说明仅出现在文档
+<!-- removed-by: mac_scope_and_b2_24；原因：无 macOS 交付项 -->
 
 ### 78. 发布门禁与灰度 ⛔ GATE
 

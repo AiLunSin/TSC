@@ -23,7 +23,9 @@ use super::capture_ports::{
 use super::capture_resume::CaptureResumeLedger;
 use super::channel_arbiter::{decide, subtitle_fallback_due, Decision};
 use super::channel_state::ChannelStateRegistry;
+use super::dedupe_guard::DedupeMergeGuard;
 use super::degraded_guard::{DegradedGuard, GapCloseOutcome, GuardTransition};
+use super::merge_types::{AsrTextEvent, MergedUnit};
 use super::diagnostics::DiagnosticCounter;
 use super::status_publisher::StatusPublisher;
 use super::subscriptions::{DrainReport, StatusHandler, SubscriptionHandle};
@@ -48,6 +50,7 @@ pub struct CaptureChannelService {
     diagnostics: Arc<dyn DiagnosticsSink>,
     publisher: Arc<StatusPublisher>,
     guard: Arc<DegradedGuard>,
+    merge: Option<Arc<DedupeMergeGuard>>,
     policy: CapturePolicy,
 }
 
@@ -125,7 +128,22 @@ impl CaptureChannelService {
             diagnostics,
             publisher,
             guard,
+            merge: None,
             policy,
+        }
+    }
+
+    /// 装配合并编排器（独立构造器，不改既有三个签名）。
+    pub fn with_merge(mut self, guard: Arc<DedupeMergeGuard>) -> Self {
+        self.merge = Some(guard);
+        self
+    }
+
+    /// 文本摄入：装配存在时交给编排器；未装配时零执行。
+    pub fn ingest_text(&self, side: ChannelKind, event: AsrTextEvent) -> Vec<MergedUnit> {
+        match self.merge.as_ref() {
+            Some(guard) => guard.push(side, event),
+            None => Vec::new(),
         }
     }
 
@@ -412,6 +430,9 @@ impl CaptureChannelService {
             if matches!(self.observe(&observation), ObservationOutcome::Applied) {
                 applied += 1;
             }
+        }
+        if let Some(guard) = self.merge.as_ref() {
+            let _ = guard.advance_to(now);
         }
         applied
     }

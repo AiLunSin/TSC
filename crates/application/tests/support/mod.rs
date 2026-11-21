@@ -3,6 +3,7 @@
 //! 应用层测试替身：可手动推进的时钟与全替身离线装配。
 
 pub mod fakes;
+pub mod merge_fakes;
 
 #[allow(unused_imports)]
 pub use self::fakes::{

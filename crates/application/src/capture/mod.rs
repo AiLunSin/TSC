@@ -9,8 +9,11 @@ pub mod capture_ports;
 pub mod capture_resume;
 pub mod channel_arbiter;
 pub mod channel_state;
+pub mod dedupe_guard;
 pub mod degraded_guard;
 pub mod diagnostics;
+pub mod merge_gate;
+pub mod merge_types;
 pub mod service;
 pub mod status_publisher;
 pub mod subscriptions;
@@ -33,6 +36,7 @@ pub use channel_arbiter::{decide, stable_switch_back_due, subtitle_fallback_due,
 pub use channel_state::{ChannelInstance, ChannelStateRegistry};
 pub use degraded_guard::{DegradedGuard, GapCloseOutcome, GuardError, GuardTransition};
 pub use diagnostics::{CountingDiagnostics, DiagnosticCounter, DiagnosticsSnapshot};
+pub use merge_gate::{validate_merged_set, MergeSetViolation, MergeSpan};
 pub use service::CaptureChannelService;
 pub use status_publisher::{
     LatencyStats, NotPushedReason, PublishOutcome, PublishRejectReason, StatusPublisher,

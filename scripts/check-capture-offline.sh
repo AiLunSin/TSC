@@ -79,6 +79,38 @@ rule_payload() {
   scan "payload" 'pub (text|samples|speaker|participants|reason_text)\b' "${CAPTURE_SRC}/types.rs"
 }
 
+rule_merge_writes() {
+  local target="${CAPTURE_SRC}/capture_gap_gate.rs"
+  if [[ ! -e "${target}" ]]; then
+    missing "${target}:0 扫描面缺失 [merge-writes]"
+    return
+  fi
+  if ! grep -q 'pub fn validate_intervals(' "${target}"; then
+    fail "${target}:0 合并链路替换了 validate_intervals"
+    return
+  fi
+  local arg
+  for arg in gaps segments boundary_contact_max_ms; do
+    if ! grep -q "${arg}" "${target}"; then
+      fail "${target}:0 validate_intervals 缺少参数 ${arg}"
+      return
+    fi
+  done
+  local guard="${CAPTURE_SRC}/dedupe_guard.rs"
+  if [[ -e "${guard}" ]]; then
+    if grep -nE 'fn delete\(|fn apply_correction\(|UtteranceRepository|\.delete\(' "${guard}" >/dev/null 2>&1; then
+      fail "${guard}:0 合并链路出现回溯删除或仓储写"
+      return
+    fi
+  else
+    echo "SKIP: dedupe_guard.rs 未落地"
+  fi
+  if ! grep -q 'merge_dedupe' scripts/test-name-inventory.sh; then
+    fail "scripts/test-name-inventory.sh:0 NEW_TARGETS 缺少 merge_dedupe"
+    return
+  fi
+}
+
 run_all() {
   rule_deps
   rule_source
@@ -87,6 +119,7 @@ run_all() {
   rule_guard_deps
   rule_placeholders
   rule_payload
+  rule_merge_writes
 }
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -109,6 +142,7 @@ case "${1:-}" in
   --rule=guard-deps) rule_guard_deps ;;
   --rule=placeholders) rule_placeholders ;;
   --rule=payload) rule_payload ;;
+  --rule=merge-writes) rule_merge_writes ;;
   ""|--all) run_all ;;
   *)
     echo "未知参数：${1}" >&2

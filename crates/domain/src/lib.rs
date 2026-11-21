@@ -4,6 +4,7 @@
 //! `platform-*` 或任何网络/存储实现。所有可变能力以端口 trait 形式暴露。
 
 pub mod error;
+pub mod merge;
 pub mod model;
 pub mod port;
 pub mod vo;

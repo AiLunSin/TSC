@@ -203,7 +203,7 @@ jobs:
           cat "${files[@]}"
       - name: llm-https-linux-not-applicable (C2)
         timeout-minutes: 1
-        run: 'echo "llm-https: compiled=0 platform=x86_64-unknown-linux-gnu 不适用 reason=no_linux_runner_in_matrix"'
+        run: 'echo "llm-https: compiled=0 platform=linux 不适用 reason=no_linux_runner_in_matrix"'
 
   compliance:
     name: compliance (licenses + sbom + secrets + layering)
