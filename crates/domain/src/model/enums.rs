@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// 会话状态（SPEC 6.1-4）。唯一写入点是 `Session::transition`。
@@ -28,7 +29,7 @@ impl SessionState {
 }
 
 /// 要点类型（SPEC 6.3-3）。无法判定时降级为 `KeyInfo` 并降低置信度。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum InsightKind {
     #[default]

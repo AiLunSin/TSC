@@ -26,6 +26,12 @@
 | Tesseract 语言包 | Apache-2.0 / 语言包单独许可 | 可选 OCR 兜底 | 逐语言包核查，默认不打包 | 待签 | 待签 |
 | sqlite-vec | MIT / Apache-2.0 | 直接依赖 | 随包，保留声明 | 待签 | 待签 |
 | SQLCipher + OpenSSL | BSD-style | 直接链接 | 需出口合规声明 | 待签 | 待签 |
+| schemars 1.2.3 | MIT | 直接依赖（Schema 派生） | 仅用于由领域类型派生 JSON Schema，不引入运行时校验引擎；无额外传递依赖；保留版权声明 | 待签 | 待签 |
+| TLS 传输组件（`native-tls`，阶段 D，optional） | MIT / Apache-2.0 | 已引入为可选依赖（`cfg(windows)` 与 `cfg(target_os = "macos")`），默认构建零增量 | 系统 TLS：Windows → SChannel、macOS → Security.framework；**不额外打包 OpenSSL/ring**。`Cargo.lock` 新增 native-tls 0.2.18、schannel 0.1.30（Windows 路径）；macOS 路径为 security-framework。备选 `rustls + ring` 仅在系统 TLS 不可用时评估。**个人自用，未做商业分发合规评审** | 个人项目口径免双签 | 已登记 |
+
+> **阶段 D 结论**：`llm-https = ["dep:native-tls"]` 已从空 feature 升级为真实依赖；许可类别仍受 `cargo deny` 约束（GPL/AGPL/SSPL 不可豁免）。
+
+> **Phase A 结论**：生产 HTTPS 传输**挂起**，`llm-https = []` 为空 feature；`Cargo.lock` 与依赖闭包零变化。`schemars` 落在 `domain`（导出 Schema）与 `infrastructure`（编解码校验）两侧，属任务 L1.1 备注〔D1〕的第二种选择。
 
 ## 3. 发布前检查项
 

@@ -5,6 +5,7 @@
 
 pub mod capture;
 pub mod governance;
+pub mod llm;
 pub mod repository;
 pub mod search;
 pub mod understand;
@@ -14,6 +15,10 @@ pub use capture::{
     SubtitleSource,
 };
 pub use governance::{AuditLog, Decision, Guardrail, PolicyResolver, Presenter, Sanitizer};
+pub use llm::{
+    CancelToken, LlmCapability, LlmObserver, StreamCollector, StreamOutcomeSummary,
+    StructuredLlmGateway,
+};
 pub use repository::{CardRepository, InsightRepository, SessionRepository, UtteranceRepository};
 pub use search::{
     FetchOutcome, PageFetcher, ProviderRequest, ProviderResponse, SearchBroker, SearchHit,

@@ -16,7 +16,23 @@ B0（工程基座与合规前置）已落地并在 Windows x64 验证：
 - 审计哈希链、脱敏日志白名单、10 项度量
 - CI：web / Rust 三 target / 合规三段流水线
 
-未闭合项见 [`docs/progress/b0-status.md`](docs/progress/b0-status.md) 与 [`docs/progress/ci-readiness.md`](docs/progress/ci-readiness.md)。
+未闭合项见 [`docs/progress/b0-status.md`](docs/progress/b0-status.md)、[`docs/progress/b1-status.md`](docs/progress/b1-status.md) 与 [`docs/progress/ci-readiness.md`](docs/progress/ci-readiness.md)。
+
+## B1（M0 技术验证）当前状态
+
+已达成部分：
+
+- 稳定前缀策略（12.2）
+- OpenAI 兼容 LLM 网关的四类结构化任务已通过真实联调：8 个 ignored 用例 8/8 通过，四类任务均 `degraded=false`、`http_status=200`
+- 30 样本/任务真实基线已达成：四类首 token p95 均 ≤1.2s、总耗时 p95 均 ≤6s；minutes 29/30（1 次 timeout），其余 30/30（AC-20/AC-21/AC-22）
+- 离线测试基线 ≥240 passed（阶段 F 基线；阶段 G 最终计数待复核）；fmt / clippy / 层禁 / 密钥扫描 / 依赖许可门禁通过
+- LLM 调用默认关闭，端点、模型与凭据均通过运行期环境变量注入，不写入仓库
+
+未完成：
+
+- AC-23 / AC-24 / AC-25（429、人为截止、schema 违规对照）尚未实测
+- WASAPI 采集、平台字幕、ASR/VAD 等 B1 其余技术验证
+- M0 总评与 B2~B5 尚未开始
 
 ## 目录结构
 
@@ -74,6 +90,7 @@ cargo build -p meeting-copilot-desktop
 | `docs/sdd/design.md` | 技术方案（架构、时序、选型、追溯矩阵） |
 | `docs/sdd/tasks.md` | 分批次编码任务与门禁 |
 | `docs/progress/b0-status.md` | B0 执行状态与偏差 |
+| `docs/progress/b1-status.md` | B1 技术验证、LLM 联调与真实采样状态 |
 | `docs/progress/ci-readiness.md` | CI 预检结果与剩余问题方案 |
 | `docs/compliance/license-review.md` | 高风险组件许可证边界 |
 

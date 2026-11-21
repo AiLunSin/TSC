@@ -12,13 +12,21 @@ default = ["bundled-sqlite"]
 bundled-sqlite = ["rusqlite/bundled"]
 # 页级加密：内置 SQLCipher + 随包 OpenSSL。构建机需 NASM（Windows）与 Perl/OpenSSL 构建链。
 sqlcipher = ["rusqlite/bundled-sqlcipher-vendored-openssl"]
+# 阶段 D：真实 HTTPS 传输（系统 TLS，不打包 OpenSSL）。
+llm-https = ["dep:native-tls"]
 
 [dependencies]
 aes-gcm = "0.10"
 hkdf = "0.12"
 meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
 rusqlite = { version = "0.43" }
+schemars = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"
 thiserror.workspace = true
+
+[target."cfg(windows)".dependencies]
+native-tls = { version = "0.2", optional = true }
+[target."cfg(target_os = \"macos\")".dependencies]
+native-tls = { version = "0.2", optional = true }

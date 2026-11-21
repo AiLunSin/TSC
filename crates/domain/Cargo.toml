@@ -7,9 +7,10 @@ license.workspace = true
 description = "领域层：模型、值对象、端口 trait、Guardrail 纯函数。禁止依赖平台与网络实现。"
 
 [dependencies]
+schemars = { version = "1", features = ["derive"] }
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 proptest = "1"
-serde_json.workspace = true

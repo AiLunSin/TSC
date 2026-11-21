@@ -2,6 +2,7 @@
 
 pub mod audit;
 pub mod crypto;
+pub mod llm;
 pub mod metrics;
 pub mod store;
 pub mod telemetry;
