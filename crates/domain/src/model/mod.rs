@@ -7,12 +7,17 @@ pub mod channel;
 pub mod enums;
 pub mod governance;
 pub mod insight;
+pub mod insight_kind;
+pub mod insight_policy;
+pub mod insight_similarity;
 pub mod llm;
 pub mod outbox;
 pub mod provider;
+pub mod rolling_summary;
 pub mod session;
 pub mod unknown;
 pub mod utterance;
+pub mod utterance_text;
 
 pub use card::{
     ConflictView, DedupeKey, Freshness, GapCandidate, Reference, SuggestionCard, TraceChain,

@@ -35,6 +35,8 @@ pub struct DecisionFields {
 pub struct TodoFields {
     pub assignee: Option<String>,
     pub due: Option<WallClock>,
+    #[serde(default)]
+    pub action: Option<ShortText>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -64,6 +66,8 @@ pub struct Insight {
     pub sources: Vec<UtteranceRef>,
     pub manual_locked: bool,
     pub created_at: WallClock,
+    #[serde(default)]
+    pub supplement_of: Option<InsightRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -74,6 +78,10 @@ pub enum InsightError {
     Deleted,
     #[error("字段与要点类型不匹配：{0:?}")]
     FieldsMismatch(InsightKind),
+    #[error("待办缺少动作")]
+    TodoActionMissing,
+    #[error("正文超长：{actual} 超过 {limit}")]
+    OversizeText { actual: usize, limit: usize },
 }
 
 impl Insight {
@@ -100,6 +108,7 @@ impl Insight {
             sources,
             manual_locked: false,
             created_at,
+            supplement_of: None,
         })
     }
 
@@ -127,9 +136,135 @@ impl Insight {
     }
 }
 
+/// 非空来源集合：空集合在类型上不可构造（反序列化同样拒绝）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "Vec<UtteranceRef>", into = "Vec<UtteranceRef>")]
+pub struct InsightSources(Vec<UtteranceRef>);
+
+impl InsightSources {
+    pub fn new(refs: Vec<UtteranceRef>) -> Result<Self, InsightError> {
+        if refs.is_empty() {
+            return Err(InsightError::MissingSource);
+        }
+        let mut deduped: Vec<UtteranceRef> = Vec::new();
+        for reference in refs {
+            if !deduped.contains(&reference) {
+                deduped.push(reference);
+            }
+        }
+        Ok(Self(deduped))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn as_slice(&self) -> &[UtteranceRef] {
+        &self.0
+    }
+
+    pub fn contains(&self, reference: &UtteranceRef) -> bool {
+        self.0.contains(reference)
+    }
+
+    /// 去重保序追加（合并单元的 `origin_pair` 双引用）。
+    pub fn with_parent(&self, extra: UtteranceRef) -> Self {
+        let mut refs = self.0.clone();
+        if !refs.contains(&extra) {
+            refs.push(extra);
+        }
+        Self(refs)
+    }
+}
+
+impl TryFrom<Vec<UtteranceRef>> for InsightSources {
+    type Error = InsightError;
+
+    fn try_from(refs: Vec<UtteranceRef>) -> Result<Self, Self::Error> {
+        Self::new(refs)
+    }
+}
+
+impl From<InsightSources> for Vec<UtteranceRef> {
+    fn from(sources: InsightSources) -> Self {
+        sources.0
+    }
+}
+
+/// 抽取草稿：来源在类型上非空，运行期再做一次断言。
+#[derive(Debug, Clone, PartialEq)]
+pub struct InsightDraft {
+    pub kind: InsightKind,
+    pub text: ShortText,
+    pub confidence: Confidence,
+    pub sources: InsightSources,
+    pub fields: InsightFields,
+    pub kind_fallback: bool,
+}
+
+impl InsightDraft {
+    pub fn validate(&self) -> Result<(), InsightError> {
+        if matches!(self.kind, InsightKind::Todo)
+            && self
+                .fields
+                .todo
+                .as_ref()
+                .and_then(|todo| todo.action.as_ref())
+                .is_none()
+        {
+            return Err(InsightError::TodoActionMissing);
+        }
+        let chars = self.text.as_str().chars().count();
+        if chars > ShortText::LIMIT {
+            return Err(InsightError::OversizeText {
+                actual: chars,
+                limit: ShortText::LIMIT,
+            });
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn insight_sources_reject_empty() {
+        assert_eq!(
+            InsightSources::new(Vec::new()),
+            Err(InsightError::MissingSource)
+        );
+    }
+
+    #[test]
+    fn insight_sources_with_parent_is_order_preserving() {
+        let base =
+            InsightSources::new(vec![UtteranceRef::new("a").expect("ref")]).expect("sources");
+        let same = base.with_parent(UtteranceRef::new("a").expect("ref"));
+        assert_eq!(same.len(), 1);
+        let extended = same.with_parent(UtteranceRef::new("b").expect("ref"));
+        assert_eq!(extended.len(), 2);
+        assert_eq!(extended.as_slice()[1].as_str(), "b");
+    }
+
+    #[test]
+    fn draft_requires_todo_action() {
+        let draft = InsightDraft {
+            kind: InsightKind::Todo,
+            text: ShortText::new("完成回滚方案").expect("text"),
+            confidence: Confidence::new(0.9).expect("conf"),
+            sources: InsightSources::new(vec![UtteranceRef::new("a").expect("ref")])
+                .expect("sources"),
+            fields: InsightFields::default(),
+            kind_fallback: false,
+        };
+        assert_eq!(draft.validate(), Err(InsightError::TodoActionMissing));
+    }
 
     fn insight() -> Insight {
         Insight::new(
