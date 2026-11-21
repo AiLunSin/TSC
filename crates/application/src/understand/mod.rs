@@ -24,7 +24,9 @@ pub use deduplicator::{
 };
 pub use field_filler::{apply_kind_penalty, fill_fields};
 pub use insight_extractor::{classify_signals, prefilter_hit};
-pub use insight_gateway::{decide_extraction, drafts_from_extract, ExtractDecision};
+pub use insight_gateway::{
+    build_request, decide_extraction, drafts_from_extract, run_extraction, ExtractDecision,
+};
 pub use insight_ops::{delete, filter, flag_important};
 pub use insight_splitter::split_insight_text;
 pub use ports::{LexiconView, SilenceSignal, UnderstandClock, UnderstandFeature};
