@@ -196,6 +196,8 @@ mod tests {
     #[test]
     fn overrides_are_bounded() {
         assert!(LiveRunConfig::try_new(&env(), Some(99), None, None).is_err());
+        assert!(LiveRunConfig::try_new(&env(), Some(8001), None, None).is_err());
+        assert!(LiveRunConfig::try_new(&env(), Some(100), None, None).is_ok());
         assert!(LiveRunConfig::try_new(&env(), None, Some(0), None).is_err());
         assert!(LiveRunConfig::try_new(&env(), None, Some(201), None).is_err());
         assert!(LiveRunConfig::try_new(&env(), None, None, Some(4)).is_err());

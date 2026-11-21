@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+pub mod live_harness;
+
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};

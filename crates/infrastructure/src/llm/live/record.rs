@@ -73,11 +73,11 @@ impl RunRecord {
                 return Err(invalid("tls_trust_root: 非法枚举"));
             }
         }
-        let not_measured = self
+        let all_not_measured = self
             .sub_status
             .iter()
-            .any(|item| item.status == SubStatusState::NotMeasured);
-        if not_measured && (self.calls_used != 0 || self.budget_hit) {
+            .all(|item| item.status == SubStatusState::NotMeasured);
+        if all_not_measured && (self.calls_used != 0 || self.budget_hit) {
             return Err(invalid("calls_used: 未实测时必须为 0"));
         }
         Ok(())
@@ -234,6 +234,39 @@ mod tests {
         assert!(LiveRecorder::new("../escape").is_err());
         assert!(LiveRecorder::new("a/b").is_err());
         assert!(LiveRecorder::new("20261121-abcdef0").is_ok());
+    }
+
+    #[test]
+    fn partial_not_measured_allows_nonzero_calls() {
+        let mut record = record();
+        record.sub_status = vec![
+            SubStatus {
+                item: "ac23".into(),
+                status: SubStatusState::Measured,
+                reason_code: None,
+            },
+            SubStatus {
+                item: "ac25".into(),
+                status: SubStatusState::NotMeasured,
+                reason_code: Some("construction_conflict".into()),
+            },
+        ];
+        record.calls_used = 3;
+        assert!(record.validate().is_ok());
+
+        let mut all_not_measured = record.clone();
+        all_not_measured.sub_status = vec![SubStatus {
+            item: "ac23".into(),
+            status: SubStatusState::NotMeasured,
+            reason_code: Some("not_executed".into()),
+        }];
+        all_not_measured.calls_used = 1;
+        assert!(all_not_measured.validate().is_err());
+
+        let mut empty = record;
+        empty.sub_status = Vec::new();
+        empty.calls_used = 1;
+        assert!(empty.validate().is_err());
     }
 
     #[test]

@@ -1,8 +1,11 @@
 mod support;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
-use meeting_copilot_domain::model::llm::LlmTask;
+use meeting_copilot_domain::model::llm::{FailureClass, LlmTask};
+use meeting_copilot_infrastructure::llm::degrade::FakeClock;
 use meeting_copilot_infrastructure::llm::live::config::{LiveRunConfig, SecretString};
 use meeting_copilot_infrastructure::llm::live::gate::{
     evaluate, EnvView, LiveDecision, MapEnv, SkipReason,
@@ -13,6 +16,7 @@ use meeting_copilot_infrastructure::llm::live::record::{
 use meeting_copilot_infrastructure::llm::live::stats::{percentile, summarize, Sample};
 use meeting_copilot_infrastructure::llm::live::{transport_if_allowed, STATS_RULE};
 use meeting_copilot_infrastructure::llm::transport::HttpTransport;
+use support::Step;
 
 fn full_env() -> MapEnv {
     MapEnv::new()
@@ -244,4 +248,64 @@ fn env_view_is_abstracted_from_process_env() {
     let missing = MapEnv::new();
     assert!(missing.get("LLM_MODEL").is_none());
     let _: &dyn EnvView = &env;
+}
+#[test]
+fn record_root_matches_crate_dir() {
+    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    assert_eq!(
+        manifest.file_name().and_then(|name| name.to_str()),
+        Some("infrastructure")
+    );
+    assert_eq!(
+        manifest
+            .parent()
+            .and_then(|dir| dir.file_name())
+            .and_then(|name| name.to_str()),
+        Some("crates")
+    );
+
+    let recorder = LiveRecorder::new("t").expect("recorder");
+    assert!(recorder.root().starts_with(".tmp"));
+    assert_eq!(
+        recorder
+            .root()
+            .components()
+            .nth(1)
+            .map(|component| component.as_os_str()),
+        Some(std::ffi::OsStr::new("llm-live"))
+    );
+    assert_eq!(
+        recorder
+            .samples_path()
+            .file_name()
+            .and_then(|name| name.to_str()),
+        Some("samples.jsonl")
+    );
+    assert!(!recorder.root().exists(), "守卫用例不得产生 IO");
+}
+#[test]
+fn deadline_floor_100ms_only() {
+    let config = LiveRunConfig::try_new(&full_env(), Some(100), None, None).expect("100ms");
+    assert_eq!(config.deadline_ms, 100);
+
+    let transport = support::FakeTransport::new(vec![
+        Step::Delay(Duration::from_secs(3)),
+        Step::Delay(Duration::from_secs(3)),
+        Step::Delay(Duration::from_secs(3)),
+    ]);
+    let (gateway, _observer) = support::gateway_with_config(
+        Arc::new(RwLock::new(support::test_config())),
+        transport.clone(),
+        Arc::new(FakeClock::new()),
+    );
+    let request = support::request(LlmTask::CardConclusion, "会议上下文", 100);
+    let started = std::time::Instant::now();
+    let outcome = gateway.complete_structured(&request).expect("调用");
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "延迟注入不应真实睡眠"
+    );
+    assert!(outcome.degraded);
+    assert_eq!(outcome.failure, Some(FailureClass::Timeout));
+    assert!(transport.requests() <= 3);
 }

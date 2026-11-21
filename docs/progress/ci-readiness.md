@@ -302,7 +302,9 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 | D-CI-3 | 工作区 `ci.yml` 原为 CRLF，`.gitattributes` 要求 LF | 统一转 LF，内容零变化；转换后 `git diff -U0` 无删除行 |
 | D-CI-4 | `feature-coverage` 的 `if: always()` 为 job 级汇总语义 | 不视为 C3 差集步骤的吞错修饰；差集步骤块内无 `|| true` / `continue-on-error` / `set +e` / `if: false` |
 
-### 14.3 仍只能由远端判定的项（待推送后观测）
+### 14.3 远端结果（2026-11-21 · 用户确认）
+
+> 推送后由用户在 Actions 页面确认：**6 个 job 全部通过**（`web`、`rust` 三个矩阵、`compliance`、`sqlcipher`、`feature-coverage`、`test-name-inventory`）。逐项日志未导出，L3-4 / L3-5 / L3-7 / L3-10 的具体数值以 Actions 页面为准；本记录不替代后续复跑。
 
 | 编号 | 待观测 | 证据位置 |
 |---|---|---|
@@ -317,4 +319,4 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 | L3-9 | `feature-coverage` 在 rust 失败时仍执行 | job 关系图 |
 | L3-10 | CI 分钟成本与缓存命中率 | 计费面板 / 步骤耗时 |
 
-**结论**：本地判定项全部达成；**不宣称远端 CI 通过**，G2 与三平台稳定性结论不变。
+**结论**：本地判定项全部达成；远端 CI 经用户确认 6 个 job 全绿。仍**不宣称 G2 通过**——G2 需真实三平台 30 分钟稳定运行，CI 绿不构成等价。

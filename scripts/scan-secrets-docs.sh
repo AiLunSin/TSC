@@ -11,6 +11,7 @@ SCAN_MD=0
 SCAN_ARTIFACTS=0
 SELF_TEST=0
 ARTIFACT_DIR=".tmp/llm-live"
+ARTIFACT_EXPLICIT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -19,6 +20,7 @@ while [[ $# -gt 0 ]]; do
       SCAN_ARTIFACTS=1
       if [[ $# -ge 2 && "${2}" != --* ]]; then
         ARTIFACT_DIR="$2"
+        ARTIFACT_EXPLICIT=1
         shift
       fi
       ;;
@@ -89,7 +91,11 @@ JS
 
 scan_artifacts() {
   local dir="$1"
+  local explicit="${2:-0}"
   if [[ ! -d "${dir}" ]]; then
+    if [[ "${explicit}" -eq 1 ]]; then
+      return 2
+    fi
     return 0
   fi
   if [[ ! -r "${dir}" ]]; then
@@ -155,7 +161,7 @@ if [[ ${SCAN_MD} -eq 1 ]]; then
   scan_md || final=$?
 fi
 if [[ ${SCAN_ARTIFACTS} -eq 1 ]]; then
-  scan_artifacts "${ARTIFACT_DIR}" || final=$?
+  scan_artifacts "${ARTIFACT_DIR}" "${ARTIFACT_EXPLICIT}" || final=$?
 fi
 if [[ ${final} -eq 2 ]]; then
   echo "扫描面缺失或不可读" >&2

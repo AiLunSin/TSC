@@ -216,3 +216,112 @@
 - **阶段 G 的 265 测试门禁已达成**：`cargo test --workspace` 265 passed / 0 failed（含新增 21 个具名收口用例）。
 - 改动未 commit；凭据仍未轮换。
 > 注：第 8 节中 AC-35、AC-20~AC-25 为阶段 E 历史状态；第 9 节已更新为 30 样本基线：AC-20/AC-21/AC-22 已满足，AC-23~AC-25 仍未实测，AC-18 仍由 13.4 判定。
+## 10. 2026-11-21 探针复验（真实端点，用户终端执行）
+
+### 执行方式
+- 用户在终端注入 `LLM_*` 后直跑：`cargo test -p meeting-copilot-infrastructure --features llm-https --test llm_live -- --ignored --nocapture --test-threads=1`。
+- `RUN_ID=18ea115484f44b50-28680-0`；`per_task` 记录 14；`samples=14`；`calls_used=1`。
+- 记录落在 `crates/infrastructure/.tmp/llm-live/<run-id>/`（cargo test 的 CWD 为 crate 目录）。
+
+### 实测结果
+- **8 passed / 0 failed**，总耗时 16.41s。
+- 14 条样本全部 `outcome=ok`、`http_status=200`、`degraded=false`、`excluded=null`、`failure_class=null`。
+- 分布：`summary` 5、`card_conclusion` 3、`insight_extract` 3、`minutes_draft` 3。
+- 总耗时：min 795ms / p95 1569ms / max 1569ms；本探针不记录首 token（`first_token_ms=null`）。
+- 端点与模型均通过 `path_confirmed=true`、`model_confirmed=true`、`host_locked=true`、`tls_trust_root=ok`。
+
+### 判定（不改变既有 AC 状态）
+| 项 | 结论 |
+|---|---|
+| AC-20 / AC-21 / AC-22 | 复验通过（与 §9 的 30 样本基线一致，非新基线） |
+| AC-23 / AC-24 / AC-25 | **仍未实测**。8 个用例共用 `run_probe`，只发合法请求，不注入 429、不强制短截止、不构造 schema 违规；用例名与实际覆盖不符 |
+| AC-18 | 仍由 13.4 判定 |
+| AC-26（运行期四泄漏面） | ✅ 已判定（见 10.1）；系统临时目录面已移出扫描面，偏差 D-L31-1 已关闭（见 11） |
+| 凭据轮换 | 未完成（`run.json` 中 `credential_rotated=false`） |
+
+### 10.1 AC-26 运行期四项（手工核查，2026-11-21 21:14）
+
+| 面 | 命令 | 结果 |
+|---|---|---|
+| 记录目录 | `grep -rlF -- "$LLM_API_KEY" crates/infrastructure/.tmp` | `rc=1`（grep 语义：无匹配 = 未命中） |
+| 文档/产物 | `bash scripts/scan-secrets-docs.sh --all-md --artifacts` | `rc=0`，0 命中 |
+| 仓库全量 | `bash scripts/scan-secrets.sh` | `rc=0`，`PASS: 密钥/明文扫描 0 命中` |
+| 进程命令行 | `ps -o args= -p $$ \| grep -cF -- "$LLM_API_KEY"` | `0` |
+
+**偏差 D-L31-1（已关闭，2026-11-21）**：历史事实为系统临时目录扫描在 30s 超时（实测 `timeout 30` 返回 124，本机该目录含 13,862 个子目录）。修复方式：扫描面限定仓库内两处记录根，系统临时目录永久移出扫描面；缺失/超时退 `2`。历史数值保留为背景，不代表当前行为。
+
+### 待办
+- 若要推进 AC-23/24/25，需新增**故障注入用例**（429 响应、强制 `deadline_ms` 上限、schema 违规请求），或把现有探针重命名以避免误导；属新任务，需走需求规格。
+- `run-llm-live.sh` 泄漏面扫描已修复（P0/P1，见 §11）。
+
+## 11. 2026-11-21 LLM 联调加固 P0/P1（扫描面修复 + D-L31-1 关闭）
+
+### 11.1 P0 判据
+
+| 判据 | 命令 | 结果 |
+|---|---|---|
+| 四态 | `clean` / `leak` / `absent` / `timeout` 桩 | `0/1/2/2`，连跑 3 次一致 |
+| 命中不回显 | 对 `leak` 输出做固定假值连续 8 字符 grep | 0 命中 |
+| 缺失/超时不出 `leak_hits` | `absent`、`timeout` 桩 | 各 0 次 |
+| 越界 | `--record-root ../outside` | `2` + `record_root_outside_repo`，无 `leak_hits` |
+| 空白凭据 | `LLM_API_KEY='   '` | `2` + `credential_missing`，无 `leak_hits` |
+| 优先级 | `leak`+rc7 / `timeout`+rc7 / `clean`+rc7 | `1 / 2 / 7` |
+| 静态扫描面 | `TMPDIR` / `grep -R` / `grep -rIlF` 命中数 | `0 / 0 / 1` |
+| 记录根唯一 | `crates/infrastructure/.tmp/llm-live` 字面量出现次数 | `1`（仅 `record_roots()`） |
+| 真实面耗时 | `--scan-only`（扫描 crate 记录根） | 6.0s ≤10s，`rc=0`，`leak_hits=0`，`scan_face=crate` |
+| 守卫用例 | `record_root_matches_crate_dir` | 1 passed，0.00s，执行后无目录产生 |
+
+### 11.2 偏差
+
+| 编号 | 偏差 | 处理 |
+|---|---|---|
+| D-LV-02 | 本机不支持真符号链接（`MSYS=winsymlinks:nativestrict ln -s` 失败） | 判 `2` + `symlink_unsupported_on_host`；**不降级目录联接**，因 junction 会被 `grep -r` 跟随，破坏“链接目标不计入”的语义 |
+
+### 11.3 D-L31-1 关闭与基线零漂移
+
+- 原缺陷：扫描系统临时目录导致 30s 超时挂起。
+- 修复：只扫仓库内两处记录根；`timeout` 包裹；`-R` 改 `-r`；缺失/超时退 `2`。
+- 基线：`docs/progress/test-names-before.txt` 仍 365 行，sha256 前缀 `805b20de…`，工作区无改动。
+- 第 10.1 节四项运行期结论保持原样，未改写。
+## 12. 2026-11-21 LLM 联调加固 P2/P3（离线注入与三态落盘）
+
+### 12.1 P2 结果
+
+| 项 | 结果 |
+|---|---|
+| `validate` 收窄 | `any → all`（空集合视为全部）；新增单测 `partial_not_measured_allows_nonzero_calls` 通过 |
+| 装配扩展 | `LiveOptions` + `assemble_live_with`；`assemble_live` 以默认值委托，既有调用点零改动 |
+| 截止边界 | `Some(100)` 通过、`Some(99)` / `Some(8001)` 拒绝、`None` 仍为 6000 |
+| 新增离线用例 | `rate_limit_backoff_jitter_without_retry_after`（等待 ∈ `[640,960]` ms）、`rate_limit_retry_after_exceeds_remaining_deadline`（requests=1 / attempts=1）、`deadline_floor_100ms_only`、`record_root_matches_crate_dir`，均退出 0 |
+| 既有用例增强 | `rate_limit_backoff` 精确等待 1000ms；`rate_limit_beyond_remaining_budget_degrades` 增 `attempts=1`；`invalid_schema_twice_degrades_with_same_shape` 增同类型断言 |
+
+### 12.2 P3 结果
+
+| 项 | 结果 |
+|---|---|
+| `--list --ignored` | 9 条；8 个原名逐字存在 + `ac25_control_request_skipped_construction_conflict` |
+| 测试侧脚手架 | `shared_ledger`（进程内唯一）、`next_seq`（行数+1）、`SubStatusRegistry`（`ac23/ac24/ac25` + `ac35`）、`AbortFlag`、`write_summary` |
+| 失败即停 | 401/402/403 → `aborted_unauthorized`；不可达/不可用 → `aborted_network`；在 admit 后、构造传输前检查 |
+| CI 同步 | `live_count -ge 9`；8 原名循环断言；`--list --ignored` 2 处；`--nocapture` / `run-llm-live` / `LLM_*` 均 0 |
+
+### 12.3 回归
+
+- `cargo test --workspace`：38 targets / 404 passed / 0 failed / **9 ignored**（`8 → 9` 属预期增量）
+- `fmt` / `clippy -D warnings` / `build`：均 0
+- 静态：`layering` / `secrets` / `secrets-docs` / `capture-offline` / `g2-claims` / `deny`：全 0
+- 差集：`removed=0`，新增 48
+- 零转录：记录目录 `https?://` 与 `request_id` 0 命中；`docs/**` 与规格目录无模型名字面量
+
+### 12.4 偏差
+
+| 编号 | 偏差 | 处理 |
+|---|---|---|
+| D-LV-03 | 未引入独立 `ObservingTransport`，改由 `StructuredOutcome.http_status` 直接判定 429 | 机制等价（仅读状态码，不保存 header 原文）；登记为最小实现 |
+| D-LV-04 | CI 未内置 `--ignored` 精确正则自扫描（避免自我匹配） | 本地审计：剔除 `--list --ignored` 后 0 命中；CI 保留 `-ge 9` 与原名断言 |
+
+### 12.5 L3 仍未实测（需用户终端）
+
+- 真实 429 观测（`ac23` 的实际取值）
+- 100ms 截止的真实偏差与 `ac24` 三态
+- 真实 `run.json` 三项三态共存与 `seq` 唯一单调
+- 凭据轮换（未完成）

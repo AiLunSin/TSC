@@ -32,6 +32,30 @@ fn run(
     (outcome, transport)
 }
 
+fn run_with_clock(
+    task: LlmTask,
+    steps: Vec<Step>,
+    deadline_ms: u64,
+) -> (
+    meeting_copilot_domain::model::llm::StructuredOutcome,
+    Arc<support::FakeTransport>,
+    Duration,
+) {
+    use meeting_copilot_infrastructure::llm::degrade::Clock;
+    let transport = support::FakeTransport::new(steps);
+    let clock = Arc::new(FakeClock::new());
+    let before = clock.now();
+    let (gateway, _observer) = support::gateway_with_config(
+        Arc::new(RwLock::new(support::test_config())),
+        transport.clone(),
+        clock.clone(),
+    );
+    let request = support::request(task, "会议上下文", deadline_ms);
+    let outcome = gateway.complete_structured(&request).expect("调用");
+    let after = clock.now();
+    (outcome, transport, after.duration_since(before))
+}
+
 #[test]
 fn timeout_deadline() {
     let started = Instant::now();
@@ -60,7 +84,7 @@ fn retry_cap() {
 
 #[test]
 fn rate_limit_backoff() {
-    let (outcome, transport) = run(
+    let (outcome, transport, waited) = run_with_clock(
         LlmTask::InsightExtract,
         vec![
             Step::Status(429, vec![("Retry-After".into(), "1".into())], String::new()),
@@ -71,6 +95,47 @@ fn rate_limit_backoff() {
     assert!(!outcome.degraded);
     assert_eq!(outcome.attempts, 2);
     assert_eq!(transport.requests(), 2);
+    assert_eq!(waited, Duration::from_millis(1_000));
+}
+
+#[test]
+fn rate_limit_backoff_jitter_without_retry_after() {
+    let (outcome, transport, waited) = run_with_clock(
+        LlmTask::InsightExtract,
+        vec![
+            Step::Status(429, vec![], String::new()),
+            Step::Json(support::envelope(&support::insight_body())),
+        ],
+        6_000,
+    );
+    assert!(!outcome.degraded);
+    assert_eq!(outcome.attempts, 2);
+    assert_eq!(transport.requests(), 2);
+    assert!(waited > Duration::ZERO, "等待必须为正: {waited:?}");
+    assert!(
+        waited >= Duration::from_millis(640),
+        "抖动下界 640ms 未达成: {waited:?}"
+    );
+    assert!(
+        waited <= Duration::from_millis(960),
+        "抖动上界 960ms 越界: {waited:?}"
+    );
+}
+
+#[test]
+fn rate_limit_retry_after_exceeds_remaining_deadline() {
+    let (outcome, transport) = run(
+        LlmTask::InsightExtract,
+        vec![
+            Step::Status(429, vec![("Retry-After".into(), "1".into())], String::new()),
+            Step::Json(support::envelope(&support::insight_body())),
+        ],
+        300,
+    );
+    assert!(outcome.degraded);
+    assert_eq!(outcome.failure, Some(FailureClass::RateLimited));
+    assert_eq!(outcome.attempts, 1);
+    assert_eq!(transport.requests(), 1);
 }
 
 #[test]
@@ -85,6 +150,7 @@ fn rate_limit_beyond_remaining_budget_degrades() {
     );
     assert!(outcome.degraded);
     assert_eq!(outcome.failure, Some(FailureClass::RateLimited));
+    assert_eq!(outcome.attempts, 1);
     assert_eq!(transport.requests(), 1);
 }
 
@@ -112,7 +178,12 @@ fn invalid_schema_twice_degrades_with_same_shape() {
     );
     assert!(outcome.degraded);
     assert_eq!(outcome.failure, Some(FailureClass::InvalidSchema));
+    assert_eq!(outcome.attempts, 2);
     assert!(matches!(outcome.body, Some(StructuredBody::Insight(_))));
+    assert!(matches!(
+        outcome.body.as_ref().map(|body| body.task()),
+        Some(LlmTask::InsightExtract)
+    ));
     assert_eq!(transport.requests(), 2);
 }
 

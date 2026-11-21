@@ -110,7 +110,12 @@ jobs:
           live_ignored="$(cargo test -p meeting-copilot-infrastructure --features llm-https \
             --test llm_live --target "${LLM_HTTPS_TARGET}" -- --list --ignored)"
           live_count="$(printf '%s\n' "${live_ignored}" | grep -cE ': test$' || true)"
-          test "${live_count}" -ge 8
+          test "${live_count}" -ge 9
+          for name in run_gate_skips_without_live first_token_latency_p50_p95 \
+            total_latency_four_tasks schema_conformance_rate rate_limit_observation \
+            deadline_forced_timeout schema_violation_probe_once record_is_recomputable; do
+            printf '%s\n' "${live_ignored}" | grep -qE "::${name}: test$"
+          done
           base_ignored="$(cargo test -p meeting-copilot-infrastructure --features llm-https \
             --test llm_live_baseline --target "${LLM_HTTPS_TARGET}" -- --list --ignored)"
           base_count="$(printf '%s\n' "${base_ignored}" | grep -cE ': test$' || true)"

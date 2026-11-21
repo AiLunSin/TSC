@@ -54,6 +54,15 @@ pub struct LiveSession {
     pub config: Arc<LiveRunConfig>,
 }
 
+/// 装配扩展项：全部可选，默认与 [`assemble_live`] 的既有行为一致。
+#[derive(Default)]
+pub struct LiveOptions {
+    pub deadline_override: Option<u64>,
+    pub samples_override: Option<usize>,
+    pub concurrency_override: Option<usize>,
+    pub ledger: Option<Arc<BudgetLedger>>,
+}
+
 /// 真实装配：票据 → 配置（唯一凭据读点）→ Bearer → 预算 → 网关 → 记录器。
 #[allow(clippy::too_many_arguments)]
 pub fn assemble_live(
@@ -64,9 +73,38 @@ pub fn assemble_live(
     clock: Arc<dyn Clock>,
     run_id: &str,
 ) -> Result<LiveSession, CopilotError> {
-    let config = Arc::new(LiveRunConfig::try_new(env, None, None, None)?);
+    assemble_live_with(
+        ticket,
+        env,
+        transport,
+        observer,
+        clock,
+        run_id,
+        LiveOptions::default(),
+    )
+}
+
+/// 带扩展项的装配入口；`assemble_live` 以默认值委托至此。
+#[allow(clippy::too_many_arguments)]
+pub fn assemble_live_with(
+    ticket: &AdmissionTicket,
+    env: &dyn EnvView,
+    transport: Arc<dyn HttpTransport>,
+    observer: Arc<dyn LlmObserver>,
+    clock: Arc<dyn Clock>,
+    run_id: &str,
+    options: LiveOptions,
+) -> Result<LiveSession, CopilotError> {
+    let config = Arc::new(LiveRunConfig::try_new(
+        env,
+        options.deadline_override,
+        options.samples_override,
+        options.concurrency_override,
+    )?);
     let recorder = Arc::new(LiveRecorder::new(run_id)?);
-    let ledger = Arc::new(BudgetLedger::new(config.call_budget as u64));
+    let ledger = options
+        .ledger
+        .unwrap_or_else(|| Arc::new(BudgetLedger::new(config.call_budget as u64)));
     let bearer = Arc::new(BearerTransport::new(transport, config.secret.clone()));
     let budgeted: Arc<dyn HttpTransport> = Arc::new(BudgetedTransport::new(bearer, ledger.clone()));
 

@@ -1,0 +1,1 @@
+# 符号链接夹具：target 由 run-llm-live.sh 在自检时创建（真 symlink 优先）。
