@@ -91,6 +91,7 @@ cargo build -p meeting-copilot-desktop
 | `docs/sdd/tasks.md` | 分批次编码任务与门禁 |
 | `docs/progress/b0-status.md` | B0 执行状态与偏差 |
 | `docs/progress/b1-status.md` | B1 技术验证、LLM 联调与真实采样状态 |
+| `docs/progress/b2-status.md` | B2.23 离线通道状态机当前进度与剩余门禁 |
 | `docs/progress/ci-readiness.md` | CI 预检结果与剩余问题方案 |
 | `docs/compliance/license-review.md` | 高风险组件许可证边界 |
 

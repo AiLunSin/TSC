@@ -4,6 +4,7 @@
 //! 不出现任何具体服务商、平台 API 或存储细节。
 
 pub mod capture;
+pub mod capture_clock;
 pub mod governance;
 pub mod llm;
 pub mod repository;
@@ -14,6 +15,7 @@ pub use capture::{
     AudioChunk, AudioSource, SourceHealth, Subscription, SubtitleCapability, SubtitleEvent,
     SubtitleSource,
 };
+pub use capture_clock::CaptureClock;
 pub use governance::{AuditLog, Decision, Guardrail, PolicyResolver, Presenter, Sanitizer};
 pub use llm::{
     CancelToken, LlmCapability, LlmObserver, StreamCollector, StreamOutcomeSummary,

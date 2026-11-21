@@ -16,4 +16,4 @@ pub use ids::{
 };
 pub use sanitized::{SanitizedQuery, URL_LIMIT};
 pub use text::{ConclusionText, ShortText, TextBoundError, TitleText, UtteranceText};
-pub use time::{AudioClock, WallClock};
+pub use time::{AudioClock, ClockError, MonoMillis, WallClock};

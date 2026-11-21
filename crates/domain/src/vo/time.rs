@@ -63,6 +63,38 @@ impl WallClock {
     }
 }
 
+/// 单调毫秒。只用于阈值判定与超时比较，不参与墙钟展示。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct MonoMillis(u64);
+
+impl MonoMillis {
+    pub const ZERO: Self = Self(0);
+
+    pub const fn from_millis(millis: u64) -> Self {
+        Self(millis)
+    }
+
+    pub const fn as_millis(self) -> u64 {
+        self.0
+    }
+
+    pub const fn saturating_sub(self, other: Self) -> u64 {
+        self.0.saturating_sub(other.0)
+    }
+
+    pub const fn checked_add(self, delta_ms: u64) -> Option<Self> {
+        match self.0.checked_add(delta_ms) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    pub fn to_wall(self) -> WallClock {
+        WallClock::from_unix_millis(i64::try_from(self.0).unwrap_or(i64::MAX))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

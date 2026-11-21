@@ -135,7 +135,11 @@ fn card_wire_long_conclusion_truncated() {
     match decode_structured(LlmTask::CardConclusion, &raw).expect("decode") {
         StructuredBody::Conclusion(card) => {
             assert_eq!(
-                card.conclusion.expect("conclusion").as_str().chars().count(),
+                card.conclusion
+                    .expect("conclusion")
+                    .as_str()
+                    .chars()
+                    .count(),
                 80
             );
         }
@@ -275,9 +279,5 @@ fn config_max_request_bytes_rejects_out_of_range() {
 
 #[test]
 fn minutes_wire_unknown_top_field_err() {
-    assert!(decode_structured(
-        LlmTask::MinutesDraft,
-        r#"{"summary":"纪要","unknown":1}"#
-    )
-    .is_err());
+    assert!(decode_structured(LlmTask::MinutesDraft, r#"{"summary":"纪要","unknown":1}"#).is_err());
 }
