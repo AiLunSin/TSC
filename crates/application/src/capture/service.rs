@@ -1,28 +1,32 @@
 //! 采集通道服务门面（B2.23.5.1 的最小子集）。
 //!
-//! 已装配：注册表、仲裁决策、切换记录、时钟。
-//! 尚未装配：gap/status/asr 端口；`advance_to` 目前仅实现 5s 回退子集。
+//! 已装配：注册表、仲裁决策、切换记录、gap/status/asr 端口。
+//! 尚未：同毫秒合并进入真实写入、完整 `advance_to`、推送订阅。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use meeting_copilot_domain::error::ErrorCode;
 use meeting_copilot_domain::model::{
     ChannelKey, ChannelKind, ChannelPreference, ChannelState, ChannelStateError, GapReason,
-    StateReason, SwitchReason,
+    SessionState, StateReason, SwitchReason,
 };
 use meeting_copilot_domain::port::CaptureClock;
 use meeting_copilot_domain::vo::{MonoMillis, SessionId, WallClock};
 
+use super::capture_budget::AsrBudget;
 use super::capture_ports::{
     AsrDeliverySink, ChannelGapLog, ChannelStatusSink, NoopAsrDelivery, NoopGapLog, NoopStatusSink,
 };
+use super::capture_resume::CaptureResumeLedger;
 use super::channel_arbiter::{decide, subtitle_fallback_due, Decision};
 use super::channel_state::ChannelStateRegistry;
 use super::switch_log::{ChannelSwitchLog, SwitchTracker};
 use super::types::{
-    ActiveChannel, CaptureGapRecord, CapturePolicy, ChannelObservation, ChannelSnapshot,
-    ChannelStatusEvent, ObservationOutcome, ObservationPayload, RejectReason, SessionContextView,
+    ActiveChannel, AsrIntent, AsrIntentKind, CaptureAvailability, CaptureGapRecord, CapturePolicy,
+    ChannelObservation, ChannelSnapshot, ChannelStatusEvent, ObservationOutcome,
+    ObservationPayload, RejectReason, SessionContextView,
 };
 
 pub struct CaptureChannelService {
@@ -30,6 +34,8 @@ pub struct CaptureChannelService {
     registry: Mutex<ChannelStateRegistry>,
     contexts: Mutex<HashMap<SessionId, SessionContextView>>,
     trackers: Mutex<HashMap<SessionId, SwitchTracker>>,
+    resume: Mutex<HashMap<SessionId, CaptureResumeLedger>>,
+    asr_budget: Mutex<HashMap<SessionId, AsrBudget>>,
     switch_log: Arc<dyn ChannelSwitchLog>,
     gap_log: Arc<dyn ChannelGapLog>,
     status_sink: Arc<dyn ChannelStatusSink>,
@@ -69,6 +75,8 @@ impl CaptureChannelService {
             registry: Mutex::new(ChannelStateRegistry::new(registry_clock)),
             contexts: Mutex::new(HashMap::new()),
             trackers: Mutex::new(HashMap::new()),
+            resume: Mutex::new(HashMap::new()),
+            asr_budget: Mutex::new(HashMap::new()),
             switch_log,
             gap_log,
             status_sink,
@@ -95,8 +103,18 @@ impl CaptureChannelService {
         self.trackers
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
-            .entry(context.session)
+            .entry(context.session.clone())
             .or_default();
+        self.resume
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .entry(context.session.clone())
+            .or_default();
+        self.asr_budget
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .entry(context.session)
+            .or_insert_with(AsrBudget::with_default_interval);
         Ok(())
     }
 
@@ -126,6 +144,14 @@ impl CaptureChannelService {
             .unwrap_or_else(|poison| poison.into_inner())
             .remove(session);
         self.trackers
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .remove(session);
+        self.resume
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .remove(session);
+        self.asr_budget
             .lock()
             .unwrap_or_else(|poison| poison.into_inner())
             .remove(session);
@@ -239,19 +265,79 @@ impl CaptureChannelService {
         if decision.active == ActiveChannel::None {
             if let Some(reason) = decision.gap {
                 gaps.entry(session.clone()).or_insert((at, reason));
+                self.resume
+                    .lock()
+                    .unwrap_or_else(|poison| poison.into_inner())
+                    .entry(session.clone())
+                    .or_default()
+                    .begin_gap(at);
             }
             return;
         }
         if let Some((start, reason)) = gaps.remove(session) {
+            let allowed = self
+                .asr_budget
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .entry(session.clone())
+                .or_insert_with(AsrBudget::with_default_interval)
+                .try_issue(decision.active, AsrIntentKind::GapBackfill, at);
+            if allowed {
+                let chunk_count = u32::try_from(
+                    at.as_millis()
+                        .saturating_sub(start.as_millis())
+                        .div_ceil(400)
+                        .max(1),
+                )
+                .unwrap_or(u32::MAX);
+                let intent = AsrIntent {
+                    session: session.clone(),
+                    kind: AsrIntentKind::GapBackfill,
+                    window_start: start,
+                    window_end: at,
+                    chunk_count,
+                };
+                let _ = self.asr_sink.deliver(&intent);
+            }
             let record = CaptureGapRecord {
                 session: session.clone(),
                 start,
                 end: at,
                 reason,
-                backfilled: false,
+                backfilled: allowed,
             };
             let _ = self.gap_log.append(&record);
+            self.resume
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .entry(session.clone())
+                .or_default()
+                .end_gap();
         }
+    }
+
+    pub fn record_point(&self, session: &SessionId, point_id: &str, at: MonoMillis) -> bool {
+        self.resume
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .get_mut(session)
+            .is_some_and(|ledger| ledger.record_point(point_id, at))
+    }
+
+    pub fn delivered_points(&self, session: &SessionId) -> usize {
+        self.resume
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .get(session)
+            .map_or(0, CaptureResumeLedger::delivered_count)
+    }
+
+    pub fn session_state(&self, session: &SessionId) -> Option<SessionState> {
+        self.contexts
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .get(session)
+            .map(|context| context.session_state)
     }
 
     pub fn asr_sink(&self) -> &Arc<dyn AsrDeliverySink> {
@@ -358,6 +444,23 @@ impl CaptureChannelService {
             ObservationOutcome::Applied
         } else {
             ObservationOutcome::NoOp
+        }
+    }
+
+    pub fn availability(&self, session: &SessionId) -> CaptureAvailability {
+        let active = self.active_channel(session);
+        if active != ActiveChannel::None {
+            return CaptureAvailability::Available { channel: active };
+        }
+        let reason = self
+            .gap_start
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .get(session)
+            .map_or(GapReason::BothChannelsUnavailable, |(_, reason)| *reason);
+        CaptureAvailability::Unavailable {
+            reason,
+            code: ErrorCode::AudioCaptureFailed,
         }
     }
 

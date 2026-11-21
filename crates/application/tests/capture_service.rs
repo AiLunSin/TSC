@@ -213,3 +213,100 @@ fn advance_falls_back_after_five_seconds() {
         ActiveChannel::Audio
     );
 }
+#[test]
+fn gap_recovery_does_not_redeliver_old_points() {
+    let (service, _log, _clock) = service();
+    let context = view("s1", Platform::TencentMeeting);
+    service.attach_session(context.clone()).expect("attach");
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        100,
+        probe(true),
+    ));
+    assert!(service.record_point(&context.session, "p1", MonoMillis::from_millis(110)));
+
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        200,
+        probe(false),
+    ));
+    assert_eq!(
+        service.active_channel(&context.session),
+        ActiveChannel::None
+    );
+
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        300,
+        ObservationPayload::UserRetry,
+    ));
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        310,
+        probe(true),
+    ));
+    assert_eq!(
+        service.active_channel(&context.session),
+        ActiveChannel::Subtitle
+    );
+
+    assert!(!service.record_point(&context.session, "p1", MonoMillis::from_millis(320)));
+    assert!(service.record_point(&context.session, "p2", MonoMillis::from_millis(321)));
+    assert_eq!(service.delivered_points(&context.session), 2);
+}
+#[test]
+fn session_state_is_not_changed_by_gap() {
+    let (service, _log, _clock) = service();
+    let context = view("s1", Platform::TencentMeeting);
+    service.attach_session(context.clone()).expect("attach");
+    assert_eq!(
+        service.session_state(&context.session),
+        Some(SessionState::Listening)
+    );
+
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        100,
+        probe(true),
+    ));
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        200,
+        probe(false),
+    ));
+    assert_eq!(
+        service.session_state(&context.session),
+        Some(SessionState::Listening)
+    );
+
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        300,
+        ObservationPayload::UserRetry,
+    ));
+    service.observe(&observation(
+        &context.session,
+        context.platform,
+        ChannelKind::Subtitle,
+        310,
+        probe(true),
+    ));
+    assert_eq!(
+        service.session_state(&context.session),
+        Some(SessionState::Listening)
+    );
+}
