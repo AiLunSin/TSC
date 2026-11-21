@@ -114,7 +114,7 @@ jobs:
           for name in run_gate_skips_without_live first_token_latency_p50_p95 \
             total_latency_four_tasks schema_conformance_rate rate_limit_observation \
             deadline_forced_timeout schema_violation_probe_once record_is_recomputable; do
-            printf '%s\n' "${live_ignored}" | grep -qE "::${name}: test$"
+            printf '%s\n' "${live_ignored}" | grep -qE "^${name}: test$"
           done
           base_ignored="$(cargo test -p meeting-copilot-infrastructure --features llm-https \
             --test llm_live_baseline --target "${LLM_HTTPS_TARGET}" -- --list --ignored)"
