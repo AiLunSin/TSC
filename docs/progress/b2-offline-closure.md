@@ -15,6 +15,9 @@
 | 等价性说明 | toolchain 内 `cargo.exe` 与 shim 解析到同一版本，仅绕过加载器问题，不改变编译/测试语义 |
 | 隔离临时目录 | `<REPO>/.tmp/test-temp` |
 | 默认目录问题 | 进程默认 TEMP 目录不可写导致依赖磁盘的用例失败；设置 `TEMP/TMP` 后同一批用例转通过 |
+| rustc 解析 | `RUSTC`/`RUSTDOC` 必须指向 toolchain 内真实 `rustc.exe`/`rustdoc.exe`（`~/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin`）。`PATH` 中的 `~/.cargo/bin/rustc` 为 rustup shim，直接执行返回 127，被 cargo 作为子进程调用时报 `STATUS_DLL_NOT_FOUND`（0xc0000135） |
+
+> 环境等价性补充：仅设置 `RUSTC`/`RUSTDOC`，未改变编译器版本（`rustc 1.100.0`）与编译参数；区别仅在于绕过损坏的 shim。三次重复执行均在该口径下完成（见 2.1）。
 
 ## 2. 基线复现与失败归因（AC-B2-OC-05/03）
 
@@ -26,6 +29,20 @@
 | target 数（ok） | — | 38 |
 
 失败归因：**无失败用例**。`cargo test --workspace` 退出码 0，失败用例清单为空。
+
+## 2.1 重复执行一致性（R9 · 三次同口径）
+
+同一命令、同一环境连续执行三次，数值完全一致，排除首轮冷启动或状态残留造成的假通过：
+
+| 轮次 | 命令 | target | passed | failed | ignored | 退出码 | 日志 |
+|---|---|---|---|---|---|---|---|
+| 1 | `cargo test --workspace --no-fail-fast` | 38 | 399 | 0 | 8 | 0 | `.tmp/test-run1.log` |
+| 2 | 同上 | 38 | 399 | 0 | 8 | 0 | `.tmp/test-run2.log` |
+| 3 | 同上 | 38 | 399 | 0 | 8 | 0 | `.tmp/test-run3.log` |
+
+- 三次 `failed` 均为 0，`failures:` 段在其日志中命中 0 次。
+- `target / passed / failed / ignored` 四列三次逐项相等，满足 R9"重复执行结果一致"。
+- 日志位于 `.tmp/`（本地工作区，不随仓库分发），命令与退出码已在本表固化。
 
 ## 3. 改动白名单与不重写核验（AC-B2-OC-04）
 
@@ -107,6 +124,19 @@
 | 用例名差集 | `bash scripts/test-name-inventory.sh --diff` | 0 |
 | 自检 | `--self-test`（采集离线 / G2 宣称） | 1 / 1（预期） |
 
+## 5.1 依赖许可证与白名单核验（AC-B2-OC-F03 · W-F-2.5）
+
+本轮新增直接依赖 `schemars 1.2.3`（MIT）与可选依赖 `native-tls 0.2`（MIT / Apache-2.0）。核验结论：**`deny.toml` 白名单无需变更**。
+
+| 项 | 结论 |
+|---|---|
+| `deny.toml` `[licenses] allow` | 已含 `MIT`、`Apache-2.0`，覆盖上述两个依赖；未新增许可证类别 |
+| 传递依赖 | Windows 路径 `schannel 0.1.30`；macOS 路径 `security-framework`；许可证均在 allow 列表内 |
+| 登记位置 | `docs/compliance/license-review.md` 第 29/30 行已登记（`schemars`、"TLS 传输组件"） |
+| 实跑证据 | `cargo deny --offline check licenses bans sources advisories` → `advisories ok, bans ok, licenses ok, sources ok`，退出码 0 |
+
+> 口径备注：`deny.toml` 的 `[graph] all-features = true` 会启用 `llm-https`，因此 `native-tls` 分支纳入检查；默认测试构建不启用该 feature。两条路径均通过。
+
 ## 6. 未实测清单（AC-B2-OC-F02）
 
 8 个用例因需真实 LLM 端点与凭据，默认 `ignored`：
@@ -119,6 +149,8 @@
 6. `schema_conformance_rate` — 同上
 7. `schema_violation_probe_once` — 同上
 8. `total_latency_four_tasks` — 同上
+
+> 口径差异：`llm_live_baseline.rs` 的 1 个用例（`baseline_30_samples_per_task`）受 `#![cfg(feature = "llm-https")]` 约束，默认构建不收集，故默认执行显示 8 ignored；以 `--features llm-https` 执行时为 9 ignored。两者均为"未实测"，不改变结论。
 
 三项均标注"未实测"，不以离线结果替代。
 

@@ -298,12 +298,14 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 
 ### 13. LLM 网关与门控离线回放框架 🟢 PAR
 
-- [ ] **13.1 OpenAI 兼容网关与结构化输出** — `crates/infrastructure/src/llm/gateway.rs`
+- [x] **13.1 OpenAI 兼容网关与结构化输出** — `crates/infrastructure/src/llm/gateway.rs`
   - 追溯 SPEC 6.3/6.4 结构化约束 · DESIGN 2.2.2-E、2.4.1
   - DoD：`InsightExtract`/`Summary`/`CardConclusion`/`MinutesDraft` 四类 JSON Schema 由 `schemars` 生成并与 struct 同源；`complete_structured`/`stream_structured` 均可用；首 token p95 ≤1.2s（可配模型，记录实测值）
-- [ ] **13.2 超时、限流与 schema 违规降级** — `crates/infrastructure/src/llm/degrade.rs`
+  - 进度（2026-11-21）：已完成，提交 `29102c8`、`73a138a`。四类 Schema 与 struct 同源，一次性/流式均可用；真实端点 30 样本/任务下首 token p95 均 ≤1.2s，`minutes_draft` 稳定性单列跟踪。证据：`docs/progress/b1-status.md` 第 6/7 节
+- [x] **13.2 超时、限流与 schema 违规降级** — `crates/infrastructure/src/llm/degrade.rs`
   - 追溯 SPEC 4.2-8 · DESIGN 1.2.4、2.1.3(9)
   - DoD：注入超时/429/schema 违规三类故障，系统分别走"重试→降级→规则兜底"，均不 panic、不阻塞采集；`deadline` 到期立即返回
+  - 进度（2026-11-21）：已完成，提交 `29102c8`、`73a138a`。注入式三类故障 14 例全绿，六类失败分类与"重试→降级→规则兜底"均已判定；真实端点 429 观测归 AC-LLM-23（未实测）。证据：`docs/progress/b1-status.md` 第 6 节
 - [ ] **13.3 门控离线回放框架** — `crates/application/tests/replay/`
   - 追溯 SPEC 4.4-4 · DESIGN 2.8.2-M0、2.6.1
   - DoD：输入片段集，可离线跑"缺口识别→L1 门控→L2 相关性→出卡"并输出候选/拒绝原因/时延；固定随机种子下结果可复现；支持按平台、版本、场景（字幕/音频）分组回放
@@ -331,6 +333,8 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 **前置**：B1（G1 通过）。
 **⛔ 出口门禁 G2（M1 前半）**：三平台均可建立会话并稳定运行 30 分钟；通道状态可见且 5s 内更新；字幕失效 5s 内回退音频；双通道不重复计入。
 **并行**：15 与 16 并行；17 先于 18/19/20；21 可与 18–20 并行；25 依赖 15/16；26 依赖 23/24。
+
+> **离线闭环增补（2026-11-21）**：W-00 / W-C / W-D / W-E / W-F 的子任务与验收定义见 `docs/sdd/tasks-b2-offline-closure.md`，实测三态与偏差见 `docs/progress/b2-offline-closure.md`（399 passed / 0 failed / 8 ignored，43 项 AC，结论"部分完成"）。本清单 23.x 的离线部分据此回写；真机项（15~22、24、26/27）未开始。
 
 ### 15. Windows 音频通道工程化 🔴 CP 🟢 PAR
 
@@ -457,18 +461,22 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 
 ### 23. 通道仲裁与状态机 🔴 CP
 
-- [ ] **23.1 实现通道状态机** — `crates/application/src/capture/channel_state.rs`
+- [x] **23.1 实现通道状态机** — `crates/application/src/capture/channel_state.rs`
   - 追溯 SPEC 5.8.1-4、4.2-7 · DESIGN 2.1.3(2)
   - DoD：四状态（探测中/可用/降级/不可用）+ 设计文档全部迁移边均有单测；非法迁移被拒绝；每平台每通道独立实例
+  - 进度（2026-11-21）：离线已完成，提交 `d683b7a`。四状态表驱动用例 `crates/domain/tests/channel_state_table.rs` 覆盖全部迁移边，非法迁移拒绝有单测。证据：`docs/progress/b2-offline-closure.md` §4
 - [ ] **23.2 字幕优先与回退/切回** — `crates/application/src/capture/channel_arbiter.rs`
   - 追溯 SPEC 4.2-7、5.8.1-5 · DESIGN 2.5.4-仲裁规则 1/2/3
   - DoD：字幕可用时音频仅用于校验与缺口回补（ASR 调用数下降可测）；字幕 5s 无有效文本 → 切音频；恢复后连续 10s 稳定 → 切回；切换点写入会话记录
-- [ ] **23.3 双通道均失效的保护** — `crates/application/src/capture/degraded_guard.rs`
+  - 进度（2026-11-21）：**部分完成**。离线仲裁与切换日志已落地（`5731801`），恢复间隔由注入时钟判定（`single_channel_recovery_within_5s`）；真实平台字幕 5s 失效与 10s 切回、ASR 调用数下降未实测，故保持未勾选
+- [x] **23.3 双通道均失效的保护** — `crates/application/src/capture/degraded_guard.rs`
   - 追溯 SPEC 4.2-7 · DESIGN 2.5.4-仲裁规则 5
   - DoD：两会话通道均不可用时，会话保留、已产生要点不丢、UI 明确"采集不可用"；恢复后可续采且片段不重不漏
+  - 进度（2026-11-21）：离线已完成，提交 `4a4e430`。`gap_300s_keeps_session_and_insight_ids` 证明要点零写/零删/零迁移；恢复续采与回补窗口由 `resume_from_is_close_minus_capped_duration` 判定（偏差 D1/D4 见验收记录）
 - [ ] **23.4 状态变更 5s 内推送** — `crates/application/src/capture/status_publisher.rs`
   - 追溯 SPEC 5.8.1-4 · DESIGN 2.1.3(2)、2.1.3(4)
   - DoD：状态变更到 UI 的时延 p99 ≤5s（打点验证）；事件去重（同一状态不重复推）；订阅者可查询当前快照
+  - 进度（2026-11-21）：**部分完成**。去重、快照可见、会话内单序号流、p99 下标语义均已判定（`capture_status_push` 13 例）；但 p99 为注入时钟推导的**逻辑上限**，真实 UI 线程时延未实测，故保持未勾选
 
 ### 24. 双通道去重合并 🔴 CP
 
