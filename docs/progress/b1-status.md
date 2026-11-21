@@ -213,6 +213,6 @@
 - 一次性诊断 `tests/llm_debug_raw.rs` 已删除。
 - 64 KiB 请求体字节预算已落地（默认 65536，超限在发请求前拒绝，请求计数 0）。
 - normalization trace 已落地：`StructuredOutcome.normalization` 只含字段名与来源，不含文本。
-- 阶段 G 的 265 测试门禁仍未补齐（当前基线 240+）。
+- **阶段 G 的 265 测试门禁已达成**：`cargo test --workspace` 265 passed / 0 failed（含新增 21 个具名收口用例）。
 - 改动未 commit；凭据仍未轮换。
 > 注：第 8 节中 AC-35、AC-20~AC-25 为阶段 E 历史状态；第 9 节已更新为 30 样本基线：AC-20/AC-21/AC-22 已满足，AC-23~AC-25 仍未实测，AC-18 仍由 13.4 判定。
