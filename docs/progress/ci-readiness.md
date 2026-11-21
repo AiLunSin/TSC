@@ -221,3 +221,50 @@ SQLCipher 模式下 `SqliteStore::open_in_memory()` 仍以 `key = None` 调用 `
 - `cargo fmt --all --check` → 0 差异
 
 SQLCipher feature 的实际编译仍需 Ubuntu CI 验证（本地 Perl 缺少 `Locale::Maketext::Simple`）。
+## 13. 当前 HEAD 本地 CI 模拟（2026-11-21 · `9baa573`）
+
+> 说明：第 1~12 节记录的是 B0 阶段（80 个测试）的 CI 调试过程，数字已过期。本节为该状态在 B1/B2 交付后的重新校准。
+
+### 13.1 门禁结果
+
+| Job | 步骤 | 命令 | 结果 |
+|---|---|---|---|
+| web | lint | `npm run lint` | 0 |
+| web | typecheck | `npm run typecheck` | 0 |
+| web | bindings-contract | `npm run check:bindings` | 0 |
+| web | build | `npm run build` | 0 |
+| web | bundle-size-budget | 逐文件 `gzip -9 -c` 求和 | 72,259 B（预算 819,200 B） |
+| rust | fmt | `cargo fmt --all --check` | 0 |
+| rust | clippy | `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
+| rust | build | `cargo build --workspace` | 0 |
+| rust | test | `cargo test --workspace --no-fail-fast` | 38 targets / 399 passed / 0 failed / 8 ignored，连跑 3 次一致 |
+| compliance | layering | `bash scripts/check-layering.sh` | PASS |
+| compliance | secrets | `bash scripts/scan-secrets.sh` | 0 命中 |
+| compliance | secrets-docs | `bash scripts/scan-secrets-docs.sh --all-md` | 0 命中 |
+| compliance | licenses | `cargo deny --offline check licenses bans sources advisories` | 四项全 ok |
+| compliance | sbom | `bash scripts/sbom.sh ci` | 719 个组件 |
+| compliance | 用例名差集 | `CARGO=<toolchain>/cargo.exe bash scripts/test-name-inventory.sh --diff` | PASS，removed=0，新增 42 |
+| compliance | 采集离线 | `bash scripts/check-capture-offline.sh` | PASS |
+| compliance | G2 宣称 | `bash scripts/check-g2-claims.sh` | PASS |
+| sqlcipher | test | `cargo test -p meeting-copilot-infrastructure --features sqlcipher` | 本地不可跑（Perl/OpenSSL），仍以 Ubuntu CI 为准 |
+
+### 13.2 本地环境关键约束
+
+`PATH` 中的 rustup shim（`~/.cargo/bin/{cargo,rustc,rustfmt}`）在本机损坏：直接执行返回 127，被 cargo 作为子进程调用时报 `STATUS_DLL_NOT_FOUND`。有效规避方式：
+
+```bash
+export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
+```
+
+前置后 `cargo`/`rustc`/`rustfmt` 均解析到 toolchain 内真实可执行文件；`cargo fmt` 与 `cargo clippy` 恢复正常（仅设 `RUSTC`/`RUSTDOC` 不足以让 `cargo fmt` 找到 `rustfmt`）。
+
+`scripts/test-name-inventory.sh` 支持 `CARGO` 环境变量覆盖，CI 中无需修改脚本本身。
+
+### 13.3 待决的 CI 配置缺口（尚未修改 `ci.yml`）
+
+| 编号 | 缺口 | 影响 |
+|---|---|---|
+| C1 | `compliance` job 未执行 `check-capture-offline.sh`、`check-g2-claims.sh`、`scan-secrets-docs.sh` | 三个门禁只在本地跑，远端无守护 |
+| C2 | `rust` job 未编译 `--features llm-https` | `llm_live_baseline.rs` 等仅在该 feature 下编译，存在特性组合漂移风险 |
+| C3 | `test-name-inventory.sh --diff` 未纳入 CI | 用例被删除时无自动拦截 |
+| C4 | `test-name-inventory.sh` 在 `cargo` 不可用时静默吞错，把"抓取失败"报成"removed 全量" | 本地实测：shim 损坏时误报 365 条 removed、退出码 1；应改为退出 2（扫描面缺失） |
