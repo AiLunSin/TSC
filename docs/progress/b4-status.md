@@ -1308,6 +1308,7 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 
 1. **U-05 整体仍 `open`**：未做真实联网 E2E、未做真机 WebView2 验证、未声明窗口/焦点/投屏已验收。
 2. C-UI-02（macOS CI 编译观察项存废）未裁决；`ci.yml` / `deny.toml` / `platform-mac` 零 diff。
+   - 口径更正（2026-11-23）：已按 §29.6 裁决为"保留"，冲突登记见 §30.6 ERR-01。
 3. C-UI-03（生产探针）默认关闭，AC 仅用替身取证。
 4. 9 个 `#[ignore]` 与 `tests/replay/` 未解锁。
 5. ~~未执行 `git push`~~ → 用户已于 2026-11-22 自行推送；本地 `9791bfa` 与 `origin/main` 同步。
@@ -1320,3 +1321,109 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | C-UI-02 | **保留** macOS CI 编译观察项 | `ci.yml` / `deny.toml` / `platform-mac` 零改动 |
 | C-UI-03 | **保持默认关闭**（稳妥口径，AI 选择） | 仅 `--features llm-https` 显式开启；AC 仍用替身取证 |
 | U-05 | 仍 **`open`** | 真实联网 E2E、真机 WebView2、9 个 `#[ignore]`、`tests/replay/` 未解锁 |
+
+## §30 仓库审计与清理收口登记（2026-11-23）
+
+> 依据：`.codeartsdoer/specs/repo_audit_cleanup/{spec.md,design.md,tasks.md}`。本轮只做只读审计、可重建产物清理与文档登记；不改源码、不改门禁语义、不 push、不解锁 `#[ignore]`、不创建 `tests/replay/`。
+> 基线：分支 `main`，HEAD `87eea33`，跟踪文件 **281**，工作区审计前干净，`docs/progress/test-names-before.txt` **365** 行。
+
+### §30.1 审计台账（AUD-01 ~ AUD-17）
+
+| 编号 | 事项 | 状态 | 关闭条件 | 所需用户条件 | 取证命令/定位 | 冲突 | 来源 |
+|---|---|---|---|---|---|---|---|
+| AUD-01 | U-05 整体 | `open` | 真实联网 E2E 记录 + 真机 WebView2 验收记录 + 窗口/焦点/投屏结论 | 端点凭据、真机、投屏/会议样本 | `docs/progress/b4-status.md §29.5-1`；`ui_integration/tasks.md §19-10` | 无 | §29.5、§19 |
+| AUD-02 | U-07 整体 | `open` | AUD-03~06 四项全部关闭 | 见 AUD-03~06 合并条件 | `docs/progress/b4-status.md §25.3` | 无 | §25.3 |
+| AUD-03 | U-07-41.5 负反馈加权 | `未完成`（规格层明确不做） | 补齐 b4 级增量需求规格（字段/枚举/AC/零转录） | 需求规格立项授权 | `grep -n "U-07-41.5" docs/progress/b4-status.md` | 无 | §25.3 |
+| AUD-04 | U-07-42 缓存/outbox | `未完成` | 持久化介质确定 + "重启不丢"口径定义 + 用例通过 | 确认介质与口径 | `grep -n "U-07-42" docs/progress/b4-status.md` | 无 | §25.3 |
+| AUD-05 | U-07-43 按需补全实体 | `未完成` | 真实检索源接入 + 8s p95 样本达标 | 真实检索源 + 性能样本 | `grep -n "U-07-43" docs/progress/b4-status.md` | 无 | §25.3 |
+| AUD-06 | U-07-52 审计哈希链存储 | `未完成` | 落库介质确定 + 180 天保留策略确认 + 哈希链用例通过 | 介质与保留策略裁决 | `grep -n "U-07-52" docs/progress/b4-status.md` | 无 | §25.3 |
+| AUD-07 | U-08 真实端点/真机 | `未判定`（9 个 `#[ignore]` 保持） | 端点凭据可用 + 真机验证 + 误触发率与性能记录 | 凭据、真机、样本；`#[ignore]` 不解锁 | `bash scripts/run-llm-live.sh --print-record-roots`（只打印根，不联网） | 无 | §25.3、§29.5-4 |
+| AUD-08 | AC-B4-109 远端 CI | `passed`（仅本地）/ 远端未取证 | 远端 run 结论文本或截图 + 步骤全绿 | push 授权后的远端只读查看权限 | 文档定位 `b4-status.md §25.3`；远端结论需用户提供 | 无 | §25.3 |
+| AUD-09 | C-UI-02 macOS CI 编译观察项 | `已裁决保留` | 无（保持 `ci.yml`/`deny.toml`/`platform-mac` 零 diff） | 无 | `git diff --quiet HEAD -- .github/workflows/ci.yml deny.toml` | 见 AUD-16 | §29.6 |
+| AUD-10 | C-UI-03 生产探针 | `已裁决保留`（默认关闭） | 无（仅 `--features llm-https` 显式开启） | 无 | `grep -n "C-UI-03" docs/progress/b4-status.md` | 无 | §29.6 |
+| AUD-11 | 9 个 `#[ignore]` 纪律项 | `未判定`（不解锁） | 不改数量、不改名称；解锁需另行立项 | 明确解锁授权 | `grep -rIn "#\[ignore\]" crates app --include=*.rs \| wc -l` 期望 9 | 无 | §29.5-4、§19-11 |
+| AUD-12 | `tests/replay/` 不存在 | `未判定`（纪律项） | 保持不存在；创建需另行立项 | 明确创建授权 | `find . -type d -name replay -not -path './target/*' \| wc -l` 期望 0 | 无 | §29.5-4 |
+| AUD-13 | platform-win WASAPI/UIA/OCR 占位 | `未完成` | 三个能力各有真实实现 + 用例 | 真机音频/UI 自动化/OCR 样本 | 文档定位 `b4-status.md §29.5`；`ls crates/platform-win/src` | 无 | 需求侧 §1.3-2 |
+| AUD-14 | platform-mac 整体占位 | `未完成` | macOS 目标实现 + 交叉编译验证 | macOS 环境（本轮不提供） | `git ls-files crates/platform-mac \| wc -l`；`check-mac-scope.sh --rule=...` | 无 | §29.6 |
+| AUD-15 | `.codeartsdoer/` 未入库（治理缺口） | `open` | 解除忽略并入库，或明确"永久不入库"并登记理由 | 忽略面变更裁决（Q-07） | `git check-ignore -v .codeartsdoer`；`git ls-files .codeartsdoer \| wc -l` 期望 0 | 无 | `.gitignore:11` |
+| AUD-16 | 文档口径漂移：C-UI-02 | `未完成` | 三处表述统一到"已裁决保留"或明确时点差异 | 无（按 §29.6 裁决口径收口） | `grep -n "C-UI-02"` 三处文档 | `§29.5-2`"未裁决" / `§29.6`"保留" / `handoff-pui §4-2`"未裁决" | §29.5、§29.6、handoff |
+| AUD-17 | 本地专属门禁未纳入 CI | `open` | 四个本地门禁进 CI 或明确"仅本地执行"并登记理由 | CI 变更裁决（本轮不做） | `grep -cE "check-b4-gates\|check-ui-integration\|check-mac-scope\|check-b3-gates" .github/workflows/ci.yml` 期望 0 | 无 | `ci.yml:28-265` |
+
+### §30.2 三色清单与批次定义
+
+| 颜色 | 条目 | 处置 | 说明 |
+|---|---|---|---|
+| 黑名单 | 43 | 禁删 | `test-names-before.txt`、`docs/progress/*.md`、`docs/sdd/*.md`、`scripts/**`、`ci.yml`、`deny.toml`、`Cargo.*`、`models/`、`.tmp/test-temp/`（目录）、`.codeartsdoer/`、`README.md` |
+| 灰名单 | 9 | 默认保留 | `ac-board.md`、`llm-live/`、`rollback/*.bak`、`url-2.5.9-meta/`、`target/`、外层 `.screenshots/`、外层 `temp/accept/` |
+| 可删 | 81 | 按批次删除 | B-1（76 条，1,003,207 B）、B-2（5 条，336 B） |
+
+### §30.3 批次执行记录
+
+| 批次 | 时点 | 基线提交 | 条目数 | 前体积 | 后体积 | 已删 | 失败 | 跳过 | 不可回滚 | 结论 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| B-0 | 2026-11-22T18:2xZ | `87eea33` | 133 清单 | 0 | 0 | 0 | 0 | 0 | 0 | PASS（只读） |
+| B-1 | 2026-11-22T18:28Z | `87eea33` | 76 | 1,003,207 B | 852,453 B（`.tmp` 剩余，含审计台账与灰名单） | 76 | 0 | 0 | 0 | PASS |
+| B-2 | 2026-11-22T18:28Z | `87eea33` | 5 | 336 B | 0 B（夹具目录保留） | 5 | 0 | 0 | 0 | PASS |
+| B-3 | — | — | 6 | 899,104 B | — | 0 | 0 | 6 | — | 未执行（待裁决 Q-02~Q-05） |
+| B-4 | — | — | 1 | 约 5.6 G（估算） | — | 0 | 0 | 1 | — | 未执行（待授权 Q-01） |
+| B-5 | — | — | 2 | 127 K | — | 0 | 0 | 2 | — | 未执行（待授权 Q-06） |
+
+偏差登记（不新增小节编号）：X-AUD-01 `asr.json` 未列入设计 P-30~P-36，按五准则判为可删（模型元数据可重取），已随 B-1 删除；X-AUD-02 全量基线由 README/§25 的 825 变为实测 **859 passed / 0 failed / 9 ignored**（P-UI 桌面层 24 例与另 10 例已并入 workspace），本轮只登记不改基线文件；X-AUD-03 `llm-live` 实测 13 个 run（设计写 6），`ui-store-tests` 实测 5 文件（设计写 6）；X-AUD-04 B-1 实测回收 1,003,207 B（设计估 0.87 M）；X-AUD-05 三条宣称组合词在既有"不宣称"句（§21 第 921 行、§20 结论第 1254 行、§25.4 第 1052 行）命中，属否定语境且按纪律不得改写；本轮新增 §30.7 命中 0。
+
+### §30.4 灰名单裁决登记（Q-01 ~ Q-08）
+
+| 编号 | 对象 | 默认 | 若批准的前置动作 | 风险 | 裁决 |
+|---|---|---|---|---|---|
+| Q-01 | `target/`（约 5.6 G 估算，30,585 文件） | 保留 | 记录工具链版本 + `Cargo.lock` 指纹 + 删除后重建并按当时基线回归（当前实测 859/0/9） | 中 | 待裁决 |
+| Q-02 | `.tmp/ui-integration/ac-board.md`（3,721 B，20/20 AC） | 保留 | 先归档 AC 结论至本节表 C，归档后门禁 rc=0 | 高（不可回滚） | 待裁决 |
+| Q-03 | `crates/infrastructure/.tmp/llm-live/`（131,072 B，13 run） | 保留 | 先归档 run 摘要 + 记录敏感扫描命中数 | 中 | 待裁决 |
+| Q-04 | `.tmp/rollback/{ci,design,tni}.bak`（257,327 B） | 保留 | 确认对应变更均已在 `main` 历史 | 低 | 待裁决 |
+| Q-05 | `.tmp/url-2.5.9-meta/`（275,456 B，19 文件） | 保留 | 确认网络可重取或复核结束 | 低 | 待裁决 |
+| Q-06 | 外层 `.screenshots/`（空）+ 外层 `temp/accept/`（127 K） | 保留 | `ls -R` 确认无交付文件；严禁触碰外层配置目录 | 中（不可回滚） | 待裁决 |
+| Q-07 | 解除 `.codeartsdoer/` 忽略 | 保留 | 本轮不做；独立变更单 | 高 | 本轮不做 |
+| Q-08 | `app/dist`、`node_modules`、`*.cdx.json`、`*.tsbuildinfo` | 保留 | 本轮不做；另立批次 | 中 | 本轮不做 |
+
+### §30.5 验收证据（E-01 ~ E-16）
+
+| 编号 | 判据 | 命令 | 退出码/输出 | 结论 |
+|---|---|---|---|---|
+| E-01 | 台账 17 行 | `grep -cE '^\| AUD-[0-9]{2} \|' docs/progress/b4-status.md` | 17 | PASS |
+| E-02 | 编号唯一 17 | `grep -oE 'AUD-[0-9]{2}' ... \| sort -u \| wc -l` | 17 | PASS |
+| E-03 | 无模糊状态词 | `grep -cE '基本完成\|大致可用'` | 0 | PASS |
+| E-04 | AUD-01~08 无 closed/passed（AUD-08 除外） | awk 抽取状态列 | 1（AUD-08 本地 passed） | PASS |
+| E-05 | AC 汇总仍 130 | `grep -n "AC 汇总.*130"` | 3 处命中 | PASS |
+| E-06 | `NEW_TARGETS` 仍 25 | `grep -c "^NEW_TARGETS='" scripts/test-name-inventory.sh` | 1 | PASS |
+| E-07 | 基线 365 行 | `wc -l < docs/progress/test-names-before.txt` | 365 | PASS |
+| E-08 | 工作区仅预期文档改动 | `git status --porcelain` | 仅 `b4-status.md` 与 `README.md` | PASS |
+| E-09 | 跟踪文件 281 | `git ls-files \| wc -l` | 281 | PASS |
+| E-10 | HEAD 未变 | `git rev-parse --short HEAD` | `87eea33` | PASS |
+| E-11 | 黑名单全在 | 9 代表路径 `test -e` | 全部存在 | PASS |
+| E-12 | `.tmp` 顶层可删文件 0 | `find .tmp -maxdepth 1 -type f \| wc -l` | 0 | PASS |
+| E-13 | 用例名零回归 | `test-name-inventory.sh --diff` | `removed=0`（baseline_drift=479） | PASS |
+| E-14 | 批次记录齐全 | `b1-record.md`/`b2-record.md` | 各含 11 字段 | PASS |
+| E-15 | 全量回归（实测基线） | `cargo test --workspace` | 859 passed / 0 failed / 9 ignored（59 个 test target） | PASS |
+| E-16 | 无 URL 形态串 | `grep -rInE 'https?[:]//' docs/progress/b4-status.md \| wc -l` | 0 | PASS |
+
+### §30.6 勘误登记（ERR-01）
+
+| 勘误 | 冲突双方（文件+章节） | 采用口径 | 依据 |
+|---|---|---|---|
+| ERR-01 | `docs/progress/b4-status.md §29.5-2`（"未裁决"）/ `§29.6`（"保留"）/ `docs/progress/handoff-2026-11-22-pui.md §4-2`（"未裁决"） | 保留 macOS CI 编译观察项；`ci.yml`/`deny.toml`/`platform-mac` 零改动 | `§29.6` 用户裁决（2026-11-22）优先于批次状态与交接说明 |
+
+### §30.7 不宣称清单
+
+1. 不宣称 U-05 真实联网 E2E 有验收记录。
+2. 不宣称真机 WebView2 交互、窗口/焦点/投屏有验收记录。
+3. 不宣称 U-07 负反馈、缓存/outbox、按需补全、审计哈希链属于已实现能力。
+4. 不宣称 U-08 真实检索源、真实冷却、性能与误触发率已判定。
+5. 不宣称远端 CI 结论已取证（AC-B4-109 仅本地取证）。
+6. 不宣称 `#[ignore]` 已解锁或 `tests/replay/` 已创建。
+7. 不宣称清理动作等同于产品能力完成。
+8. 不宣称 `target/`、灰名单与仓库外残留已处置（均为未执行/待裁决）。
+
+### §30.8 交接四要素
+
+- 当前 HEAD：`87eea33`（审计前基线，未提交本轮改动）。
+- 跟踪文件数：**281**；基线文件 `test-names-before.txt` 仍 **365** 行。
+- 保留目录约定：`.tmp/test-temp/`（TEMP/TMP 根）、`.tmp/ui-integration/ac-board.md`（取证看板）、`crates/infrastructure/.tmp/llm-live/`（联调记录）、`target/`（构建缓存）均保留。
+- 未完成项入口：`docs/progress/b4-status.md §25.3`、`§29.5`、本节 `§30.1`；清理待裁决项见 `§30.4`。

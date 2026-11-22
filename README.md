@@ -16,7 +16,7 @@
 | P-UI 设置向导 + 关键词卡片前端 | **离线落地**：AC-B4-111~130 离线通过；6 命令、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；真机与真实联网未验证（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 
-最近一次全量基线：**825 passed / 0 failed / 9 ignored**；P-UI 新增桌面层 **24 例**已单列通过（`cargo test -p meeting-copilot-desktop`）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量基线：**859 passed / 0 failed / 9 ignored**（含 P-UI 桌面层 **24 例**，`cargo test -p meeting-copilot-desktop` 单列通过）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 仍未完成：
 
