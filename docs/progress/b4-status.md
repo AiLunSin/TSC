@@ -866,3 +866,31 @@ AC 三态：AC-B4-85~94 均为 **passed**（18 用例）。
 7. 未执行 `git commit`；如需提交本次规格增量，请确认后单独提交（范围仅上述 2 个文档）。
 
 > 结论：CI `exit 3` 的直接来源是 **advisories(1) + bans(2)**，许可证未命中是 **warn 噪音**（0 贡献）；本次修复口径为 R-1/R-2/R-3 同批处理，AC-B4-105~110 全部 `pending`，**待确认后进入实现**。
+
+
+## §22 CI compliance / cargo-deny 修复快照
+
+日期：2026-11-22。
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 四合一 | `cargo deny check licenses bans sources advisories` | exit 0；四项 ok |
+| licenses 单独 | `cargo deny check licenses` | exit 0 |
+| 负例（删 MIT 白名单） | 同上 | exit 4；60 条 `error[rejected]`；已恢复 |
+| lock 变化 | `git diff --numstat Cargo.lock` | 5/5（url 2.5.8→2.5.9、form_urlencoded 1.2.2→1.2.3；syn 未降级） |
+| 白名单 | 15 项 | 原样保留 |
+
+AC 三态：
+
+| AC | 状态 | 证据 |
+|---|---|---|
+| AC-B4-105 | passed | `unused-allowed-license = "allow"`；licenses 退 0 |
+| AC-B4-106 | passed | 负例退 4、60 条 rejected |
+| AC-B4-107 | passed | url 2.5.9；advisories ok |
+| AC-B4-108 | passed | ui-bridge 两处 path 依赖补 version；bans ok |
+| AC-B4-109 | passed（本地） | CI 版本 step 已加；远端 run 取证待 push 后补 |
+| AC-B4-110 | passed | 变更预算 1/0、2/2、5/5、2/0；源码零 diff |
+
+偏差：D-B4-P138 收窄为 lock **5 行**（url/form_urlencoded 各自 version+checksum），非 4 行；包集合不变。
+
+> 结论：本地四合一已退 0；CI compliance 远端取证需推送后确认，不宣称远端已绿。
