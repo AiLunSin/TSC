@@ -81,7 +81,7 @@
 | AC-B4-48 200 例回放 | closed（§11，W-B4-41；`replay_200_cases_*` 已交付） |
 | AC-B4-51~57 关键词卡片契约 | closed（§11，W-B4-34~40） |
 | AC-B4-58~64 39 引用对齐校验 | 规格已定、待实现（§12；AC-B4-58~64 为 `pending`；不建 39 实体） |
-| 13.3 回放本体 | 未做 |
+| 13.3 回放本体 | 规格已定、待实现（§20；AC-B4-95~104 为 `pending`；`tests/replay/` 仍不存在） |
 | 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 未做（38/39/51 与关键词卡片的边界已在规格中定义） |
 | 真实检索源连通 / 真实 LLM 冷却 | 未判定（仍为既有 9 个 ignored） |
 
@@ -259,7 +259,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | U-03 | 38 卡片合成 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.8/§6.16~6.18/§7.13 与 `requirements.md` §12 已定义 38 的 7 项输入、11 项可展示字段、6 项拒绝原因、固定模板解释、`Unknown→Unverified` 唯一回填、离线/零转录/归属边界与 AC-B4-65~74；尚未创建 38 实体文件，AC-B4-65~74 为 `pending` | 38（`crates/application/src/cards/**` + `card_compose` target；不建 UI/存储/回放目录、不新增 domain 契约） |
 | U-04 | 39 引用对齐校验 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.7/§6.14~6.15/§7.12 与 `requirements.md` §11 已定义 `Passed`/`Failed`/`Unknown` 三态（`Unknown→Unverified` 唯一投影）、引用只存 ID+4 档信任+2 态可访问+发布时间、零转录/离线/确定性边界与 AC-B4-58~64；尚未创建 39 实体文件，AC-B4-58~64 为 `pending` | 39（domain 契约 `citation.rs` + application 只读校验 `citation/align.rs` + `citation_align` target；不建 UI/合成/回放目录） |
 | U-05 | 51 点击 UI 与设置向导 | **规格已定，待实现（2026-11-22）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；尚未创建 51 实体文件，AC-B4-75~94 为 `pending` | 51（`crates/ui-bridge/src/keyword_card/**` + `crates/ui-bridge/src/settings/**` + `keyword_card_view`/`llm_settings_view` 两个 target；不建平台适配/52 存储/回放目录；settings 不新增依赖） |
-| U-06 | 13.3 回放本体 | 未做；`tests/replay/` 仍不得创建 | 13.3 |
+| U-06 | 13.3 回放本体 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.11/§6.29/§7.16 与 `requirements.md` §15 已定义驱动契约（7 项封闭）、双层用例（报告层零文本/执行层借用）、装载校验（3 错误/升序）、只调 4 函数、记录核验（14 字段）、失败报告（2 项/5 码）、确定性（两次/乱序/100 次）、零转录、与 200 例并存、`tests/replay/` 不解禁与 `NEW_TARGETS` 24→25；尚未创建 13.3 实体文件，AC-B4-95~104 为 `pending` | 13.3（`gate/replay.rs` + `tests/gate_replay_driver.rs` + `gate_replay_driver` target；不改 `tests/gate_replay.rs`、不建 `tests/replay/`、不新增依赖） |
 | U-07 | 41.5 / 42 / 43 / 52 | 未做；负反馈、缓存/outbox、按需补全实体、审计哈希链存储 | 对应章节 |
 | U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | 保持 9 个 `#[ignore]`，不宣称 G4 |
 
@@ -272,13 +272,14 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 5. **失败闭合**：门控拒绝、引用未对齐、授权撤销、投屏/遮蔽、跨会话/引用过期，一律 `click_state=Disabled{reason}`，不得展示可点击的 `Deny` 卡。
 6. **39 引用对齐（2026-11-22 增量）**：39 只输出 `Passed`/`Failed`/`Unknown`（`Unknown→Unverified` **唯一投影**），引用只存 `reference_id`/`trust_tier`/`access_status`/`published_at_ms`/`alignment`；不联网抓正文、不写门控记录；AC-B4-58~64 为 `pending`；不改既有 AC 01~57 与任何封闭字段数。
 7. **38 卡片合成（2026-11-22 增量）**：38 只做 7 项输入的确定性组装，输出 11 项可展示字段；`gate_decision_ref`/`click_state` 由 B4 准入补齐，38 不判定点击；解释只用固定模板 + 术语（不调 LLM、不复制引用正文）；`card_id` 由装配方注入、38 不重算；拒绝原因码 6 项为 38 私有，不并入 `GateRejectReason`（23）、不新增 `GateCounter`（32）；AC-B4-65~74 为 `pending`；不改既有 AC 01~64 与任何封闭字段数。
+8. **13.3 回放本体（2026-11-22 增量）**：13.3 只做“驱动 + 用例装载 + 比对 + 失败报告”；契约 7 项封闭、执行层 `ReplayCase` 4 项、失败项 2 项/5 码；只调 4 个纯函数与常量 `FixedClock`，不重算门控、不做报表、不写生产计数；`tests/replay/` **不解禁**，用例落 `tests/gate_replay_driver.rs` 单文件；与 `tests/gate_replay.rs` 的 200 例**并存且零 diff**；`NEW_TARGETS` 24→25、脚本零改动；AC-B4-95~104 为 `pending`；不改既有 AC 01~94 与任何封闭字段数。
 
 ### §10.3 建议执行顺序（不含新任务编号）
 
 1. 先完成 **U-01**：AC-B4-48 方案 A 的 200 例回放与两次逐字节一致性，闭合 P3 遗留 pending。
 2. 再落 **U-02**：B4 关键词候选/卡片契约与 `click_state` 前置；只动契约与测试，不动 38/39/51 实体。
 3. 随后按 **U-03（已关闭，见 §15）→ U-04（已关闭，见 §13）→ U-05（规格已定、待实现，见 §16 点击 UI 与 §17 设置向导）** 接入 38 合成、39 校验、51 UI；每步以"只消费 B4 契约、不反写记录"为门禁。
-4. **U-06~U-08** 保持独立排期；在 U-01/U-02 未闭合前，不宣称关键词卡片或 B4 出口完成。
+4. **U-06~U-08** 保持独立排期；U-06 已更新为“回放本体：规格已定，待实现（§20）”，U-07/U-08 保持 open；不宣称关键词卡片、回放平台或 B4 出口完成。
 
 ### §10.4 工作区与提交状态
 
@@ -733,3 +734,68 @@ AC 三态：AC-B4-85~94 均为 **passed**（18 用例）。
 未完成：U-06 / U-07 / U-08 保持 open；不宣称真机可用。
 
 > 结论：设置向导（Key 掩码/模型/端点/测试/意图/文案）离线契约已闭环；U-05 closed。
+## §20 13.3 回放本体需求增量登记（2026-11-22）
+
+> 本节登记 13.3 回放本体的**需求规格增量**。本轮只更新 `spec.md`、`requirements.md` 与本文件，**未改代码、未建 13.3 实体文件、未解禁 `tests/replay/`、未提交**。
+
+### §20.1 增量规格落点
+
+| 文件 | 章节 | 内容 |
+|---|---|---|
+| `.codeartsdoer/specs/b4_gate/spec.md` | §5.11 | 13.3 定位、归属矩阵、四条接口约定、12 条业务规则（交付形态/双层用例/装载/驱动流程/4 函数关系/记录核验/确定性/失败报告/零转录/200 例并存/目录与门禁/平台依赖）、时序图、7 条异常场景 |
+| `.codeartsdoer/specs/b4_gate/spec.md` | §6.29 | `ReplayCase`（4）、`ReplayCaseSource`（trait/2 方法）、`ReplayDriver`（1 方法）、`ReplayRun`（3）、`ReplayFailure`（2）、`ReplayMismatchCode`（5）、`ReplayLoadError`（3）；既有 3 结构不变 |
+| `.codeartsdoer/specs/b4_gate/spec.md` | §7.16 | AC-B4-95~104（10 条，逐条可机器判定，含 target 名、扫描面与并存纪律） |
+| `.codeartsdoer/specs/b4_gate/spec.md` | §1.4 / §1.9 / §1.11 / §7.10 / §8 / §9.1 / §9.3 | 职责边界改写、U-06 修订、N-01 改写、AC 汇总 94→104 与时点口径、变更清单 6 行、J-35~J-44、D-B4-10 |
+| `.codeartsdoer/specs/b4_gate/requirements.md` | §15 | 13.3 增量需求（定位、术语、五组能力、数据约束、AC 映射、出口影响） |
+| `docs/progress/b4-status.md` | §5 / §10.1 / §10.3 / §20 | U-06 口径更新、执行顺序指引、本节登记 |
+
+### §20.2 新增决策（D-B4-P108 ~ D-B4-P117）
+
+| 编号 | 决策 | 理由 | 影响面 |
+|---|---|---|---|
+| **D-B4-P108** | 13.3 交付形态 = `crates/application/src/gate/replay.rs` 内 7 项顶层封闭契约 + `ReplayDriver::run`；`gate/mod.rs` 仅 +1 行 `pub use`；`api.rs` 4 个 `pub fn` 与其余 `gate/**` 零 diff；不新增 domain 契约 | 回放骨架本就预留给 U-06；纯封装不复制门控逻辑，可离线判定 | 1 源文件扩展 + 1 行门面；`domain/**` 零 diff |
+| **D-B4-P109** | **不从 `GateInputFixture` 反构 `GateInput`**：报告层保留 `GateReplayCase`（零文本），执行层用 `ReplayCase` 借用测试进程 arena | 夹具 23 字段无文本，无法还原 `Insight`/`NormalizedFragment`；强塞文本会破坏零转录 | AC-B4-96；`from_fixture` 命中 0 |
+| **D-B4-P110** | 13.3 与现有 200 例**并存**：`tests/gate_replay.rs` 零 diff，200 例继续作为 AC-B4-48 证据；13.3 不复刻/不迁移其构造器，自检集独立 ≥20 例 | 改动已闭环证据会破坏字节一致与三态；U-06 目标是驱动契约，不是重做 200 例 | AC-B4-103；`gate_replay.rs` 零 diff |
+| **D-B4-P111** | **`tests/replay/` 不解禁**：13.3 落单文件 `tests/gate_replay_driver.rs`（target `gate_replay_driver`） | 既有 AC-B4-49/57/63/73/83 的目录硬断言继续有效；单文件同样可承载用例 | 1 测试文件；目录不存在 |
+| **D-B4-P112** | 驱动只调 `detect_gaps`→`evaluate_gate`→`record_from`，`score_relevance` 可独立比对；每例 `FixedClock{anchor_ms: input.now_ms, tick_ms: 0}` | 保证“回放不重算门控”，避免第二套判定逻辑漂移 | AC-B4-98；`gate/replay.rs` 无级序分支 |
+| **D-B4-P113** | 失败报告封闭 `ReplayFailure{case_id, code}` 2 项 + `ReplayMismatchCode` 5 变体；`ReplayReport` 5 字段不变；`report.mismatch_cases` 与 `failures.case_id` 一致 | `ReplayReport` 是对外契约，扩字段会破坏既有 AC；失败诊断归 13.3 私有面 | AC-B4-100；`GateRejectReason` 仍 23 |
+| **D-B4-P114** | 确定性以 `ReplayReport` 5 字段 + `failures` + `records` **逐项相等**判定；不新增 `serde_json`，不引入 `rand` | application 无 `serde_json`；零新依赖是硬红线；字段逐项相等已足够机器判定 | AC-B4-101；`Cargo` 零 diff；登记 D-B4-10 |
+| **D-B4-P115** | 新增第 12 个 target `gate_replay_driver`（`NEW_TARGETS` 24→25）；`check-b4-gates.sh` **零改动**（`gate/*.rs` 与 `tests/gate_*.rs` 自动覆盖）；`--rule=targets` 循环不追加（X-05）；规则仍 7 条 | 命名落 `gate_*.rs` 可直接复用既有扫描面，避免脚本先改导致全规则退 2 | AC-B4-102/104；`scripts/check-b4-gates.sh` 零 diff |
+| **D-B4-P116** | 每例 `record_from` 产出 1 条 `GateRecord` 并核验 14 字段/跳级/`refs`/`stopped_at`；违规记 `RecordViolation`；`Debug` 白名单与断言消息纪律 | 回放必须证明记录零转录与字段封闭，否则无法支撑 AC-B4-47 的持续有效性 | AC-B4-99；`records.len()=total` |
+| **D-B4-P117** | AC-B4-50/64/74/84/94 的“汇总=57/64/74/84/94、`NEW_TARGETS`=21/22/23/24”视为**阶段时点断言**；U-06 起以 AC-B4-104 的“汇总=104、`NEW_TARGETS`=25”为准；既有编号与其余语义不重排不改写 | 等值断言必须随增量演进，否则文档自相矛盾；时点口径可保留历史证据 | §7.10 时点口径、AC-B4-104；D-B4-10 |
+
+### §20.3 AC 三态（增量 AC-B4-95~104）
+
+| AC | 状态 | 证据口径 |
+|---|---|---|
+| AC-B4-95 | pending | 规格已定；待 `replay_driver_types_are_closed` 与 7 项顶层类型/零 diff 复核 |
+| AC-B4-96 | pending | 规格已定；待 `replay_case_layers_are_separated` 与 `ReplayCase`=4 / 夹具=23 |
+| AC-B4-97 | pending | 规格已定；待 3 类装载错误用例与升序排序断言 |
+| AC-B4-98 | pending | 规格已定；待 `replay_driver_uses_only_four_functions`/`..._injects_constant_clock` + `--rule=source` |
+| AC-B4-99 | pending | 规格已定；待 `replay_driver_records_are_closed`/`..._record_violation_is_reported` |
+| AC-B4-100 | pending | 规格已定；待 `replay_failure_reports_case_id_and_code_only`/`..._codes_cover_all_mismatch_kinds` |
+| AC-B4-101 | pending | 规格已定；待 `replay_driver_is_deterministic_twice`/`..._order_insensitive`/`..._seed_is_report_only` |
+| AC-B4-102 | pending | 规格已定；待 `replay_driver_zero_transcript_boundary`/`..._debug_is_whitelisted` + `--rule=zero-transcript` |
+| AC-B4-103 | pending | 规格已定；待 `replay_driver_coexists_with_gate_replay_fixture`/`..._does_not_touch_200_cases` + `gate_replay.rs` 零 diff |
+| AC-B4-104 | pending | 规格已定；待 `gate_replay_driver` target 全绿、`NEW_TARGETS`=25、AC 汇总=104、U-06 口径复核 |
+
+### §20.4 13.3 明确不做（本轮边界）
+
+1. **不做分组报表**：不做覆盖矩阵报表、HTML/JSON 报表、按阶段分组统计；`ReplayReport` 仍 5 字段。
+2. **不解禁目录**：不建 `crates/application/tests/replay/`；既有目录断言继续有效。
+3. **不复刻 200 例**：不改 `tests/gate_replay.rs`、不迁移其构造器、不共享其私有 `Kind`/`build_cases`/`run`。
+4. **不重算门控**：不复制五级顺序、阈值、预算、冷却、抑制逻辑；只调 4 个纯函数。
+5. **不写生产面**：不新增 `GateCounter`（32）、不写 `gate_replay_runs`/`gate_replay_mismatch` 计数、不写审计/存储/文件/日志。
+6. **不联网/不读系统时间/随机源/环境变量**：无 `reqwest`/`TcpStream`/`std::net`/`std::fs`/`std::env`/`Instant::now`/`SystemTime::now`/`thread::sleep`/`rand`。
+7. **不改既有封闭面**：`api.rs` 4、`GateRecord` 14、审计 7、夹具 23、`ReplayReport` 5、`GateCounter` 32、`GateRejectReason` 23、`ComposedCard` 11、`KeywordCardView` 10、`SettingsView` 8 全部不变；`Cargo.toml`/`Cargo.lock` 零 diff。
+8. **不做 macOS**：只支持 Windows；macOS 一律“不适用（无设备）”，不新增任何 mac 约束或分支。
+9. **不宣称**：离线通过 ≠ 分组报表可用、≠ 真实端点时延、≠ 6s/10s p95、≠ 误触发率 ≤30%、≠ 产品级回放平台；不宣称 G3/G4/真机。
+
+### §20.5 工作区与提交状态
+
+- 本轮修改文件：`.codeartsdoer/specs/b4_gate/spec.md`、`.codeartsdoer/specs/b4_gate/requirements.md`、`docs/progress/b4-status.md`。
+- 未修改：`.codeartsdoer/specs/b4_gate/design.md`、`.codeartsdoer/specs/b4_gate/tasks.md`、任何 `crates/**` 源码、任何 `scripts/**`、根 `Cargo.toml`/`Cargo.lock`。
+- 未执行 `git commit`；如需提交本次 13.3 需求增量，请确认后单独执行（提交范围仅上述 3 个文档）。
+- 下一步入口：实现前先确认 §20.2 的 D-B4-P108~P117，特别是“`tests/replay/` 不解禁”“200 例零 diff”“只调 4 函数”“失败报告 2 项/5 码”“`NEW_TARGETS` 24→25 且脚本零改动”；确认后由 13.3 阶段建 `gate/replay.rs` + `tests/gate_replay_driver.rs` + `NEW_TARGETS` 1 行（同批提交）。
+
+> 结论：13.3 回放本体 **规格已定，待实现**；AC-B4-95~104 全部 `pending`；`tests/replay/` 仍不存在、200 例证据不变；**不宣称回放平台/报表/真机已交付**。
