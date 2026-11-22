@@ -618,10 +618,10 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 5.2.1-3、6.3-4 · DESIGN 2.2.2-C
   - DoD：超长必须在提炼器内拆分为多条并各自保留原文引用；UI 层不做截断（断言：UI 无 truncate 逻辑）；输出 0 条超 60 字
   - 进度（2026-11-21）：已完成。复用 C-02、limit=60、逐字无损，`insight_splitter` 3 例
-- [ ] **30.4 决策/待办/疑问字段补全** — `crates/application/src/understand/field_filler.rs`
+- [x] **30.4 决策/待办/疑问字段补全** — `crates/application/src/understand/field_filler.rs`
   - 追溯 SPEC 5.2.1-4/5/6、6.3-10/11 · DESIGN 2.3.2
   - DoD：决策缺决策人/范围 → "待确认"；待办缺负责人/期限 → "待确认"；疑问初始 `answered=false`，后续出现回应片段时置 `true` 并关联回应片段（有单测）
-  - 进度（2026-11-21）：**部分完成**。`fill_fields` 仅补疑问字段；决策 owner 与待办 assignee 补全未实现
+  - 进度（2026-11-21）：已完成。决策补空壳（`owner=None` 即待补）、待办缺 `action` 用正文回填、疑问 `unanswered=true`、异类字段清空；6 例通过
 - [x] **30.5 规则提炼兜底** — `crates/application/src/understand/rule_fallback.rs`
   - 追溯 SPEC 4.2-8 · DESIGN 2.1.3(9)
   - DoD：LLM 不可用/断网时仍能产出四类要点（准确率可降但结构完整）；兜底开关可观测（指标 `insight.rule_fallback.rate`）；不抛错、不阻塞采集

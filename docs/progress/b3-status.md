@@ -146,3 +146,8 @@
 - W-B3-28（网关抽取）与 D-B3-12（失败分类）已完成。
 - W-B3-35.4（service 侧只提炼一次）已接入并有 `understand_ingest` 用例。
 - 因此第 3 节中对应条目视为已关闭。
+
+### 7.3 字段补全收口（2026-11-21）
+
+- `fill_fields` 按 kind 补齐并清空异类字段：决策补空壳（`owner=None` 即待补）、待办缺 `action` 时用正文回填、疑问 `unanswered=true`、`KeyInfo` 不保留任何异类字段。
+- `field_filler` 6 例通过；`30.4` 已回写为完成。
