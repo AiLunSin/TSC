@@ -123,3 +123,26 @@
 | 4 | 领域类型（`InsightSources` 非空） | 由 `insight_sources_reject_empty` 证明 | — |
 
 演练均使用 `.tmp` 备份恢复，未残留改动。
+
+## 7. 抽取链路与 service 接入（2026-11-21 补充）
+
+| 项 | 内容 |
+|---|---|
+| `build_request` | `InsightExtract` 请求，`DeadlineMs` 封顶 6000、可覆盖 |
+| `run_extraction` | 预筛 → 能力前置 → 网关 → 草稿 → 规则兜底 |
+| 失败分类 | `InvalidSchema` → `schema_violation`；不可用/冷却 → `gateway_cooling` |
+| `merge_identical_duplicate` | 正文与来源均相同时 `duplicate_text_draft+1`，仍按 `Identical` 合并 |
+| `CaptureChannelService` | 可选 `understand` 字段、`with_understand`、`admit_merged`（单点接入） |
+| `insight_extract` target | 7 条（含 `StubGateway`） |
+| `understand_ingest` target | 2 条（已装配/未装配） |
+
+### 7.1 最新全量
+
+- 45 targets / **560 passed** / 0 failed / 9 ignored
+- `fmt --check` 0、`clippy -D warnings` 0
+
+### 7.2 与第 3 节“未完成”的差异
+
+- W-B3-28（网关抽取）与 D-B3-12（失败分类）已完成。
+- W-B3-35.4（service 侧只提炼一次）已接入并有 `understand_ingest` 用例。
+- 因此第 3 节中对应条目视为已关闭。

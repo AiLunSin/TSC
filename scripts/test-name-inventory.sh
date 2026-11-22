@@ -15,7 +15,7 @@ SELF_ABS="${ROOT}/${SELF}"
 BASE_ROOT="${INVENTORY_ROOT:-${ROOT}}"
 CARGO="${CARGO:-cargo}"
 DEFAULT_BASELINE_PLATFORM="x86_64-pc-windows-msvc"
-NEW_TARGETS='capture_degraded_guard capture_status_push capture_fakes capture_offline_gate capture_contract_freeze merge_dedupe understanding_normalize rolling_summary insight_dedup insight_extract'
+NEW_TARGETS='capture_degraded_guard capture_status_push capture_fakes capture_offline_gate capture_contract_freeze merge_dedupe understanding_normalize rolling_summary insight_dedup insight_extract understand_ingest'
 
 WORKDIR="$(mktemp -d 2>/dev/null)" || WORKDIR=""
 TMP_OUT=""
