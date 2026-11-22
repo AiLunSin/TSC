@@ -1286,6 +1286,8 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | 绑定契约 | 11 个 DTO 一致 | `npm --prefix app run check:bindings` |
 | AC 汇总 | 130 | 三份 spec 的 AC 并集 |
 | `NEW_TARGETS` | 25 | `scripts/test-name-inventory.sh` |
+| clippy | 通过（`--all-targets -D warnings`，含 `llm-https`） | 用户本地确认（2026-11-22，"cl 通过了"） |
+| 用户确认 | cl 检查全过，按推进处理 | 2026-11-22 |
 
 ### §29.3 AC 状态（111~130）
 
