@@ -12,14 +12,14 @@
 | B1 LLM 网关技术验证 | 完成：结构化任务、降级链路、离线基线 |
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
-| B4 门控与关键词卡片 | **部分完成**：AC-B4-01~94 离线通过；95~104 仍 `pending` |
+| B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
 | CI 门禁加固 | 完成：B3/B4 静态门禁、许可证、SBOM、密钥扫描 |
 
-最近一次全量回归：**803 passed / 0 failed / 9 ignored**；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量回归：**825 passed / 0 failed / 9 ignored**；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 仍未完成：
 
-- **U-06 13.3 回放本体**：`crates/application/src/gate/replay.rs` 仍为占位，`gate_replay_driver` target 未建；AC-B4-95~104 为 `pending`。
+- **U-06 13.3 回放本体**：**已交付**（`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`）。
 - **U-07**：负反馈、缓存/outbox、按需补全、审计存储。
 - **U-08**：真实检索源、真实 LLM 冷却、真机性能与误触发率；9 个 `#[ignore]` 用例保持不跑。
 - **平台层**：`platform-win` / `platform-mac` 目前仅为接口占位（无 WASAPI/UIA/OCR 实现）。
@@ -170,7 +170,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 1. 修改后本地跑完 Rust、前端与静态门禁。
 2. 不提交凭据、真实端点、模型名、请求标识或原文样例。
 3. 新增测试 target 时同步 `scripts/test-name-inventory.sh` 的 `NEW_TARGETS`。
-4. 能力状态必须与 `docs/progress/b4-status.md` 的 AC 三态一致，禁止把 `pending` 写成已交付。
+4. 能力状态必须与 `docs/progress/b4-status.md` 的 AC 三态一致，禁止把未完成态写成已交付。
 
 ## 许可证
 

@@ -1005,3 +1005,53 @@ AC 三态：
 - 不宣称"真实端点时延 / 6s·10s p95 / 误触发率"：全部为离线确定性回放。
 - 不宣称 G3/G4 真机、真实检索源或真实 LLM 冷却已验收。
 - 不宣称 `tests/replay/` 已解禁；目录保持不存在，200 例证据不变。
+## §25 P10 文档实况收口（W-B4-82）
+
+> P10 为 P9 之后的文档收尾批次，不含 Rust 功能实现。基线 `1b0dbf7`（`feat(gate): 落地 13.3 回放本体与 22 例自检集`）。
+
+### §25.1 命令结果表
+
+| 判据 | 结果 |
+|---|---|
+| `git rev-parse --short HEAD` | `1b0dbf7` |
+| `git status --short` | 空 |
+| `cargo test --workspace` | 825 passed / 0 failed / 9 ignored |
+| `--list` / `--list --ignored` | 834 / 9 |
+| `NEW_TARGETS` | 25 |
+| AC 汇总 | 104（103 passed + 1 not-applicable：AC-B4-45 macOS） |
+| `crates/application/tests/replay/` | 不存在 |
+| README 计数 | `803 passed`=0、`825 passed`=1、`pending`=0、`仍为占位`=0、`AC-B4-01~104`≥1、`gate_replay_driver`≥1 |
+| README `git diff --numstat` | 4 增 / 4 删（≤20） |
+| 文档门禁 | `doc-plan`/`zero-transcript`/`record`/`scan-secrets-docs`/`check-g2-claims`/`check-layering` 均 0 |
+| README 相对链接缺失 | 0 |
+| `test-name-inventory.sh --diff` | `removed=0` |
+
+### §25.2 时点补正
+
+- §24 的"**803 passed** / `NEW_TARGETS` 24 项 / AC-B4-95~104 `pending`"是 **P9 提交前时点快照**；现值以 §23 与本节 §25 为准。
+- 不删除 §24 原文；P9 后的实况为 **825 passed**、`NEW_TARGETS`=**25**、AC-B4-95~104 全部 `passed`。
+- AC 汇总保持 **104**，P10 不新增 AC、不新增 target、不新增 `#[ignore]`。
+
+### §25.3 未完成项与所需用户条件
+
+| 项 | 状态 | 所需条件 |
+|---|---|---|
+| U-07-41.5 负反馈加权 | 未做（规格层明确不做） | 需先补 b4 级需求规格（字段/枚举/AC/零转录） |
+| U-07-42 缓存/outbox | 未做 | 需用户确认持久化介质与"重启不丢"口径 |
+| U-07-43 按需补全实体 | 未做 | 需用户提供真实检索源与 8s p95 样本 |
+| U-07-52 审计哈希链存储 | 未做 | 需用户确认落库介质与 180 天保留策略 |
+| U-08 真实端点 / 真机 | 未判定，9 个 `#[ignore]` 保持 | 需用户提供端点凭据、真机与投屏样本 |
+| AC-B4-109 远端 CI | 本地 passed | 需用户授权 push 后取远端结论 |
+| U-07 整体 | open | 同上四项条件 |
+| U-08 整体 | open | 同上真实端点/真机条件 |
+
+### §25.4 不宣称清单
+
+- 不宣称负反馈、缓存/outbox、按需补全、审计哈希链存储已交付。
+- 不宣称真实端点、真机、G3/G4 或远端 CI 已绿。
+- 离线门禁全绿不等于上述能力完成；README 与本节口径一致，不以规划替代实现。
+
+### §25.5 提交记录
+
+- 本次提交：`docs(status): 校准 README 实况并登记 P10 收口（§25）`；仅 `README.md` 与本节所在文件两个文件面。
+- 未推送：U-08 与 AC-B4-109 的远端取证需用户另行授权。
