@@ -1,6 +1,12 @@
 //! 设置命令实现：快照投影、先安全存储后配置、确认后清除。
 
-use meeting_copilot_application::settings::{SecretBytes, SettingsConfig};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use meeting_copilot_application::settings::{
+    FactsSnapshot, SecretBytes, SecureStore, SettingsConfig, SettingsFactsSource,
+};
 use meeting_copilot_ui_bridge::settings::{
     apply_defaults, project_settings_view, EndpointSelectionView, FieldIssue, MaskedKey,
     ModelSelectionView, SecretInput, SettingsDefaults, SettingsFacts, SettingsFormState,
@@ -150,6 +156,38 @@ pub fn settings_clear_impl(
         has_key: false,
         notice: None,
     })
+}
+
+/// 装配层事实源：与命令共享内存 Key、冷却与在途标记。
+pub struct AppFactsSource {
+    pub secure: Arc<dyn SecureStore>,
+    pub memory_key: Arc<Mutex<Option<String>>>,
+    pub cooldown_until_ms: Arc<Mutex<Option<u64>>>,
+    pub probe_in_flight: Arc<AtomicBool>,
+    pub model_count: usize,
+    pub endpoint_count: usize,
+}
+
+impl SettingsFactsSource for AppFactsSource {
+    fn facts(&self) -> FactsSnapshot {
+        let memory_has_key = self.memory_key.lock().is_ok_and(|key| key.is_some());
+        let stored_has_key = self.secure.read().is_ok_and(|value| value.is_some());
+        FactsSnapshot {
+            has_stored_key: memory_has_key || stored_has_key,
+            model_count: self.model_count,
+            endpoint_count: self.endpoint_count,
+            now_ms: now_ms(),
+            cooldown_until_ms: self.cooldown_until_ms.lock().ok().and_then(|value| *value),
+            probe_in_flight: self.probe_in_flight.load(Ordering::Acquire),
+        }
+    }
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 fn to_snapshot_dto(state: &AppState, view: &SettingsView) -> SettingsSnapshotDto {
@@ -382,10 +420,10 @@ mod tests {
             cards: Arc::new(EmptyCards),
             view_facts: Arc::new(FixedView),
             catalog: SettingsCatalog::from_injected(presets),
-            memory_key: Mutex::new(None),
+            memory_key: Arc::new(Mutex::new(None)),
             form_state: Mutex::new(SettingsFormState::NotConfigured),
-            probe_in_flight: AtomicBool::new(false),
-            cooldown_until_ms: Mutex::new(None),
+            probe_in_flight: Arc::new(AtomicBool::new(false)),
+            cooldown_until_ms: Arc::new(Mutex::new(None)),
             last_probe_report: Mutex::new(None),
             counters: Mutex::new(CommandCounters::default()),
         }

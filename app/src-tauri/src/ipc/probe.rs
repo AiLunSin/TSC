@@ -368,10 +368,10 @@ mod tests {
             cards: Arc::new(EmptyCards),
             view_facts: Arc::new(FixedView),
             catalog: SettingsCatalog::from_injected(vec!["preset-a".to_owned()]),
-            memory_key: Mutex::new(None),
+            memory_key: Arc::new(Mutex::new(None)),
             form_state: Mutex::new(SettingsFormState::NotConfigured),
-            probe_in_flight: AtomicBool::new(false),
-            cooldown_until_ms: Mutex::new(None),
+            probe_in_flight: Arc::new(AtomicBool::new(false)),
+            cooldown_until_ms: Arc::new(Mutex::new(None)),
             last_probe_report: Mutex::new(None),
             counters: Mutex::new(CommandCounters::default()),
         }

@@ -38,10 +38,10 @@ pub struct AppState {
     pub cards: Arc<dyn CardSnapshotSource>,
     pub view_facts: Arc<dyn ViewFactsSource>,
     pub catalog: SettingsCatalog,
-    pub memory_key: Mutex<Option<String>>,
+    pub memory_key: Arc<Mutex<Option<String>>>,
     pub form_state: Mutex<SettingsFormState>,
-    pub probe_in_flight: AtomicBool,
-    pub cooldown_until_ms: Mutex<Option<u64>>,
+    pub probe_in_flight: Arc<AtomicBool>,
+    pub cooldown_until_ms: Arc<Mutex<Option<u64>>>,
     pub last_probe_report: Mutex<Option<ProbeReportDto>>,
     pub counters: Mutex<CommandCounters>,
 }
