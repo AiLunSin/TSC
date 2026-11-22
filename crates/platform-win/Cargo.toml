@@ -7,3 +7,7 @@ license.workspace = true
 description = "Windows 平台：WASAPI 环回、UI Automation 字幕读取、Windows.Media.Ocr。"
 
 [dependencies]
+meeting-copilot-application = { version = "0.1.0", path = "../application" }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.45.0", features = ["Win32_Security_Credentials", "Win32_Foundation"] }

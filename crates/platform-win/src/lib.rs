@@ -5,3 +5,4 @@
 #![cfg_attr(not(target_os = "windows"), allow(dead_code))]
 
 pub const PLATFORM_NAME: &str = "windows";
+pub mod secure_store;
