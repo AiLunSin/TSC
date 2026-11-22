@@ -15,6 +15,9 @@ GATE_DIR="crates/application/src/gate"
 GATE_MODEL="crates/domain/src/model/gate.rs"
 GATE_REPLAY="crates/domain/src/model/gate_replay.rs"
 GATE_KEYWORD="crates/domain/src/model/gate_keyword.rs"
+CITATION_APP_DIR="crates/application/src/citation"
+CITATION_MODEL="crates/domain/src/model/citation.rs"
+CITATION_TEST="crates/application/tests/citation_align.rs"
 STATUS_FILE="docs/progress/b4-status.md"
 SPEC_FILE=".codeartsdoer/specs/b4_gate/spec.md"
 RECORD_WHITELIST="schema_version trace_id session_id candidate_ref insight_ref trigger per_stage decision stopped_at budget_remaining cooldown_until_ms authorization_status skipped_stages decided_at_ms"
@@ -88,12 +91,22 @@ require_core_faces() {
   need_file "${GATE_MODEL}" || ok=1
   need_file "${GATE_REPLAY}" || ok=1
   need_file "${GATE_KEYWORD}" || ok=1
+  need_dir "${CITATION_APP_DIR}" || ok=1
+  need_file "${CITATION_MODEL}" || ok=1
   return "${ok}"
 }
 
+citation_files() {
+  local file
+  for file in "${CITATION_APP_DIR}"/*.rs; do
+    [[ -f "${file}" ]] && printf '%s\n' "${file}"
+  done
+}
+
 core_files() {
-  printf '%s\n' "${GATE_MODEL}" "${GATE_REPLAY}" "${GATE_KEYWORD}"
+  printf '%s\n' "${GATE_MODEL}" "${GATE_REPLAY}" "${GATE_KEYWORD}" "${CITATION_MODEL}"
   gate_files
+  citation_files
 }
 
 rule_source() {
@@ -217,6 +230,15 @@ rule_zero_transcript() {
   if [[ -f "${GATE_KEYWORD}" ]]; then
     files+=("${GATE_KEYWORD}")
   fi
+  if [[ -f "${CITATION_MODEL}" ]]; then
+    files+=("${CITATION_MODEL}")
+  fi
+  if [[ -f "${CITATION_TEST}" ]]; then
+    files+=("${CITATION_TEST}")
+  fi
+  while IFS= read -r file; do
+    files+=("${file}")
+  done < <(citation_files)
   if compgen -G "crates/application/tests/gate_*.rs" > /dev/null; then
     while IFS= read -r file; do
       files+=("${file}")

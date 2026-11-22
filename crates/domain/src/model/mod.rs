@@ -4,6 +4,7 @@
 
 pub mod card;
 pub mod channel;
+pub mod citation;
 pub mod enums;
 pub mod gate;
 pub mod gate_keyword;
@@ -30,6 +31,7 @@ pub use channel::{
     legal_targets, transition, wall_view, ChannelKey, ChannelKind, ChannelState, ChannelStateError,
     ChannelStateSnapshot, GapReason, StateReason, SwitchReason, TransitionOutcome,
 };
+pub use citation::*;
 pub use enums::*;
 pub use gate::*;
 pub use gate::{GateRejectReason, Visibility};

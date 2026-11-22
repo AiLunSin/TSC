@@ -78,8 +78,9 @@
 | G2 相关性 | 已实现（AC-B4-09~14，11 条用例） |
 | G3 时效/去重 | 已实现（AC-B4-15~21，15 条用例） |
 | G4 预算与冷却 | 已实现（AC-B4-24~27，含租约 3 条；真机性能仍未判定） |
-| AC-B4-48 200 例回放 | 未完成（方案 A 已裁决；`replay_200_cases_is_byte_identical` 未建） |
-| AC-B4-51~57 关键词卡片契约 | 未完成（仅规格；实现归属 B4 契约 + 38/39/51） |
+| AC-B4-48 200 例回放 | closed（§11，W-B4-41；`replay_200_cases_*` 已交付） |
+| AC-B4-51~57 关键词卡片契约 | closed（§11，W-B4-34~40） |
+| AC-B4-58~64 39 引用对齐校验 | 规格已定、待实现（§12；AC-B4-58~64 为 `pending`；不建 39 实体） |
 | 13.3 回放本体 | 未做 |
 | 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 未做（38/39/51 与关键词卡片的边界已在规格中定义） |
 | 真实检索源连通 / 真实 LLM 冷却 | 未判定（仍为既有 9 个 ignored） |
@@ -229,7 +230,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | AC-B4-56 | passed | 见 §11：`keyword_card_zero_transcript_boundary`、`--rule=zero-transcript` |
 | AC-B4-57 | passed | 见 §11：`--rule=source`、`tests/replay/` 不存在 |
 
-> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 仍为 pending；AC-B4-51~57 为 2026-11-22 增量规格新增、尚未实现，故 P3 出口与关键词卡片增量范围均未完全闭合。
+> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 与 51~57 已由 §11（2026-11-22 P4 快照）闭合为 `passed`；39 的 AC-B4-58~64 为 2026-11-22 需求增量，**规格已定、待实现**（见 §12），故 39 增量范围尚未闭合，既有 P0~P4 出口不受影响。
 
 新增偏差：
 
@@ -256,7 +257,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | U-01 | AC-B4-48 200 例回放 | **closed（W-B4-41）**：不改 `GateInputFixture`、不写原文；`gate_replay.rs` 内本地构造 `NormalizedFragment`/`Insight`；`total=200`、`mismatched=0`、`seed=7`、两次逐字节一致 | B4 测试面 / W-B4-28.3、28.4 |
 | U-02 | AC-B4-51~57 关键词卡片契约 | **closed（W-B4-34~40）**：五类候选、首见唯一、13 项卡片字段、只有 `Allow` 可出卡/可点击、点击本地查看、零转录、归属拆分 | B4 契约扩展；实现任务待 tasks.md 增量 |
 | U-03 | 38 卡片合成 | 未做；B4 只给契约，38 产出标题/解释/置信度/引用集合/状态 | 38 |
-| U-04 | 39 引用对齐校验 | 未做；39 产出 `citation_alignment` 三态，`Passed` 才可点击 | 39 |
+| U-04 | 39 引用对齐校验 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.7/§6.14~6.15/§7.12 与 `requirements.md` §11 已定义 `Passed`/`Failed`/`Unknown` 三态（`Unknown→Unverified` 唯一投影）、引用只存 ID+4 档信任+2 态可访问+发布时间、零转录/离线/确定性边界与 AC-B4-58~64；尚未创建 39 实体文件，AC-B4-58~64 为 `pending` | 39（domain 契约 `citation.rs` + application 只读校验 `citation/align.rs` + `citation_align` target；不建 UI/合成/回放目录） |
 | U-05 | 51 点击 UI 与三形态 | 未做；点击详情、投屏/紧急遮蔽、焦点由 51 实现 | 51 |
 | U-06 | 13.3 回放本体 | 未做；`tests/replay/` 仍不得创建 | 13.3 |
 | U-07 | 41.5 / 42 / 43 / 52 | 未做；负反馈、缓存/outbox、按需补全实体、审计哈希链存储 | 对应章节 |
@@ -269,12 +270,13 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 3. **不越界**：B4 不新增卡片合成器、引用校验器、展示器、卡片存储；`gate/**` 中相关符号命中必须为 0。
 4. **点击不等于外发**：点击只读本地详情，`outbound_attempts=0`、`llm_calls=0`；"继续检索"必须重新走 G1~G5。
 5. **失败闭合**：门控拒绝、引用未对齐、授权撤销、投屏/遮蔽、跨会话/引用过期，一律 `click_state=Disabled{reason}`，不得展示可点击的 `Deny` 卡。
+6. **39 引用对齐（2026-11-22 增量）**：39 只输出 `Passed`/`Failed`/`Unknown`（`Unknown→Unverified` **唯一投影**），引用只存 `reference_id`/`trust_tier`/`access_status`/`published_at_ms`/`alignment`；不联网抓正文、不写门控记录；AC-B4-58~64 为 `pending`；不改既有 AC 01~57 与任何封闭字段数。
 
 ### §10.3 建议执行顺序（不含新任务编号）
 
 1. 先完成 **U-01**：AC-B4-48 方案 A 的 200 例回放与两次逐字节一致性，闭合 P3 遗留 pending。
 2. 再落 **U-02**：B4 关键词候选/卡片契约与 `click_state` 前置；只动契约与测试，不动 38/39/51 实体。
-3. 随后按 **U-03 → U-04 → U-05** 接入 38 合成、39 校验、51 UI；每步以"只消费 B4 契约、不反写记录"为门禁。
+3. 随后按 **U-03 → U-04 → U-05** 接入 38 合成、39 校验（**规格已定、待实现**，见 §12）、51 UI；每步以"只消费 B4 契约、不反写记录"为门禁。
 4. **U-06~U-08** 保持独立排期；在 U-01/U-02 未闭合前，不宣称关键词卡片或 B4 出口完成。
 
 ### §10.4 工作区与提交状态
@@ -315,7 +317,8 @@ AC 三态（增量）：
 |---|---|
 | U-01 AC-48 200 例 | **closed**（W-B4-41） |
 | U-02 AC-51~57 | **closed**（W-B4-34~40） |
-| U-03 / U-04 / U-05 | open（38/39/51 实体，P4 不承接） |
+| U-03 / U-05 | open（38 合成 / 51 UI 实体，P4 不承接） |
+| U-04 39 引用对齐校验 | **规格已定，待实现**（`spec.md` §5.7/§6.14~6.15/§7.12、`requirements.md` §11、AC-B4-58~64；待建 `citation.rs` + `citation/align.rs` + `citation_align` target） |
 | U-06 13.3 回放本体 | open（`tests/replay/` 保持不存在） |
 | U-07 41.5/42/43/52 | open |
 | U-08 真实端点/真机 | open（9 ignored，不宣称 G4） |
@@ -332,4 +335,101 @@ AC 三态（增量）：
 | D-B4-P32 | `KeywordCardAdmission.body_visible` | 投屏/紧急遮蔽为 false，渲染仍归 51 |
 | D-B4-P33 | AC-48 的 200 例按 25 类循环 | 覆盖 21 个可构造拒绝码；Allow 子形由 `replay_allow_variants_are_explicit` 显式断言 Skipped/queued |
 
+## §12 39 引用对齐校验需求增量登记（2026-11-22）
+
+> 本节登记 39 的**需求规格增量**。本轮只更新 `spec.md`、`requirements.md` 与本文件，**未改代码、未建 39 实体文件、未提交**。
+
+### §12.1 增量规格落点
+
+| 文件 | 章节 | 内容 |
+|---|---|---|
+| `.codeartsdoer/specs/b4_gate/spec.md` | §5.7 | 39 职责、输入/输出、三态规则、异常/降级、零转录、归属与接口 |
+| `.codeartsdoer/specs/b4_gate/spec.md` | §6.14~6.15 | `CitationCheckInput`（8 项）、`CitationAlignmentResult`（6 项）、唯一原因顺序与不变量 |
+| `.codeartsdoer/specs/b4_gate/spec.md` | §7.12 | AC-B4-58~64（7 条，逐条可机器判定） |
+| `.codeartsdoer/specs/b4_gate/requirements.md` | §11 | 39 增量需求（定位、术语、四组能力、数据约束、AC 映射、出口影响） |
+| `docs/progress/b4-status.md` | §10.1 / §11 / §12 | U-04 口径更新、AC 三态、决策登记 |
+
+### §12.2 新增决策（D-B4-P34 ~ D-B4-P37）
+
+| 编号 | 决策 | 理由 | 影响面 |
+|---|---|---|---|
+| **D-B4-P34** | 39 独立交付形态 = domain 契约 `crates/domain/src/model/citation.rs` + application 只读校验 `crates/application/src/citation/align.rs`；**不建** UI、卡片合成、卡片存储、`tests/replay/` | 39 只做校验与判定；先落契约与只读函数即可被 38/51 消费，避免越界 | 新增 2 个文件 + 1 个 test target；`gate/**` 不改 |
+| **D-B4-P35** | 39 API 三态用 `Passed`/`Failed`/`Unknown`；落到 B4 `CitationAlignment` 时 `Unknown→Unverified` **唯一投影**，其余同名；不重命名/不扩展既有 3 变体 | 用户口径用 `Unknown`；既有 AC-B4-53/55 与 `CitationAlignment` 已冻结为 `Unverified`，直接改名会破坏 57 条既有 AC | `CitationAlignment` 变体数不变；新增 `AlignmentVerdict`（39 侧）；AC-B4-59 断言投影唯一 |
+| **D-B4-P36** | 39 判定只消费 ID 面：引用仅 `reference_id`/`trust_tier`/`access_status`/`published_at_ms`/`alignment`；`normalized_term` 仅内存比对、不落记录；**不联网抓正文**、不读系统时间/环境变量 | 满足零转录与离线红线；避免把页面标题/摘要/正文带入门控或回放 | `--rule=zero-transcript` 扫描面扩 39 两文件；AC-B4-61/62 |
+| **D-B4-P37** | 新增第 8 个 target `citation_align`（`NEW_TARGETS` 20→21）；`check-b4-gates.sh` 的 `source`/`zero-transcript` 扫描面追加 39 两文件，**规则仍 7 条、退出码语义不变**；`api.rs` 4 函数、`GateRecord` 14、`GateAuditEvent` 7、`GateInputFixture` 23、`ReplayReport` 5、`GateCounter` 32、`GateRejectReason` 23 全部不变 | 否则 39 契约是静态盲区，AC-B4-58~63 不可机器判定；新增 target 不改变既有 6 项断言 | `scripts/` 两处扩展；AC-B4-64 |
+
+### §12.3 AC 三态（增量 AC-B4-58~64）
+
+| AC | 状态 | 证据口径 |
+|---|---|---|
+| AC-B4-58 | pending | 规格已定；待 `citation_input_is_readonly_and_closed` 与封闭字段数复核 |
+| AC-B4-59 | pending | 规格已定；待 `citation_alignment_is_three_state_and_fail_closed`、`unknown_projects_to_unverified_only` |
+| AC-B4-60 | pending | 规格已定；待 `citation_passed_enables_click_only_with_other_facts` 等 3 用例 |
+| AC-B4-61 | pending | 规格已定；待 `citation_result_is_id_only` + `--rule=zero-transcript` |
+| AC-B4-62 | pending | 规格已定；待 `citation_check_is_offline_and_deterministic`、`citation_ignores_reference_order` + `--rule=source` |
+| AC-B4-63 | pending | 规格已定；待 `citation_ownership_is_outside_b4_and_ui` + 禁词/目录/计数复核 |
+| AC-B4-64 | pending | 规格已定；待 `citation_align` target 全绿、`NEW_TARGETS`=21、本文件 U-04 口径复核 |
+
+### §12.4 39 明确不做（本轮边界）
+
+1. **不联网**：不请求真实检索源、不抓取/解析正文、不建立正文缓存。
+2. **不生成卡片**：不算标题/解释/置信度、不组装引用集合、不维护 `card_status`（38 职责）。
+3. **不做 UI**：不打开详情、不抢焦点、不处理投屏/紧急遮蔽界面（51 职责）。
+4. **不改既有封闭面**：`GateDecision`/`GateRecord`（14）/`GateAuditEvent`（7）/`GateInputFixture`（23）/`ReplayReport`（5）/`GateCounter`（32）/`GateRejectReason`（23）/`api.rs` 4 个 `pub fn` 均不变。
+5. **不建回放目录**：`crates/application/tests/replay/` 保持不存在；39 结果不进入回放夹具与报告。
+6. **不宣称**：离线判定通过 ≠ 真实引用可访问、语义对齐质量或 51 交互质量通过；不宣称 G3/G4/真机。
+
+### §12.5 工作区与提交状态
+
+- 本轮修改文件：`.codeartsdoer/specs/b4_gate/spec.md`、`.codeartsdoer/specs/b4_gate/requirements.md`、`docs/progress/b4-status.md`。
+- 未修改：`design.md`、`tasks.md`、任何 `crates/**` 源码、`Cargo.toml`/`Cargo.lock`、既有门禁脚本。
+- 未执行 `git commit`；如需提交本次 39 需求增量，请确认后单独执行（提交范围仅上述 3 个文档）。
+
 > 结论：AC-48/51~57 离线用例已通过；38 卡片合成、39 引用校验、51 点击 UI 与真实端点仍未做，**不宣称产品级"可点击关键词卡片"已交付**。
+## §13 P5 增量快照（W-B4-43 ~ W-B4-48）
+
+日期：2026-11-22。
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 39 用例 | `cargo test -p meeting-copilot-application --test citation_align` | 12 passed / 0 failed |
+| 域契约 | `cargo test -p meeting-copilot-domain --lib` | 153 passed / 0 failed |
+| target 清单 | `NEW_TARGETS` | 21 项，含 `citation_align` |
+| 七规则 | `source/zero-transcript/budget/outbound/record/targets/doc-plan` | 7 × 0 |
+| 回放面 | `grep -c '^pub fn ' gate/api.rs` | 4（零 diff） |
+| 静态 | `fmt --check`、`clippy -D warnings` | 0 |
+
+AC 三态（增量）：
+
+| AC | 状态 | 证据 |
+|---|---|---|
+| AC-B4-58 | passed | `citation_input_is_readonly_and_closed` |
+| AC-B4-59 | passed | `citation_alignment_is_three_state_and_fail_closed`、`unknown_projects_to_unverified_only` |
+| AC-B4-60 | passed | `citation_passed_enables_click_only_with_other_facts`、`citation_failed_still_displayed_but_disabled`、`citation_unknown_is_conservative` |
+| AC-B4-61 | passed | `citation_result_is_id_only` |
+| AC-B4-62 | passed | `citation_check_is_offline_and_deterministic`、`citation_ignores_reference_order` |
+| AC-B4-63 | passed | `citation_ownership_is_outside_b4_and_ui`、`--rule=source` |
+| AC-B4-64 | passed | `citation_basis_is_unique_and_ordered`、`citation_counts_match_inputs`、`--rule=targets` |
+
+未完成项：
+
+| 编号 | 状态 |
+|---|---|
+| U-04 39 引用对齐 | **closed（W-B4-43~48）**；历史口径见 §10.1 |
+| U-03 38 卡片合成 | open |
+| U-05 51 点击 UI | open |
+| U-06 / U-07 / U-08 | open（不变） |
+
+新增偏差：
+
+| 编号 | 内容 | 处置 |
+|---|---|---|
+| D-B4-P38 | `CONTRACT_UNVERIFIED = CitationAlignment::Unknown` | 不改既有枚举；三态单射投影 |
+| D-B4-P39 | `CitationCheckInput` 手写 `Debug`，无 `Serialize` | 防术语与 claim 外泄 |
+| D-B4-P40 | `Failed` 三因以上游 `ReferenceView.alignment` 为唯一信号 | v1 可构造，不读正文 |
+| D-B4-P41 | `ClaimRef` 类型层拒绝空/空白/`@`/scheme 分隔符/超长 | 非法引用不进入判定 |
+| D-B4-P42 | `bases: [u32; 11]` 下标由 `AlignmentBasis::index()` 给出 | 顺序与 §5.5.2 一致 |
+| D-B4-P43 | 39 不改 `gate/**`；点击前置仅在测试侧复用 `keyword_card_admission` | 分层不越界 |
+| D-B4-P44 | 测试断言用类型值/`Debug` 白名单替代 `serde_json`（application 无该依赖） | 键封闭由 domain 单测与 `--rule=record` 保证 |
+
+> 结论：39 的离线契约与只读判定已闭环；38 卡片合成与 51 点击 UI 仍 open，**不宣称产品级“可点击卡片”已交付**。

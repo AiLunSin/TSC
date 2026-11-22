@@ -239,6 +239,7 @@ impl Harness {
         }
     }
 
+    #[allow(dead_code)]
     pub fn outcome(&self) -> GateOutcome {
         evaluate_gate_with_counters(
             &self.input(),
