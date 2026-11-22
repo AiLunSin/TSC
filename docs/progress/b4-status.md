@@ -908,3 +908,24 @@ AC 三态：
 偏差：D-B4-P138 收窄为 lock **5 行**（url/form_urlencoded 各自 version+checksum），非 4 行；包集合不变。
 
 > 结论：本地四合一已退 0；CI compliance 远端取证需推送后确认，不宣称远端已绿。
+
+
+## §24 README 更新快照
+
+日期：2026-11-22。
+
+- 重写 `README.md` 为 12 章：定位与当前阶段、快速开始、目录结构、构建测试、门禁与 CI、LLM 配置入口、关键词卡片、隐私与凭据、文档索引、贡献、许可证。
+- 实况口径：全量 803 passed / 0 failed / 9 ignored；`NEW_TARGETS` 24 项（脚本实测，登记 D-RD-01）；AC-B4-01~94 passed、95~104 pending、105~110 本地 passed（远端 CI 待确认）。
+- 删除过期/夸大表述：45 targets/560 passed、WASAPI/UIA/OCR 已实现、审计保留 180 天、`cargo deny --offline`。
+- 明确“不宣称”：产品级可点击卡片、设置界面可用、真机可用、远端 CI 已绿。
+
+| 判据 | 结果 |
+|---|---|
+| `--rule=doc-plan` | 0 |
+| `--rule=zero-transcript` | 0 |
+| `scan-secrets-docs.sh --all-md` | 0 |
+| `check-g2-claims.sh` | 0 |
+| README 内相对链接 | 全部存在 |
+| URL/模型名/请求标识 | 0 命中 |
+
+> 结论：README 已按仓库实况重写；仅文档变更，未改代码/配置/脚本。
