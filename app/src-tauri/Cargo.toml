@@ -10,10 +10,16 @@ description = "Tauri 2 桌面壳与 IPC 注册入口。"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+meeting-copilot-application = { version = "0.1.0", path = "../../crates/application" }
+meeting-copilot-infrastructure = { version = "0.1.0", path = "../../crates/infrastructure", default-features = false, features = ["bundled-sqlite"] }
+meeting-copilot-platform-win = { version = "0.1.0", path = "../../crates/platform-win" }
 meeting-copilot-ui-bridge = { version = "0.1.0", path = "../../crates/ui-bridge" }
+serde.workspace = true
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tracing.workspace = true
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+llm-https = ["meeting-copilot-infrastructure/llm-https"]

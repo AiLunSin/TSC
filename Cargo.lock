@@ -2113,7 +2113,12 @@ dependencies = [
 name = "meeting-copilot-desktop"
 version = "0.1.0"
 dependencies = [
+ "meeting-copilot-application",
+ "meeting-copilot-infrastructure",
+ "meeting-copilot-platform-win",
  "meeting-copilot-ui-bridge",
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tracing",

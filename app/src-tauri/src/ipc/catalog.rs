@@ -1,0 +1,93 @@
+//! 目录清单：注入预设 + 既有白名单首项端点；不新增来源。
+
+use meeting_copilot_infrastructure::llm::live::{DEEPSEEK_HOSTS, PATH_CONSTANT};
+
+const SCHEME: &str = "https";
+const SEPARATOR: &str = "://";
+const DEFAULT_ENDPOINT_LABEL: &str = "默认服务";
+
+/// 端点目标：显示名 + 内存完整地址。
+#[derive(Clone, PartialEq, Eq)]
+pub struct EndpointTarget {
+    pub display_name: String,
+    url: String,
+}
+
+impl EndpointTarget {
+    /// 构造端点目标；地址只留在内存，不进 DTO/日志。
+    pub fn new(display_name: String, url: String) -> Self {
+        Self { display_name, url }
+    }
+
+    /// 供探针装配使用的完整地址。
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+}
+
+impl core::fmt::Debug for EndpointTarget {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("EndpointTarget")
+            .field("display_name", &self.display_name)
+            .finish_non_exhaustive()
+    }
+}
+
+/// 目录清单：模型预设与端点。
+#[derive(Clone, PartialEq, Eq)]
+pub struct SettingsCatalog {
+    pub presets: Vec<String>,
+    pub endpoints: Vec<EndpointTarget>,
+}
+
+impl SettingsCatalog {
+    /// 由注入预设生成；端点固定为既有白名单首项。
+    pub fn from_injected(presets: Vec<String>) -> Self {
+        Self {
+            presets,
+            endpoints: vec![EndpointTarget::new(
+                DEFAULT_ENDPOINT_LABEL.to_owned(),
+                default_endpoint_url(),
+            )],
+        }
+    }
+
+    /// 模型数量。
+    pub fn model_count(&self) -> usize {
+        self.presets.len()
+    }
+
+    /// 端点数量。
+    pub fn endpoint_count(&self) -> usize {
+        self.endpoints.len()
+    }
+}
+
+impl core::fmt::Debug for SettingsCatalog {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SettingsCatalog")
+            .field("model_count", &self.model_count())
+            .field("endpoint_count", &self.endpoint_count())
+            .finish_non_exhaustive()
+    }
+}
+
+fn default_endpoint_url() -> String {
+    let host = DEEPSEEK_HOSTS.first().copied().unwrap_or_default();
+    format!("{SCHEME}{SEPARATOR}{host}{PATH_CONSTANT}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn catalog_uses_injected_presets_and_fixed_label() {
+        let catalog = SettingsCatalog::from_injected(vec!["preset-a".to_owned()]);
+        assert_eq!(catalog.model_count(), 1);
+        assert_eq!(catalog.endpoint_count(), 1);
+        assert_eq!(catalog.endpoints[0].display_name, DEFAULT_ENDPOINT_LABEL);
+        assert!(catalog.endpoints[0].url().ends_with(PATH_CONSTANT));
+        assert!(!format!("{:?}", catalog.endpoints[0]).contains(DEEPSEEK_HOSTS[0]));
+    }
+}
