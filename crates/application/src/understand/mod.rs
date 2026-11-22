@@ -20,7 +20,8 @@ pub mod types;
 
 pub use counters::{Counter, CounterSnapshot, UnderstandingCounters};
 pub use deduplicator::{
-    is_visible, merge_drafted, project_sources, similarity, DedupeOutcome, InsightSimilarity,
+    is_visible, merge_drafted, merge_identical_duplicate, project_sources, similarity,
+    DedupeOutcome, InsightSimilarity,
 };
 pub use field_filler::{apply_kind_penalty, fill_fields};
 pub use insight_extractor::{classify_signals, prefilter_hit};

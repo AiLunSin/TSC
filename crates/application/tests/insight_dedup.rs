@@ -2,8 +2,8 @@
 
 use meeting_copilot_application::capture::merge_types::{MergedUnit, SingleUtterance};
 use meeting_copilot_application::understand::{
-    delete, flag_important, is_visible, merge_drafted, project_sources, similarity, DedupeOutcome,
-    InsightSimilarity, InsightStore,
+    delete, flag_important, is_visible, merge_drafted, merge_identical_duplicate, project_sources,
+    similarity, DedupeOutcome, InsightSimilarity, InsightStore,
 };
 use meeting_copilot_domain::merge::{MergedUtterance, PairBasis, Pairing};
 use meeting_copilot_domain::model::enums::{
@@ -232,4 +232,25 @@ fn realistic_corpus_has_zero_source_missing() {
         let sources = project_sources(&unit).expect("sources");
         assert!(!sources.is_empty());
     }
+}
+
+#[test]
+fn duplicate_text_draft_is_counted_once() {
+    let counters = meeting_copilot_application::understand::UnderstandingCounters::new();
+    let mut candidate = insight("i1", "u1", InsightKind::Decision, "确认下周上线");
+    candidate.sources = vec![UtteranceRef::new("u1").expect("ref")];
+    let draft = meeting_copilot_domain::model::insight::InsightDraft {
+        kind: InsightKind::Decision,
+        text: ShortText::new("确认下周上线").expect("text"),
+        confidence: Confidence::new(0.9).expect("conf"),
+        sources: meeting_copilot_domain::model::insight::InsightSources::new(vec![
+            UtteranceRef::new("u1").expect("ref"),
+        ])
+        .expect("sources"),
+        fields: meeting_copilot_domain::model::insight::InsightFields::default(),
+        kind_fallback: false,
+    };
+    let outcome = merge_identical_duplicate(&mut candidate, &draft, 0, 1_000, 600_000, &counters);
+    assert_eq!(outcome, DedupeOutcome::Merged { count: 2 });
+    assert_eq!(counters.snapshot().duplicate_text_draft, 1);
 }

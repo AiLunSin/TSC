@@ -6,6 +6,7 @@ use meeting_copilot_domain::model::insight::{Insight, InsightDraft, InsightError
 use meeting_copilot_domain::model::insight_policy::InsightPolicy;
 use meeting_copilot_domain::vo::WallClock;
 
+use super::counters::{Counter, UnderstandingCounters};
 use super::store::InsightStore;
 use crate::capture::merge_types::MergedUnit;
 
@@ -135,6 +136,29 @@ pub fn apply_supplement(
     };
     let supplement = supplement_draft(&original_insight, draft, reference, created_at);
     store.insert(supplement)
+}
+
+/// 正文与来源都与既有可见要点完全相同：先计重复草稿，再按 `Identical` 合并。
+pub fn merge_identical_duplicate(
+    candidate: &mut Insight,
+    draft: &InsightDraft,
+    created_ms: u64,
+    now_ms: u64,
+    window_ms: u64,
+    counters: &UnderstandingCounters,
+) -> DedupeOutcome {
+    let same_text = candidate.text.as_str() == draft.text.as_str();
+    let same_sources = candidate.sources.as_slice() == draft.sources.as_slice();
+    if same_text && same_sources {
+        counters.bump(Counter::DuplicateTextDraft);
+    }
+    merge_drafted(
+        candidate,
+        InsightSimilarity::Identical,
+        created_ms,
+        now_ms,
+        window_ms,
+    )
 }
 
 #[cfg(test)]

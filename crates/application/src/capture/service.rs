@@ -51,6 +51,7 @@ pub struct CaptureChannelService {
     publisher: Arc<StatusPublisher>,
     guard: Arc<DegradedGuard>,
     merge: Option<Arc<DedupeMergeGuard>>,
+    understand: Option<Arc<crate::understand::UnderstandService>>,
     policy: CapturePolicy,
 }
 
@@ -129,6 +130,7 @@ impl CaptureChannelService {
             publisher,
             guard,
             merge: None,
+            understand: None,
             policy,
         }
     }
@@ -145,6 +147,32 @@ impl CaptureChannelService {
             Some(guard) => guard.push(side, event),
             None => Vec::new(),
         }
+    }
+
+    /// 装配理解层（独立构造器，不改既有签名）。
+    pub fn with_understand(mut self, service: Arc<crate::understand::UnderstandService>) -> Self {
+        self.understand = Some(service);
+        self
+    }
+
+    /// 合并单元只在此处进入理解层一次；未装配时返回 `Disabled`。
+    pub fn admit_merged(
+        &self,
+        session: &SessionId,
+        unit: MergedUnit,
+        state: meeting_copilot_domain::model::enums::SessionState,
+        platform: Option<meeting_copilot_domain::model::enums::Platform>,
+    ) -> crate::understand::UnderstandOutcome {
+        let Some(service) = self.understand.as_ref() else {
+            return crate::understand::UnderstandOutcome::Disabled;
+        };
+        service.observe(&crate::understand::UnderstandInput {
+            session: session.clone(),
+            unit,
+            state,
+            silence: crate::understand::SilenceSignal::none(),
+            session_platform: platform,
+        })
     }
 
     pub fn policy(&self) -> CapturePolicy {
