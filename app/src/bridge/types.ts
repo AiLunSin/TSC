@@ -28,7 +28,114 @@ export interface IpcErrorDto {
   retryable: boolean;
 }
 
+export type ModelChoiceDto =
+  | { preset: { displayName: string } }
+  | { custom: { name: string } };
+
+export type EndpointChoiceDto = { option: { displayName: string } } | "unavailable";
+
+export type ConclusionDto =
+  | { available: { text: string } }
+  | "noReliableSource"
+  | "absent";
+
+export interface ProbeReportDto {
+  succeeded: boolean;
+  failure: string | null;
+  message: string;
+  elapsedMs: number;
+  remainingMs: number | null;
+}
+
+export interface SettingsSnapshotDto {
+  formState: string;
+  hasKey: boolean;
+  keyDisplay: string;
+  modelChoice: ModelChoiceDto;
+  endpointChoice: EndpointChoiceDto;
+  inlineErrors: string[];
+  canTest: boolean;
+  canSave: boolean;
+  sectionsOrder: string[];
+  advancedCollapsed: boolean;
+  probeReport: ProbeReportDto | null;
+}
+
+export interface SettingsSaveReceiptDto {
+  persisted: boolean;
+  fallback: string | null;
+  hasKey: boolean;
+  notice: string | null;
+}
+
+export interface SettingsClearReceiptDto {
+  cleared: boolean;
+  hasKey: boolean;
+  notice: string | null;
+}
+
+export interface CardBodyDto {
+  title: string;
+  conclusion: ConclusionDto;
+  confidence: number;
+  referenceIds: string[];
+}
+
+export interface KeywordCardViewDto {
+  cardId: string;
+  keywordKind: string;
+  trigger: string;
+  triggeredAtMs: number;
+  cardStatus: string;
+  bodyVisible: boolean;
+  body: CardBodyDto | null;
+  clickState: string;
+  disabledReason: string | null;
+  badgeCount: number;
+}
+
+export interface CardDetailDto {
+  cardId: string;
+  title: string;
+  conclusion: ConclusionDto;
+  referenceIds: string[];
+  citationAlignment: string;
+}
+
+export interface ProbeInputDto {
+  key: string;
+  modelIndex: number;
+  endpointIndex: number;
+  timeoutMs: number | null;
+}
+
+export interface SaveInputDto {
+  key: string;
+  modelIndex: number;
+  endpointIndex: number;
+  timeoutMs: number | null;
+}
+
+export interface ClearInputDto {
+  confirm: boolean;
+}
+
+export interface OpenInputDto {
+  cardId: string;
+}
+
 export const IPC_PROTOCOL_VERSION = 1;
+
+export const IPC_COMMANDS = [
+  "settings_snapshot",
+  "settings_probe",
+  "settings_save",
+  "settings_clear",
+  "keyword_cards_snapshot",
+  "keyword_card_open",
+] as const;
+
+export type IpcCommand = (typeof IPC_COMMANDS)[number];
 
 export interface IpcInvoker {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;

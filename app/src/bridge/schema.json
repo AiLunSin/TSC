@@ -10,5 +10,35 @@
     "sourceLabel",
     "shownAtMs"
   ],
-  "IpcErrorDto": ["code", "message", "retryable"]
+  "IpcErrorDto": ["code", "message", "retryable"],
+  "SettingsSnapshotDto": [
+    "formState",
+    "hasKey",
+    "keyDisplay",
+    "modelChoice",
+    "endpointChoice",
+    "inlineErrors",
+    "canTest",
+    "canSave",
+    "sectionsOrder",
+    "advancedCollapsed",
+    "probeReport"
+  ],
+  "ProbeReportDto": ["succeeded", "failure", "message", "elapsedMs", "remainingMs"],
+  "SettingsSaveReceiptDto": ["persisted", "fallback", "hasKey", "notice"],
+  "SettingsClearReceiptDto": ["cleared", "hasKey", "notice"],
+  "KeywordCardViewDto": [
+    "cardId",
+    "keywordKind",
+    "trigger",
+    "triggeredAtMs",
+    "cardStatus",
+    "bodyVisible",
+    "body",
+    "clickState",
+    "disabledReason",
+    "badgeCount"
+  ],
+  "CardBodyDto": ["title", "conclusion", "confidence", "referenceIds"],
+  "CardDetailDto": ["cardId", "title", "conclusion", "referenceIds", "citationAlignment"]
 }
