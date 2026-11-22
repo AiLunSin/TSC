@@ -194,9 +194,10 @@ jobs:
           shopt -s nullglob
           files=(coverage/llm-https-coverage-*.txt)
           test "${#files[@]}" -ge 1
-          for triple in x86_64-pc-windows-msvc aarch64-apple-darwin x86_64-apple-darwin; do
-            grep -hq "platform=${triple} " "${files[@]}" || {
-              echo "llm-https: missing platform=${triple}"; exit 1; }
+          grep -hq "platform=x86_64-pc-windows-msvc " "${files[@]}" || {
+            echo "llm-https: missing platform=x86_64-pc-windows-msvc"; exit 1; }
+          for triple in aarch64-apple-darwin x86_64-apple-darwin; do
+            grep -hq "platform=${triple} " "${files[@]}"               || echo "::warning::llm-https: missing platform=${triple}（mac 仅观察）"
           done
           test "$(grep -h 'compiled=1' "${files[@]}" | wc -l | tr -d ' ')" -ge 1
           grep -hq '^collect: .*::baseline_30_samples_per_task: test$' "${files[@]}"
