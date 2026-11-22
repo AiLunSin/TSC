@@ -1,14 +1,14 @@
 //! 诊断入口：五级编排 + 32 项计数快照；4 个公开纯函数仍在 `api.rs`。
 
 use meeting_copilot_domain::model::gate::{
-    ClusterSource, EntityKey, GapRule, GateContentType, GateCounter, GateCounters, GateDecision,
-    GatePolicy, GateRejectReason, GateStage, OutboundIntent, PerStageResults, ScoredCandidate,
-    StageResult, StageTrace,
+    ClusterSource, EntityKey, GapRule, GateCounter, GateCounters, GateDecision, GatePolicy,
+    GateRejectReason, GateStage, OutboundIntent, PerStageResults, ScoredCandidate, StageResult,
+    StageTrace,
 };
 
 use crate::gate::clock::GateClock;
 use crate::gate::input::{GateInput, RelevanceInput};
-use crate::gate::{budget, dedupe, prefilter, relevance};
+use crate::gate::{budget, dedupe, outbound, prefilter, relevance};
 
 /// 判定 + 32 项计数快照（诊断入口，不进入回放面）。
 #[derive(Debug, Clone)]
@@ -149,20 +149,24 @@ pub fn evaluate_gate_with_counters(
     }
     per_stage.0[3] = trace(StageResult::Allow, None, g4_elapsed);
 
+    let g5_started = clock.now_ms();
+    let g5 = outbound::authorize(input, policy);
+    let g5_elapsed = elapsed_ms(g5_started, clock.now_ms());
+    if let Some(reason) = g5.deny {
+        if let Some(counter) = reason.counter_at(GateStage::G5) {
+            counters.bump(counter);
+        }
+        counters.bump(GateCounter::GateDenyTotal);
+        per_stage.0[4] = trace(StageResult::Deny, Some(reason), g5_elapsed);
+        return deny_outcome(reason, GateStage::G5, None, per_stage, counters);
+    }
+    per_stage.0[4] = trace(StageResult::Allow, None, g5_elapsed);
+
     counters.bump(GateCounter::GateAllowTotal);
-    let outbound = if g4.queued {
-        Some(OutboundIntent {
-            sanitized_query_len: 0,
-            content_type: GateContentType::TextQuery,
-            provider_ids: input.provider.provider_ids.clone(),
-            authorization_status: input.authorization.status,
-            truncated: false,
-            queued: true,
-            cooldown_until_ms: None,
-        })
-    } else {
-        None
-    };
+    let mut outbound = g5.outbound;
+    if let Some(intent) = &mut outbound {
+        intent.queued = g4.queued;
+    }
     GateOutcome {
         decision: allow(
             per_stage,

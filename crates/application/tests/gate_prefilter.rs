@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use meeting_copilot_application::gate::{
     detect_gaps, detect_gaps_with_counters, evaluate_gate, FixedClock, GapScanInput, GateClock,
-    GateInput, GateSignals, GateSnapshot,
+    GateInput, GateSignals, GateSnapshot, NoopSink, PassthroughSanitizer,
 };
 use meeting_copilot_application::understand::types::NormalizedFragment;
 use meeting_copilot_domain::model::card::GapCandidate;
@@ -22,6 +22,9 @@ use meeting_copilot_domain::model::governance::EffectivePolicy;
 use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::model::utterance::SpeakerRef;
 use meeting_copilot_domain::vo::{Confidence, SessionId, TraceId, UtteranceRef};
+
+static PASS_SANITIZER: PassthroughSanitizer = PassthroughSanitizer;
+static NOOP_SINK: NoopSink = NoopSink;
 
 struct TestClock {
     now_ms: AtomicU64,
@@ -181,6 +184,9 @@ impl Harness {
             audit_available: true,
             scan: self.scan(),
             signals: GateSignals::default(),
+            sanitizer: &PASS_SANITIZER,
+            audit_sink: &NOOP_SINK,
+            query_seed: "默认查询",
         }
     }
 
@@ -270,6 +276,9 @@ fn gate_input_is_single_source() {
         audit_available: true,
         scan: harness.scan(),
         signals: GateSignals::default(),
+        sanitizer: &PASS_SANITIZER,
+        audit_sink: &NOOP_SINK,
+        query_seed: "默认查询",
     };
     let input = snapshot.into_input();
     assert!(std::ptr::eq(input.fragments, input.scan.fragments));

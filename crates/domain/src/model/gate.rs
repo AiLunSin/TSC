@@ -468,6 +468,24 @@ pub struct GateAuthorization {
     pub revoked_at_ms: Option<i64>,
 }
 
+impl GateAuthorization {
+    /// 7 字段齐备且可外发；任一缺失或非 Granted 一律 false（fail-closed）。
+    pub fn is_complete(&self) -> bool {
+        self.status == AuthorizationStatus::Granted
+            && self.granted_at_ms.is_some()
+            && self.content_types == [GateContentType::TextQuery]
+            && self.max_query_chars.is_some()
+            && !self.provider_ids.is_empty()
+            && self.notice_version >= 1
+            && self.revoked_at_ms.is_none()
+    }
+
+    /// 撤销不可自恢复：`Revoked` 或已有 `revoked_at_ms` 一律不可直接授权。
+    pub fn is_grantable(&self) -> bool {
+        self.status != AuthorizationStatus::Revoked && self.revoked_at_ms.is_none()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NetworkState {

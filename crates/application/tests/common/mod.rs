@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use meeting_copilot_application::gate::{
-    evaluate_gate_with_counters, GateClock, GateInput, GateOutcome, GateSignals, RelevanceSnapshot,
+    evaluate_gate_with_counters, AuditSink, GateClock, GateInput, GateOutcome, GateSignals,
+    NoopSink, PassthroughSanitizer, RelevanceSnapshot,
 };
 use meeting_copilot_application::understand::types::NormalizedFragment;
 use meeting_copilot_domain::model::enums::{
@@ -17,7 +18,14 @@ use meeting_copilot_domain::model::gate::{
 use meeting_copilot_domain::model::governance::EffectivePolicy;
 use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::model::utterance::SpeakerRef;
-use meeting_copilot_domain::vo::{Confidence, SessionId, TraceId, UtteranceRef, UtteranceText};
+use meeting_copilot_domain::port::governance::Sanitizer;
+use meeting_copilot_domain::vo::{
+    Confidence, ProviderId, SessionId, TraceId, UtteranceRef, UtteranceText,
+};
+
+static DEFAULT_SANITIZER: PassthroughSanitizer = PassthroughSanitizer;
+static DEFAULT_SINK: NoopSink = NoopSink;
+pub const DEFAULT_SEED: &str = "默认查询";
 
 pub struct TestClock {
     now_ms: AtomicU64,
@@ -72,6 +80,7 @@ pub struct Harness {
     pub llm_cooling: bool,
     pub llm_cooling_until_ms: Option<u64>,
     pub network: NetworkState,
+    pub audit_available: bool,
 }
 
 impl Harness {
@@ -89,7 +98,7 @@ impl Harness {
                 granted_at_ms: Some(0),
                 content_types: vec![GateContentType::TextQuery],
                 max_query_chars: Some(200),
-                provider_ids: Vec::new(),
+                provider_ids: vec![ProviderId::new("provider-1").expect("provider")],
                 notice_version: 1,
                 revoked_at_ms: None,
             },
@@ -131,9 +140,11 @@ impl Harness {
             llm_cooling: false,
             llm_cooling_until_ms: None,
             network: NetworkState::Online,
+            audit_available: true,
         }
     }
 
+    #[allow(dead_code)]
     pub fn push(&mut self, text: &str, confidence: f64, start_ms: u64, end_ms: u64) {
         let reference = UtteranceRef::new(format!("u{}", self.fragments.len() + 1)).expect("ref");
         self.fragments.push(NormalizedFragment {
@@ -166,6 +177,15 @@ impl Harness {
     }
 
     pub fn input(&self) -> GateInput<'_> {
+        self.input_with(&DEFAULT_SANITIZER, &DEFAULT_SINK, DEFAULT_SEED)
+    }
+
+    pub fn input_with<'b>(
+        &'b self,
+        sanitizer: &'b dyn Sanitizer,
+        audit_sink: &'b dyn AuditSink,
+        seed: &'b str,
+    ) -> GateInput<'b> {
         GateInput {
             session: &self.session,
             trace_id: &self.trace,
@@ -178,7 +198,7 @@ impl Harness {
             authorization: &self.authorization,
             provider: ProviderView {
                 enabled_count: self.provider_enabled,
-                provider_ids: Vec::new(),
+                provider_ids: vec![ProviderId::new("provider-1").expect("provider")],
             },
             llm: LlmCapabilityView {
                 cooling: self.llm_cooling,
@@ -194,9 +214,12 @@ impl Harness {
             duplicate_detected: self.duplicate_detected,
             now_ms: self.now_ms,
             budget: self.budget.clone(),
-            audit_available: true,
+            audit_available: self.audit_available,
             scan: self.scan(),
             signals: self.signals(),
+            sanitizer,
+            audit_sink,
+            query_seed: seed,
         }
     }
 
@@ -227,5 +250,20 @@ impl Harness {
     #[allow(dead_code)]
     pub fn outcome_with(&self, policy: &GatePolicy) -> GateOutcome {
         evaluate_gate_with_counters(&self.input(), policy, &TestClock::new(self.now_ms))
+    }
+
+    #[allow(dead_code)]
+    pub fn outcome_with_ports(
+        &self,
+        policy: &GatePolicy,
+        sanitizer: &dyn Sanitizer,
+        audit_sink: &dyn AuditSink,
+        seed: &str,
+    ) -> GateOutcome {
+        evaluate_gate_with_counters(
+            &self.input_with(sanitizer, audit_sink, seed),
+            policy,
+            &TestClock::new(self.now_ms),
+        )
     }
 }

@@ -14,7 +14,7 @@ use meeting_copilot_domain::vo::{InsightRef, SessionId, TraceId, UtteranceRef};
 use crate::understand::types::NormalizedFragment;
 
 /// 装配方一次性注入的只读快照（与 `GateInput` 同源构造的唯一入口）。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GateSnapshot<'a> {
     pub session: &'a SessionId,
     pub trace_id: &'a TraceId,
@@ -40,10 +40,13 @@ pub struct GateSnapshot<'a> {
     pub audit_available: bool,
     pub scan: GapScanInput<'a>,
     pub signals: GateSignals<'a>,
+    pub sanitizer: &'a dyn meeting_copilot_domain::port::governance::Sanitizer,
+    pub audit_sink: &'a dyn crate::gate::AuditSink,
+    pub query_seed: &'a str,
 }
 
 /// 门控输入；`insights`/`fragments` 为不可变借用，编译期禁止回写。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GateInput<'a> {
     pub session: &'a SessionId,
     pub trace_id: &'a TraceId,
@@ -69,6 +72,9 @@ pub struct GateInput<'a> {
     pub audit_available: bool,
     pub scan: GapScanInput<'a>,
     pub signals: GateSignals<'a>,
+    pub sanitizer: &'a dyn meeting_copilot_domain::port::governance::Sanitizer,
+    pub audit_sink: &'a dyn crate::gate::AuditSink,
+    pub query_seed: &'a str,
 }
 
 impl<'a> GateSnapshot<'a> {
@@ -101,6 +107,9 @@ impl<'a> GateSnapshot<'a> {
             audit_available: self.audit_available,
             scan: self.scan,
             signals: self.signals,
+            sanitizer: self.sanitizer,
+            audit_sink: self.audit_sink,
+            query_seed: self.query_seed,
         }
     }
 }

@@ -152,3 +152,84 @@ P1 未覆盖（登记见 §4）：`from_fixture`（D-B4-P05）、`gate_replay` t
 
 P2 已覆盖：400/250/200/150 加权与整数衰减（180 s = 367‰）、620/619 阈值边界、越界钳制、六分项；聚类 880‰、10 分钟去重键、主题 ≤2/全局 ≤3、实体 5 分钟冷却、抑制（自动拒/按需提示）、24h 缓存、11→3 收敛、`dedupe_enabled` 只关四步；会话 120 上限、令牌桶 3000/档位 1/3/5、冷却/离线/Unknown/第 4 并发排队、600 001 ms 恢复；3 槽租约+单排队位+队首提升。
 P2 未覆盖：G5 授权/审计（P3）；`gate_outbound`/`gate_replay` target；回放 200 例。
+## §9 P3 快照与 50 条 AC 三态（W-B4-24 ~ W-B4-33）
+
+日期：2026-11-22。
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| G5 | `cargo test -p meeting-copilot-application --test gate_outbound` | 16 passed / 0 failed |
+| 回放面 | `cargo test -p meeting-copilot-application --test gate_replay` | 3 passed / 0 failed |
+| 六 target | 逐个 `--test gate_{prefilter,relevance,dedupe,budget,outbound,replay}` | 全 0 |
+| 回放面函数 | `grep -c '^pub fn ' gate/api.rs` | 4 |
+| targets | `--rule=targets` | 19 项，退 0 |
+| 记录/文档 | `--rule=record`、`--rule=doc-plan` | 0 |
+
+AC 三态（`passed` / `not-applicable` / `pending`）：
+
+| AC | 状态 | 证据 |
+|---|---|---|
+| AC-B4-01 | passed | `prefilter_scores_six_gap_rules`、`acronym_whitelist_is_configurable` |
+| AC-B4-02 | passed | `first_seen_suppresses_second_candidate`、`sensitive_term_is_not_a_seed` |
+| AC-B4-03 | passed | `unanswered_question_yields_after_ten_seconds`、`answered_question_is_skipped` |
+| AC-B4-04 | passed | `below_half_gap_confidence_yields_no_candidate`、`exactly_half_gap_confidence_passes` |
+| AC-B4-05 | passed | `candidate_is_ready_within_two_seconds_of_stable_prefix` |
+| AC-B4-06 | passed | `gap_kind_is_closed_enum_and_institution_maps_to_proper_noun`、`dedupe_key_is_32_hex` |
+| AC-B4-07 | passed | `prefilter_is_pure_and_deterministic`、`--rule=source` |
+| AC-B4-08 | passed | `prefilter_denies_eleven_hard_cases`、`deny_short_circuits_later_stages` |
+| AC-B4-09 | passed | `relevance_weights_match_spec`、`relevance_full_score_is_thousand` |
+| AC-B4-10 | passed | `time_decay_at_180_seconds_is_367_milli` |
+| AC-B4-11 | passed | `threshold_profiles_are_072_062_052`、`balanced_threshold_boundary` |
+| AC-B4-12 | passed | `relevance_parts_are_all_reported` |
+| AC-B4-13 | passed | `low_relevance_is_denied`、`empty_topic_is_deterministic` |
+| AC-B4-14 | passed | `relevance_never_calls_llm_or_network`、`relevance_is_deterministic_for_mixed_text` |
+| AC-B4-15 | passed | `semantic_cluster_threshold_is_088`、`cluster_boundary_08799_08800` |
+| AC-B4-16 | passed | `duplicate_key_blocks_within_ten_minutes`、`duplicate_key_expires_at_ten_minutes` |
+| AC-B4-17 | passed | `topic_quota_is_two_per_ten_minutes`、`global_quota_is_three_per_ten_minutes` |
+| AC-B4-18 | passed | `entity_cooldown_is_five_minutes`、`entity_cooldown_expires_at_five_minutes` |
+| AC-B4-19 | passed | `suppression_blocks_auto_allows_on_demand`、`dedupe_switch_keeps_suppression_and_cache` |
+| AC-B4-20 | passed | `fresh_cache_is_allowed`、`stale_cache_is_denied` |
+| AC-B4-21 | passed | `candidate_convergence_keeps_top_three` |
+| AC-B4-22 | passed | `budget_is_independent_of_llm_live_cap`、`--rule=budget` |
+| AC-B4-23 | passed | `session_outbound_cap_is_120`、`commit_advances_only_on_allow` |
+| AC-B4-24 | passed | `token_bucket_capacity_and_refill`、`frequency_profiles_are_1_3_5` |
+| AC-B4-25 | passed | `gateway_cooling_denies_without_retry` |
+| AC-B4-26 | passed | `gateway_cooling_does_not_block_admission` |
+| AC-B4-27 | passed | `budget_recovers_after_window`、`offline_and_unknown_network_paths`、`fourth_concurrent_request_is_queued`、`lease` 三条 |
+| AC-B4-28 | passed | `authorization_records_seven_required_fields` |
+| AC-B4-29 | passed | `unauthorized_outbound_is_zero` |
+| AC-B4-30 | passed | `revoked_authorization_is_not_auto_restored`、`reauthorization_bumps_notice_version` |
+| AC-B4-31 | passed | `auto_query_is_capped_at_80`、`sanitizer_receives_truncated_input_only`、`oversize_never_reaches_sanitizer` |
+| AC-B4-32 | passed | `authorization_change_invalidates_old_grant` |
+| AC-B4-33 | passed | `--rule=outbound`、`grep -rln` 文件数 1 |
+| AC-B4-34 | passed | `outbound_audit_has_required_fields_without_text`、`audit_is_appended_before_release` |
+| AC-B4-35 | passed | `audit_unavailable_blocks_outbound`、`audit_append_error_blocks_outbound` |
+| AC-B4-36 | passed | `sanitize_failure_blocks_outbound` |
+| AC-B4-37 | passed | `gate_consumes_insights_readonly`、understand 目录零 diff |
+| AC-B4-38 | passed | `gate_input_has_no_insight_draft`、`InsightDraft`/`InsightStore` 0 命中 |
+| AC-B4-39 | passed | 全量回归 0 failed；六 target 全绿；`removed=0` |
+| AC-B4-40 | passed | 5 常量各 1 处；`GapKind` 6 变体 |
+| AC-B4-41 | passed | `Cargo.toml`/`Cargo.lock` 零 diff；`cargo deny` 四项 |
+| AC-B4-42 | passed | `scan-secrets.sh`、`--rule=zero-transcript`、`scan-secrets-docs.sh --all-md` |
+| AC-B4-43 | passed | `--rule=source` 退 0；9 个 `#[ignore]` 不变 |
+| AC-B4-44 | passed | `--list --ignored` = 9；`check-g2-claims.sh` = 0 |
+| AC-B4-45 | not-applicable | macOS 无设备（D-B4-04） |
+| AC-B4-46 | passed | `replay_interface_is_io_free`；`api.rs` 4 个 `pub fn` |
+| AC-B4-47 | passed | `--rule=record`；`--self-test` 反例 |
+| AC-B4-48 | pending | 200 例回放未建（D-B4-P13）：夹具不持有原文/`Insight` 本体，零转录约束下无法构造 |
+| AC-B4-49 | passed | `tests/replay/` 不存在；禁符号 0 命中 |
+| AC-B4-50 | passed | `--rule=doc-plan`；本表 50 行 |
+
+> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 仍为 pending，故 P3 出口未完全闭合。
+
+新增偏差：
+
+| 编号 | 内容 | 处置 |
+|---|---|---|
+| D-B4-D01 | `GapKind` 缺"机构/职务" | `GapRule::Institution` → `proper_noun`；`GapKind` 保持 6 变体 |
+| D-B4-D03 | 脱敏/审计替身不参与决策 | P3 用 `PassthroughSanitizer`/`NoopAuditSink` 作为装配默认；失败分支由 `gate_outbound` 替身覆盖 |
+| D-B4-P13 | AC-48 的 200 例回放未实现 | `GateInputFixture` 无文本/`Insight` 本体；需先扩展夹具（会触碰零转录约束），登记为 pending |
+| D-B4-P14 | `GateInput`/`GateSnapshot` 再增 `sanitizer`/`audit_sink`/`query_seed` | 端口只能经输入注入以保持 4 函数签名不变 |
+| D-B4-P15 | 审计失败缓冲仅内部持有，未对外暴露 | `AuthorizeOutcome.buffered` 私有；测试以 Deny + 计数 + `append` 未调用替代 |
+| D-B4-P16 | 审计端口在门面命名为 `AuditSink`（非 `GateAuditSink`） | 保持回放面"符号 0 命中"断言 |
+| D-B4-P17 | `is_grantable` 只表达"撤销不可自恢复"；启动/升级/会话/策略四入口由装配方接入 | P3 不新增平台入口，避免越界实现 43/52 |
