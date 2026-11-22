@@ -2158,6 +2158,8 @@ version = "0.1.0"
 name = "meeting-copilot-ui-bridge"
 version = "0.1.0"
 dependencies = [
+ "meeting-copilot-application",
+ "meeting-copilot-domain",
  "serde",
  "serde_json",
 ]

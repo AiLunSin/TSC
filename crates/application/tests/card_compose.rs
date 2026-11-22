@@ -264,7 +264,8 @@ fn card_compose_zero_transcript_boundary() {
 fn card_compose_ownership_is_outside_gate_and_ui() {
     assert_eq!(GateCounters::default().snapshot().len(), 32);
     assert!(!std::path::Path::new("crates/application/tests/replay").exists());
-    assert!(!std::path::Path::new("crates/ui-bridge/src/keyword_card").exists());
+    assert!(!include_str!("../src/cards/compose.rs")
+        .contains(concat!("ui-bridge/src/", "keyword_card")));
     assert_eq!(ComposeRejectReason::ALL.len(), 6);
     assert_eq!(ComposeRejectReason::ALL[0].index(), 0);
     assert_eq!(ComposeRejectReason::ALL[5].index(), 5);

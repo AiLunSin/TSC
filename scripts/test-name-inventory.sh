@@ -15,7 +15,7 @@ SELF_ABS="${ROOT}/${SELF}"
 BASE_ROOT="${INVENTORY_ROOT:-${ROOT}}"
 CARGO="${CARGO:-cargo}"
 DEFAULT_BASELINE_PLATFORM="x86_64-pc-windows-msvc"
-NEW_TARGETS='capture_degraded_guard capture_status_push capture_fakes capture_offline_gate capture_contract_freeze merge_dedupe understanding_normalize rolling_summary insight_dedup insight_extract understand_ingest insight_corpus merge_corpus gate_prefilter gate_relevance gate_dedupe gate_budget gate_outbound gate_replay gate_keyword citation_align card_compose'
+NEW_TARGETS='capture_degraded_guard capture_status_push capture_fakes capture_offline_gate capture_contract_freeze merge_dedupe understanding_normalize rolling_summary insight_dedup insight_extract understand_ingest insight_corpus merge_corpus gate_prefilter gate_relevance gate_dedupe gate_budget gate_outbound gate_replay gate_keyword citation_align card_compose keyword_card_view'
 
 WORKDIR="$(mktemp -d 2>/dev/null)" || WORKDIR=""
 TMP_OUT=""
