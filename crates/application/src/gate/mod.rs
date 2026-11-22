@@ -45,3 +45,4 @@ pub use lease::{LeaseId, LeaseOutcome, LeaseTable};
 pub use outbound::{NoopAuditSink as NoopSink, PassthroughSanitizer};
 pub use prefilter::detect_gaps_with_counters;
 pub use relevance::decay_milli;
+pub use replay::*;
