@@ -9,8 +9,6 @@ use meeting_copilot_domain::vo::UtteranceRef;
 use super::counters::{Counter, UnderstandingCounters};
 use super::types::{NormalizedFragment, RejectReason, UnderstandInput, UnderstandOutcome};
 
-const SPECULATIVE_CONFIDENCE: f64 = 0.35;
-
 fn fragment(
     input: &UnderstandInput,
     reference: UtteranceRef,
@@ -76,16 +74,19 @@ pub(crate) fn admit(
         return UnderstandOutcome::Rejected(RejectReason::Empty);
     }
 
-    let confidence = utterance.confidence.value();
-    if confidence < SPECULATIVE_CONFIDENCE {
-        counters.bump(Counter::SpeculativeSkip);
-        return UnderstandOutcome::Rejected(RejectReason::Speculative);
-    }
-    if confidence < f64::from(policy.insight_confidence_min_milli) / 1000.0 {
-        counters.bump(Counter::SkippedLowConfidence);
-        return UnderstandOutcome::StoredOnly {
-            reason: RejectReason::LowConfidence,
-        };
+    let confidence_milli = (utterance.confidence.value() * 1000.0).round() as u16;
+    match super::low_confidence::classify(confidence_milli, policy.insight_confidence_min_milli) {
+        super::low_confidence::ConfidenceVerdict::Speculative => {
+            counters.bump(Counter::SpeculativeSkip);
+            return UnderstandOutcome::Rejected(RejectReason::Speculative);
+        }
+        super::low_confidence::ConfidenceVerdict::StoredOnly => {
+            counters.bump(Counter::SkippedLowConfidence);
+            return UnderstandOutcome::StoredOnly {
+                reason: RejectReason::LowConfidence,
+            };
+        }
+        super::low_confidence::ConfidenceVerdict::Admitted => {}
     }
 
     let span_ms = utterance
@@ -94,13 +95,19 @@ pub(crate) fn admit(
         .saturating_sub(utterance.span.start_ms)
         .max(1);
     let silence_ms = input.silence.overlap_ms(utterance.span);
-    if silence_ms > 0 {
-        let ratio_milli = silence_ms.saturating_mul(1000) / span_ms;
-        if ratio_milli >= u64::from(policy.silence_overlap_ratio_min_milli) {
+    match super::silence_filter::classify(
+        silence_ms,
+        span_ms,
+        policy.silence_overlap_ratio_min_milli,
+    ) {
+        super::silence_filter::SilenceVerdict::Dropped => {
             counters.bump(Counter::SilenceDropped);
             return UnderstandOutcome::Rejected(RejectReason::Silence);
         }
-        counters.bump(Counter::SilencePartialOverlap);
+        super::silence_filter::SilenceVerdict::Partial => {
+            counters.bump(Counter::SilencePartialOverlap);
+        }
+        super::silence_filter::SilenceVerdict::None => {}
     }
 
     if raw.chars().count() > usize::from(policy.split_char_limit) {

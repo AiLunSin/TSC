@@ -40,6 +40,18 @@ pub struct Utterance {
 }
 
 impl Utterance {
+    /// 一致性：区间有效、正文非空、双通道标志只允许出现在平台来源。
+    pub fn is_consistent(&self) -> bool {
+        let span_ok = self.span.end_ms > self.span.start_ms;
+        let text_ok = !self.text.as_str().trim().is_empty();
+        let dual_ok = !self.dual_channel
+            || matches!(
+                self.source,
+                SourceKind::PlatformSubtitle | SourceKind::PlatformAudio
+            );
+        span_ok && text_ok && dual_ok
+    }
+
     /// 静音、超低置信度与占位文本不参与要点提炼。
     pub const MIN_INSIGHT_CONFIDENCE: f64 = 0.35;
 
@@ -65,6 +77,33 @@ pub struct Correction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn utterance_consistency_accepts_platform_dual() {
+        let mut item = utterance(0.9, "确认下周灰度上线");
+        assert!(item.is_consistent());
+        item.dual_channel = true;
+        assert!(item.is_consistent());
+    }
+
+    #[test]
+    fn utterance_consistency_rejects_zero_span() {
+        let mut item = utterance(0.9, "确认下周灰度上线");
+        item.span = TextRange {
+            start_ms: 1_500,
+            end_ms: 1_500,
+        };
+        assert!(!item.is_consistent());
+    }
+
+    #[test]
+    fn utterance_consistency_rejects_mic_dual() {
+        let mut item = utterance(0.9, "确认下周灰度上线");
+        item.source = SourceKind::Microphone;
+        item.platform = None;
+        item.dual_channel = true;
+        assert!(!item.is_consistent());
+    }
 
     fn utterance(confidence: f64, text: &str) -> Utterance {
         Utterance {

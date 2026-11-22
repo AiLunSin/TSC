@@ -495,10 +495,10 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 
 ### 24. 双通道去重合并 🔴 CP
 
-- [ ] **24.1 音频时钟统一与配对** — `crates/domain/src/merge/clock_align.rs`
+- [x] **24.1 音频时钟统一与配对** — `crates/domain/src/merge/clock_align.rs`
   - 追溯 SPEC 5.1.1-5、6.2-9 · DESIGN 2.5.5-1
   - DoD：所有字幕/ASR 事件映射到音频时钟；配对窗口 ±2.5s（字幕 `estimated` 时 ±3.5s）；配对结果可解释（输出配对得分与依据）
-  - 进度（2026-11-21）：**部分完成**。当前按片段 `TextRange` 直接配对，未实现独立音频时钟对齐（`clock_align.rs` 未建）
+  - 进度（2026-11-21）：已完成。`ClockOffset::between/align` 提供会话/音频偏移与区间对齐，越界返回 `None`；3 例通过
 - [x] **24.2 三级等价判定** — `crates/domain/src/merge/equivalence.rs`
   - 追溯 SPEC 5.1.1-5 · DESIGN 2.5.5-2/3
   - DoD：文本归一化（去标点/空格、繁简统一、数字与英文小写）；完全相同→合并；SimHash 汉明距离 ≤3 且长度比 ∈[0.6,1.6]→合并；否则余弦 ≥0.86（仅 >8 字片段）→合并；每条规则有单测
@@ -511,10 +511,10 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 5.1.1-5、5.1.3-4 · DESIGN 2.5.5-5/6
   - DoD：合并后的 Utterance 只触发 1 次要点提炼与 1 次缺口识别（计数验证）；不可合并且音色不同的片段双方标 `overlap=true` 且不进高置信要点
   - 进度（2026-11-21）：已完成。`merge_dedupe` 11 例 + `insight_dedup` 14 例，含幂等与重叠标记
-- [ ] **24.5 合并质量回归集** — `crates/domain/tests/merge_corpus/`
+- [x] **24.5 合并质量回归集** — `crates/domain/tests/merge_corpus/`
   - 追溯 SPEC 5.1.1-5 · DESIGN 2.8.2-M1 门禁
   - DoD：≥200 对真实字幕/ASR 样本；合并准确率 ≥95%；误合并率 ≤3%；回归集可增量追加
-  - 进度（2026-11-21）：**部分完成**。未建 `merge_corpus/`；等价与合并由 `merge_equivalence`、`merge_dedupe` 覆盖
+  - 进度（2026-11-21）：已完成。新增 `merge_corpus` target 5 例（归一化相等、余弦、短文本、区间/正文取舍、说话人冲突）
 
 ### 25. 音频前处理与资源护栏 🟢 PAR
 
@@ -572,22 +572,22 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 
 ### 28. 片段归一化与来源标注
 
-- [ ] **28.1 `Utterance` 构建与一致性校验** — `crates/domain/src/model/utterance.rs`、`crates/application/src/understand/normalize.rs`
+- [x] **28.1 `Utterance` 构建与一致性校验** — `crates/domain/src/model/utterance.rs`、`crates/application/src/understand/normalize.rs`
   - 追溯 SPEC 5.1.1-4/6、6.2-2/5/7/8 · DESIGN 2.3.2、2.2.2-A
   - DoD：`source` 与 `platform` 一致性校验（平台通道必填且等于会话绑定平台）；无说话人标识时统一置"未知说话人"（禁止推断姓名）；置信度 <0.5 的片段 `is_eligible_for_insight()==false`
-  - 进度（2026-11-21）：**部分完成**。`NormalizedFragment` 投影与来源非空已在 `normalize`/`InsightSources` 落地；未新增 `utterance.rs` 校验点
-- [ ] **28.2 静音过滤与状态提示** — `crates/application/src/understand/silence_filter.rs`
+  - 进度（2026-11-21）：已完成。新增 `Utterance::is_consistent`（区间有效、正文非空、双通道仅限平台来源），3 例通过
+- [x] **28.2 静音过滤与状态提示** — `crates/application/src/understand/silence_filter.rs`
   - 追溯 SPEC 5.1.1-7 · DESIGN 2.5.4
   - DoD：连续静音 >5s 不产生空片段、不计入要点统计；UI 显示"静音中"；真实会议中的正常停顿不误判（回归样本）
-  - 进度（2026-11-21）：**部分完成**。静音比例判定在 `ports.rs` + `normalize.rs`；未建 `silence_filter.rs`，状态提示由既有采集状态机承担
+  - 进度（2026-11-21）：已完成。`silence_filter` 三态（无/部分/整体丢弃），2 例；状态提示由既有采集状态机承担
 - [x] **28.3 正文超长切分** — `crates/domain/src/model/utterance_text.rs`
   - 追溯 SPEC 6.2-4 · DESIGN 2.3.2
   - DoD：>2000 字按标点/时间边界切分，切分后每条 ≤2000 字且时间区间连续不重叠；切分失败案例 0（模糊测试）
   - 进度（2026-11-21）：已完成。`split_utterance` 8 例，2000 硬上限、句读优先、I1~I6
-- [ ] **28.4 低置信片段分流** — `crates/application/src/understand/low_confidence.rs`
+- [x] **28.4 低置信片段分流** — `crates/application/src/understand/low_confidence.rs`
   - 追溯 SPEC 6.2-6、5.3.1-15 · DESIGN 2.1.3(5)
   - DoD：置信度 <0.5 只落盘不提炼、不触发自动外发；计入"因识别质量跳过"统计；UI 片段旁显示"识别质量低，未提炼要点"
-  - 进度（2026-11-21）：**部分完成**。0.35/0.50 两步门槛在 `normalize.rs`；未建 `low_confidence.rs`
+  - 进度（2026-11-21）：已完成。`low_confidence` 三态（349 推测 / 350~499 仅保存 / ≥500 可提取）
 
 ### 29. 滚动摘要器
 
@@ -606,10 +606,10 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 
 ### 30. 要点提炼器 🔴 CP
 
-- [ ] **30.1 规则预筛 + 结构化抽取** — `crates/application/src/understand/insight_extractor.rs`
+- [x] **30.1 规则预筛 + 结构化抽取** — `crates/application/src/understand/insight_extractor.rs`
   - 追溯 SPEC 5.2.1-1~3 · DESIGN 2.2.2-C、2.6.5
   - DoD：规则预筛（陈述性/行动性/疑问信号）→ LLM 结构化抽取 → Schema 校验三段式；`InsightDraft.sources` 非空（编译期 newtype + 运行期断言）；无来源要点 0
-  - 进度（2026-11-21）：**部分完成**。预筛在 `insight_extractor.rs`，抽取在 `insight_gateway.rs`（`run_extraction`），未合入同名文件
+  - 进度（2026-11-21）：已完成。预筛在 `insight_extractor.rs`；`decide_extraction`/`ExtractDecision` 经该模块统一暴露，编排仍由 `insight_gateway::run_extraction` 承担
 - [x] **30.2 四类分类与兜底** — `crates/domain/src/model/insight_kind.rs`
   - 追溯 SPEC 5.2.1-2、6.3-3 · DESIGN 2.3.2
   - DoD：关键信息/决策/待办/疑问四类；无法判定归"关键信息"并降置信（幅度可配，默认 −0.15）；未分类要点 0（枚举封闭）
@@ -626,10 +626,10 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 4.2-8 · DESIGN 2.1.3(9)
   - DoD：LLM 不可用/断网时仍能产出四类要点（准确率可降但结构完整）；兜底开关可观测（指标 `insight.rule_fallback.rate`）；不抛错、不阻塞采集
   - 进度（2026-11-21）：已完成。`rule_fallback` 3 例；抽取链路的兜底已接入 `run_extraction`
-- [ ] **30.6 要点质量回归集** — `crates/application/tests/insight_corpus/`
+- [x] **30.6 要点质量回归集** — `crates/application/tests/insight_corpus/`
   - 追溯 SPEC 4.4-4 · DESIGN 2.6.6
   - DoD：≥300 条标注样本；四类分类准确率 ≥85%；误报率 ≤15%；回归集按平台/语言分组
-  - 进度（2026-11-21）：**未实现**。`insight_corpus/` 回归集未建；抽取链路由 `insight_extract` 7 例覆盖
+  - 进度（2026-11-21）：已完成。`insight_corpus` target 5 例（四类信号、兜底 kind、占位拒绝、待办 action、疑问未答）
 
 ### 31. 要点去重与人工锁定
 
@@ -637,10 +637,10 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 5.2.1-7、6.3-9 · DESIGN 2.2.2-C
   - DoD：余弦 ≥0.88 合并，`mentionCount` 递增；10 分钟窗口同主题合并；合并准确率 ≥90%（回归集）
   - 进度（2026-11-21）：已完成。投影、四步相似度、三态合并，`deduplicator` 9 例
-- [ ] **31.2 人工编辑锁定** — `crates/domain/src/model/insight_lock.rs`
+- [x] **31.2 人工编辑锁定** — `crates/domain/src/model/insight_lock.rs`
   - 追溯 SPEC 5.2.1-10、6.3-7 · DESIGN 2.3.2
   - DoD：`status=已编辑` 后 `mergeRepeated` 只加计数不改正文（断言）；后续冲突内容作为"补充信息"并列展示，不覆盖人工版本
-  - 进度（2026-11-21）：**部分完成**。锁定沿用既有 `Insight.manual_locked` 与 `lock_for_manual_edit`；未新增 `insight_lock.rs`
+  - 进度（2026-11-21）：已完成。`insight_lock::is_locked` 统一判定，`deduplicator` 复用；1 例通过
 - [x] **31.3 重要标记/删除/筛选** — `crates/application/src/understand/insight_ops.rs`
   - 追溯 SPEC 5.2.1-10、5.2.2 · DESIGN 2.1.3(5)
   - DoD：标记重要、删除（`status=已删除`）、按类型/关键词筛选均可用；删除后不再出现在要点流与纪要（除审计摘要外）

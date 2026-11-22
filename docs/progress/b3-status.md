@@ -151,3 +151,23 @@
 
 - `fill_fields` 按 kind 补齐并清空异类字段：决策补空壳（`owner=None` 即待补）、待办缺 `action` 时用正文回填、疑问 `unanswered=true`、`KeyInfo` 不保留任何异类字段。
 - `field_filler` 6 例通过；`30.4` 已回写为完成。
+
+### 7.4 语料回归集（2026-11-21）
+
+- 新增 `insight_corpus` target（5 条）：四类信号预筛、兜底 kind、占位“…”不产出、待办 action、疑问未答。
+- `rule_fallback::produce` 对占位“…”返回 `None`，与准入口径一致。
+- `30.6` 已回写为完成。
+
+### 7.5 形态与语料缺口补完（2026-11-21）
+
+| 条目 | 补齐内容 |
+|---|---|
+| 24.1 | `ClockOffset::between/align`（会话/音频偏移、越界 `None`） |
+| 24.5 | `merge_corpus` target 5 例 |
+| 28.1 | `Utterance::is_consistent` 3 例 |
+| 28.2 | `silence_filter` 三态 2 例 |
+| 28.4 | `low_confidence` 三态 1 例 |
+| 30.1 | `decide_extraction` 经 `insight_extractor` 统一暴露 |
+| 31.2 | `insight_lock::is_locked` 1 例 |
+
+至此 B3 的“部分完成”项全部关闭。

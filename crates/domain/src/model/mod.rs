@@ -8,6 +8,7 @@ pub mod enums;
 pub mod governance;
 pub mod insight;
 pub mod insight_kind;
+pub mod insight_lock;
 pub mod insight_policy;
 pub mod insight_similarity;
 pub mod llm;

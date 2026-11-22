@@ -16,7 +16,7 @@ fn head_60(text: &str) -> String {
 
 pub fn produce(fragment: &NormalizedFragment) -> Option<InsightDraft> {
     let raw = fragment.text.as_str();
-    if raw.trim().is_empty() {
+    if raw.trim().is_empty() || raw.trim() == "…" {
         return None;
     }
     let classification = classify_signals(raw);

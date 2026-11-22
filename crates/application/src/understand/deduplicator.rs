@@ -89,7 +89,7 @@ pub fn merge_drafted(
         return DedupeOutcome::New;
     }
     candidate.mention_count = candidate.mention_count.saturating_add(1);
-    if candidate.manual_locked || candidate.status == InsightStatus::Edited {
+    if meeting_copilot_domain::model::insight_lock::is_locked(candidate) {
         DedupeOutcome::Locked {
             count: candidate.mention_count,
         }

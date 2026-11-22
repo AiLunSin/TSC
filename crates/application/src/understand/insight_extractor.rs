@@ -38,6 +38,9 @@ pub fn classify_signals(text: &str) -> KindClassification {
     classify_kind(None)
 }
 
+/// 抽取决策与编排统一从本模块暴露（30.1 合名）。
+pub use super::insight_gateway::{decide_extraction, ExtractDecision};
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,9 +1,7 @@
 //! 分类兜底惩罚（整数毫值）与字段补全。
 
 use meeting_copilot_domain::model::enums::InsightKind;
-use meeting_copilot_domain::model::insight::{
-    DecisionFields, InsightDraft, InsightFields, QuestionFields, TodoFields,
-};
+use meeting_copilot_domain::model::insight::{DecisionFields, InsightDraft, QuestionFields};
 use meeting_copilot_domain::model::insight_policy::InsightPolicy;
 use meeting_copilot_domain::vo::Confidence;
 
@@ -69,7 +67,7 @@ mod tests {
     #![allow(clippy::field_reassign_with_default)]
 
     use super::*;
-    use meeting_copilot_domain::model::insight::InsightSources;
+    use meeting_copilot_domain::model::insight::{InsightFields, InsightSources, TodoFields};
     use meeting_copilot_domain::vo::{ShortText, UtteranceRef};
 
     fn draft(kind: InsightKind, text: &str) -> InsightDraft {
