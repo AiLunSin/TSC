@@ -2,6 +2,7 @@
 
 pub mod catalog;
 pub mod dto;
+pub mod probe;
 pub mod settings;
 pub mod settings_store;
 pub mod state;

@@ -1,7 +1,7 @@
 //! 非敏感配置：恰 4 键、原子写、损坏或版本不符回默认并留 `.bak`。
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use meeting_copilot_application::settings::{PortError, SettingsConfig, SettingsConfigStore};
 use serde::{Deserialize, Serialize};
@@ -113,7 +113,7 @@ mod tests {
     use super::*;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join(".tmp")
             .join("ui-store-tests")
             .join(name);

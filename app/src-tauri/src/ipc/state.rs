@@ -47,22 +47,20 @@ pub struct AppState {
 }
 
 /// 单飞守卫：离开作用域必复位在途标记。
-pub struct ProbeGuard {
-    flag: Arc<AtomicBool>,
+pub struct ProbeGuard<'a> {
+    flag: &'a AtomicBool,
 }
 
-impl ProbeGuard {
+impl<'a> ProbeGuard<'a> {
     /// 取得单飞权；已在途时返回 `None`。
-    pub fn acquire(flag: &Arc<AtomicBool>) -> Option<Self> {
+    pub fn acquire(flag: &'a AtomicBool) -> Option<Self> {
         flag.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
             .ok()
-            .map(|_| Self {
-                flag: Arc::clone(flag),
-            })
+            .map(|_| Self { flag })
     }
 }
 
-impl Drop for ProbeGuard {
+impl Drop for ProbeGuard<'_> {
     fn drop(&mut self) {
         self.flag.store(false, Ordering::Release);
     }

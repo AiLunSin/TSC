@@ -1,6 +1,6 @@
 //! 设置命令实现：快照投影、先安全存储后配置、确认后清除。
 
-use meeting_copilot_application::settings::{SecretBytes, SettingsConfig, SettingsConfigStore};
+use meeting_copilot_application::settings::{SecretBytes, SettingsConfig};
 use meeting_copilot_ui_bridge::settings::{
     apply_defaults, project_settings_view, EndpointSelectionView, FieldIssue, MaskedKey,
     ModelSelectionView, SecretInput, SettingsDefaults, SettingsFacts, SettingsFormState,
@@ -244,7 +244,8 @@ mod tests {
 
     use meeting_copilot_application::settings::{
         CardSnapshotEntry, CardSnapshotSource, FactsSnapshot, PortError, ProbeAttempt, ProbeCall,
-        ProbeExecutor, SecureStore, SettingsFactsSource, ViewFactsSnapshot, ViewFactsSource,
+        ProbeExecutor, SecureStore, SettingsConfigStore, SettingsFactsSource, ViewFactsSnapshot,
+        ViewFactsSource,
     };
     use meeting_copilot_ui_bridge::settings::mask_api_key;
 

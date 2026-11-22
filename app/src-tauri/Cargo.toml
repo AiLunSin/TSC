@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 meeting-copilot-application = { version = "0.1.0", path = "../../crates/application" }
+meeting-copilot-domain = { version = "0.1.0", path = "../../crates/domain" }
 meeting-copilot-infrastructure = { version = "0.1.0", path = "../../crates/infrastructure", default-features = false, features = ["bundled-sqlite"] }
 meeting-copilot-platform-win = { version = "0.1.0", path = "../../crates/platform-win" }
 meeting-copilot-ui-bridge = { version = "0.1.0", path = "../../crates/ui-bridge" }

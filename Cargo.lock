@@ -2114,6 +2114,7 @@ name = "meeting-copilot-desktop"
 version = "0.1.0"
 dependencies = [
  "meeting-copilot-application",
+ "meeting-copilot-domain",
  "meeting-copilot-infrastructure",
  "meeting-copilot-platform-win",
  "meeting-copilot-ui-bridge",
