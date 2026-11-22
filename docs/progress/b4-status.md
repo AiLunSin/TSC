@@ -1310,4 +1310,13 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 2. C-UI-02（macOS CI 编译观察项存废）未裁决；`ci.yml` / `deny.toml` / `platform-mac` 零 diff。
 3. C-UI-03（生产探针）默认关闭，AC 仅用替身取证。
 4. 9 个 `#[ignore]` 与 `tests/replay/` 未解锁。
-5. 未执行 `git push`。
+5. ~~未执行 `git push`~~ → 用户已于 2026-11-22 自行推送；本地 `9791bfa` 与 `origin/main` 同步。
+
+### §29.6 用户裁决（2026-11-22）
+
+| 项 | 裁决 | 落地 |
+|---|---|---|
+| 推送 | 用户已自行 `push` | `main...origin/main` 无 ahead/behind |
+| C-UI-02 | **保留** macOS CI 编译观察项 | `ci.yml` / `deny.toml` / `platform-mac` 零改动 |
+| C-UI-03 | **保持默认关闭**（稳妥口径，AI 选择） | 仅 `--features llm-https` 显式开启；AC 仍用替身取证 |
+| U-05 | 仍 **`open`** | 真实联网 E2E、真机 WebView2、9 个 `#[ignore]`、`tests/replay/` 未解锁 |
