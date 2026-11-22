@@ -8,8 +8,8 @@ description = "IPC DTO 与 serde/TS 绑定生成。"
 
 [dependencies]
 serde.workspace = true
-meeting-copilot-application = { path = "../application" }
-meeting-copilot-domain = { path = "../domain" }
+meeting-copilot-application = { version = "0.1.0", path = "../application" }
+meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
 
 
 [dev-dependencies]

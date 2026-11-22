@@ -236,6 +236,8 @@ jobs:
       - name: secrets-docs (C1)
         timeout-minutes: 5
         run: bash scripts/scan-secrets-docs.sh --all-md
+      - name: cargo-deny-version
+        run: cargo deny --version
       - name: licenses
         run: cargo deny check licenses bans sources advisories
       - name: sbom
