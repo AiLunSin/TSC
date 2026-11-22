@@ -1,55 +1,12 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { invokeCommand } from "./bridge/tauri";
+import type { CardDetailDto, KeywordCardViewDto } from "./bridge/types";
+import { CardDetail } from "./cards/CardDetail";
+import { KeywordCard } from "./cards/KeywordCard";
+import { SettingsPage } from "./settings/SettingsPage";
 
 type ChannelState = "ready" | "degraded" | "off";
-
-type InsightKind = "fact" | "decision" | "todo" | "question";
-
-interface InsightCard {
-  readonly id: string;
-  readonly kind: InsightKind;
-  readonly title: string;
-  readonly conclusion: string;
-  readonly source: string;
-  readonly trust: "high" | "medium" | "low";
-  readonly at: string;
-}
-
-const KIND_LABEL: Record<InsightKind, string> = {
-  fact: "关键信息",
-  decision: "决策",
-  todo: "待办",
-  question: "疑问",
-};
-
-const SEED_CARDS: readonly InsightCard[] = [
-  {
-    id: "c-001",
-    kind: "fact",
-    title: "SLA 与赔付条款",
-    conclusion: "合同约定月度可用性 99.9%，低于阈值按当月费用的 10% 赔付。",
-    source: "合同正文 §7.2 · 本地文档",
-    trust: "high",
-    at: "10:14:02",
-  },
-  {
-    id: "c-002",
-    kind: "decision",
-    title: "灰度范围收口",
-    conclusion: "首批灰度限定华东两个站点，不做全国放量。",
-    source: "发言人 · 张工",
-    trust: "high",
-    at: "10:16:41",
-  },
-  {
-    id: "c-003",
-    kind: "question",
-    title: "P99 时延口径未决",
-    conclusion: "当前未明确 P99 是否含网络往返，需会后确认。",
-    source: "发言人 · 李经理",
-    trust: "medium",
-    at: "10:18:09",
-  },
-];
 
 const CHANNELS: readonly { name: string; state: ChannelState; detail: string }[] = [
   { name: "字幕文本通道", state: "ready", detail: "腾讯会议 · 已连接" },
@@ -65,6 +22,35 @@ const STATE_TEXT: Record<ChannelState, string> = {
 
 export default function App() {
   const [active, setActive] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [cards, setCards] = useState<readonly KeywordCardViewDto[]>([]);
+  const [cardError, setCardError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<CardDetailDto | null>(null);
+
+  const loadCards = useCallback(async () => {
+    try {
+      const next = await invokeCommand<KeywordCardViewDto[]>("keyword_cards_snapshot");
+      setCards(next);
+      setCardError(null);
+    } catch {
+      setCardError("卡片暂不可用，请稍后重试。");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCards();
+  }, [loadCards]);
+
+  async function openCard(cardId: string): Promise<void> {
+    try {
+      const next = await invokeCommand<CardDetailDto>("keyword_card_open", {
+        input: { cardId },
+      });
+      setDetail(next);
+    } catch {
+      setCardError("详情暂不可用。");
+    }
+  }
 
   return (
     <div className="shell">
@@ -79,6 +65,16 @@ export default function App() {
         <div className="topbar-meta">
           <span className="pill">腾讯会议 · 产品评审会</span>
           <span className="timer">00:18:42</span>
+          <button
+            className="btn"
+            type="button"
+            aria-pressed={showSettings}
+            onClick={() => {
+              setShowSettings((prev) => !prev);
+            }}
+          >
+            {showSettings ? "返回卡片" : "设置"}
+          </button>
           <button
             className={active ? "btn btn-stop" : "btn btn-start"}
             onClick={() => {
@@ -124,30 +120,31 @@ export default function App() {
           </dl>
         </aside>
 
-        <section className="panel cards">
-          <div className="panel-head">
-            <h2>提示卡流</h2>
-            <span className="hint">门控预算：10 分钟 3 条</span>
-          </div>
-          <ul className="card-list">
-            {SEED_CARDS.map((card) => (
-              <li key={card.id} className="card">
-                <div className="card-top">
-                  <span className={`kind kind-${card.kind}`}>{KIND_LABEL[card.kind]}</span>
-                  <span className="time">{card.at}</span>
-                </div>
-                <h3>{card.title}</h3>
-                <p>{card.conclusion}</p>
-                <footer>
-                  <span className="source">{card.source}</span>
-                  <span className={`trust trust-${card.trust}`}>
-                    可信度 {card.trust === "high" ? "高" : card.trust === "medium" ? "中" : "低"}
-                  </span>
-                </footer>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {showSettings ? (
+          <SettingsPage />
+        ) : (
+          <section className="panel cards">
+            <div className="panel-head">
+              <h2>关键词卡片</h2>
+              <span className="hint">按会议内容实时生成</span>
+            </div>
+            {cardError === null ? null : (
+              <p className="settings-error" role="alert">
+                {cardError}
+              </p>
+            )}
+            {cards.length === 0 ? (
+              <p className="hint">暂无卡片。</p>
+            ) : (
+              <ul className="card-list">
+                {cards.map((card) => (
+                  <KeywordCard key={card.cardId} card={card} onOpen={(id) => void openCard(id)} />
+                ))}
+              </ul>
+            )}
+            {detail === null ? null : <CardDetail detail={detail} />}
+          </section>
+        )}
 
         <aside className="panel timeline">
           <h2>要点时间轴</h2>
