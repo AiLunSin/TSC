@@ -2,7 +2,7 @@
 
 监听会议对话、识别值得解释的关键词、经门控判定后主动提示，并可本地查看关键词详情的桌面 AI 助手。
 
-当前定位：**离线契约与门控已闭环，真实采集与真实端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；真实采集、真机验收与真实端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
 ## 当前进度
 
@@ -13,30 +13,32 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| CI 门禁加固 | 完成：B3/B4 静态门禁、许可证、SBOM、密钥扫描 |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地**：AC-B4-111~130 离线通过；6 命令、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；真机与真实联网未验证（U-05 `open`） |
+| CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 
-最近一次全量回归：**825 passed / 0 failed / 9 ignored**；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量基线：**825 passed / 0 failed / 9 ignored**；P-UI 新增桌面层 **24 例**已单列通过（`cargo test -p meeting-copilot-desktop`）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 仍未完成：
 
 - **U-06 13.3 回放本体**：**已交付**（`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`）。
+- **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；真实联网 E2E、真机 WebView2 验收仍未完成，**U-05 保持 `open`**。
 - **U-07**：负反馈、缓存/outbox、按需补全、审计存储。
 - **U-08**：真实检索源、真实 LLM 冷却、真机性能与误触发率；9 个 `#[ignore]` 用例保持不跑。
-- **平台层**：`platform-win` / `platform-mac` 目前仅为接口占位（无 WASAPI/UIA/OCR 实现）。
-- **产品能力口径**：38 只产卡片数据、39 只做引用对齐、51 只做视图与点击契约；尚不宣称“产品级可点击卡片”或真机可用。
+- **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`），WASAPI/UIA/OCR 仍为接口占位；`platform-mac` 不适用（保留占位）。
+- **产品能力口径**：38/39/51 只交付契约与视图；前端已只读消费 DTO，但仍不宣称“产品级可点击卡片”或真机可用。
 
 ## 目录结构
 
 ```
 crates/
   domain/            领域模型、值对象、端口 trait（禁止依赖实现）
-  application/       应用编排：采集、治理、理解层、门控、卡片、引用对齐
+  application/       应用编排：采集、治理、理解层、门控、卡片、引用对齐、设置端口
   infrastructure/    存储、加密、审计链、度量、日志、LLM 传输
-  platform-win/      Windows 适配（当前仅接口占位）
+  platform-win/      Windows 适配（凭据管理已实现；采集与 OCR 仍占位）
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
 app/                 React 19 + TypeScript + Vite 前端
-app/src-tauri/       Tauri 2 桌面壳
+app/src-tauri/       Tauri 2 桌面壳（6 个 IPC 命令与装配）
 docs/sdd/            需求规格、技术方案、任务清单
 docs/progress/       各批次状态与验收记录
 docs/baseline/       LLM 与 ASR 基线
@@ -99,6 +101,7 @@ bash scripts/scan-secrets.sh
 bash scripts/scan-secrets-docs.sh --all-md
 bash scripts/check-capture-offline.sh --all
 bash scripts/check-mac-scope.sh --rule=na
+bash scripts/check-ui-integration.sh
 bash scripts/check-g2-claims.sh
 cargo deny check licenses bans sources advisories
 ```
@@ -115,6 +118,14 @@ done
 bash scripts/check-b4-gates.sh --self-test   # 预期退 1（反例检出）
 ```
 
+P-UI 六规则：
+
+```bash
+for r in credential-redline settings-ux card-render body-hidden frontend-offline zero-transcript; do
+  bash scripts/check-ui-integration.sh --rule="$r" || exit 1
+done
+```
+
 用例名差集：
 
 ```bash
@@ -128,8 +139,9 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导位于 `crates/ui-bridge/src/settings/`：提供 API Key 输入、预设/自定义模型、白名单服务地址、一键测试与保存/清除**意图**；Key 固定掩码 `***`、不落盘明文、不进入日志/回放；安全存储不可用时显式提示“仅本次会话有效”。
-- 设置向导目前是契约层（视图模型与状态机），未接入真实平台安全存储与真实网关；不宣称界面已可用。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（6 命令），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试与保存/清除。
+- 凭据经 `crates/platform-win/src/secure_store.rs` 写入 Windows 凭据管理器（唯一目标名）；非敏感配置为 `settings.json` **恰 4 键**、原子写、损坏回默认；Key 固定掩码 `***`、不落盘明文、不进日志/审计/回放。
+- 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；真机 WebView2 与真实联网未验证，**不宣称界面已验收**。
 
 ## 关键词卡片
 
@@ -138,6 +150,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 - 仅 B4 `Allow` 才允许出卡/可点击；任一 Deny → 0 卡。
 - 38 只产 11 项卡片数据；39 只产 `citation_alignment`（`Passed`/`Failed`/`Unknown`，`Unknown` 唯一投影为 `Unverified`）；51 只产视图（10 项）与点击详情（5 项）。
 - `Failed`/`Unverified` 仍可展示但不可点；投屏/紧急遮蔽隐藏正文；撤回不可复活。
+- 前端 `app/src/cards/KeywordCard.tsx` / `CardDetail.tsx` 只读消费 10/5 项 DTO；仅 `enabled` 绑点击，禁用卡 `aria-disabled`，隐藏态只留条数角标，详情内联不抢焦点。
 - 点击只展开本地详情，不发起检索、不调 LLM、不外发、不写审计。
 
 ## 隐私与凭据
@@ -161,7 +174,8 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 | `docs/progress/b2-offline-closure.md` | 离线闭环 43 项 AC |
 | `docs/progress/b2-24-merge.md` | 双通道合并验收 |
 | `docs/progress/b3-status.md` | 理解层进度 |
-| `docs/progress/b4-status.md` | 门控/卡片/设置向导与 AC 三态 |
+| `docs/progress/b4-status.md` | 门控/卡片/设置向导与 AC 三态（§29 为 P-UI 收口） |
+| `docs/progress/handoff-2026-11-22-pui.md` | P-UI 落地交接（C1~C7） |
 | `docs/progress/ci-readiness.md` | CI 预检与缺口 |
 | `docs/compliance/license-review.md` | 许可证边界 |
 
