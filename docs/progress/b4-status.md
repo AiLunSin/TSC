@@ -258,7 +258,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | U-02 | AC-B4-51~57 关键词卡片契约 | **closed（W-B4-34~40）**：五类候选、首见唯一、13 项卡片字段、只有 `Allow` 可出卡/可点击、点击本地查看、零转录、归属拆分 | B4 契约扩展；实现任务待 tasks.md 增量 |
 | U-03 | 38 卡片合成 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.8/§6.16~6.18/§7.13 与 `requirements.md` §12 已定义 38 的 7 项输入、11 项可展示字段、6 项拒绝原因、固定模板解释、`Unknown→Unverified` 唯一回填、离线/零转录/归属边界与 AC-B4-65~74；尚未创建 38 实体文件，AC-B4-65~74 为 `pending` | 38（`crates/application/src/cards/**` + `card_compose` target；不建 UI/存储/回放目录、不新增 domain 契约） |
 | U-04 | 39 引用对齐校验 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.7/§6.14~6.15/§7.12 与 `requirements.md` §11 已定义 `Passed`/`Failed`/`Unknown` 三态（`Unknown→Unverified` 唯一投影）、引用只存 ID+4 档信任+2 态可访问+发布时间、零转录/离线/确定性边界与 AC-B4-58~64；尚未创建 39 实体文件，AC-B4-58~64 为 `pending` | 39（domain 契约 `citation.rs` + application 只读校验 `citation/align.rs` + `citation_align` target；不建 UI/合成/回放目录） |
-| U-05 | 51 点击 UI 与设置向导 | **规格已定，待实现（2026-11-22）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；尚未创建 51 实体文件，AC-B4-75~94 为 `pending` | 51（`crates/ui-bridge/src/keyword_card/**` + `crates/ui-bridge/src/settings/**` + `keyword_card_view`/`llm_settings_view` 两个 target；不建平台适配/52 存储/回放目录；settings 不新增依赖） |
+| U-05 | 51 点击 UI 与设置向导 | **离线契约已实现（P7/P8）；产品化接入规格已定、待实现（§28）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；点击 UI 与设置向导离线契约已实现（`keyword_card_view` 19 例、`llm_settings_view` 18 例）；**产品化缺口**（Windows 安全存储、非敏感配置、既有网关探针、保存/清除执行、Tauri 前端渲染与 IPC）见 §28，AC-B4-111~130 为 `pending`。归属：51（`crates/ui-bridge/src/**`）→ 平台（`crates/platform-win/src/secure_store.rs`）→ 装配层（`app/src-tauri/src/ipc/**`）→ 前端（`app/src/**`）；不建 52 存储/回放目录；`NEW_TARGETS` 保持 25 |
 | U-06 | 13.3 回放本体 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.11/§6.29/§7.16 与 `requirements.md` §15 已定义驱动契约（7 项封闭）、双层用例（报告层零文本/执行层借用）、装载校验（3 错误/升序）、只调 4 函数、记录核验（14 字段）、失败报告（2 项/5 码）、确定性（两次/乱序/100 次）、零转录、与 200 例并存、`tests/replay/` 不解禁与 `NEW_TARGETS` 24→25；尚未创建 13.3 实体文件，AC-B4-95~104 为 `pending`；已于 P9 closed（见 §23） | 13.3（`gate/replay.rs` + `tests/gate_replay_driver.rs` + `gate_replay_driver` target；不改 `tests/gate_replay.rs`、不建 `tests/replay/`、不新增依赖） |
 | U-07 | 41.5 / 42 / 43 / 52 | 未做；负反馈、缓存/outbox、按需补全实体、审计哈希链存储 | 对应章节 |
 | U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | 保持 9 个 `#[ignore]`，不宣称 G4 |
@@ -273,13 +273,14 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 6. **39 引用对齐（2026-11-22 增量）**：39 只输出 `Passed`/`Failed`/`Unknown`（`Unknown→Unverified` **唯一投影**），引用只存 `reference_id`/`trust_tier`/`access_status`/`published_at_ms`/`alignment`；不联网抓正文、不写门控记录；AC-B4-58~64 为 `pending`；不改既有 AC 01~57 与任何封闭字段数。
 7. **38 卡片合成（2026-11-22 增量）**：38 只做 7 项输入的确定性组装，输出 11 项可展示字段；`gate_decision_ref`/`click_state` 由 B4 准入补齐，38 不判定点击；解释只用固定模板 + 术语（不调 LLM、不复制引用正文）；`card_id` 由装配方注入、38 不重算；拒绝原因码 6 项为 38 私有，不并入 `GateRejectReason`（23）、不新增 `GateCounter`（32）；AC-B4-65~74 为 `pending`；不改既有 AC 01~64 与任何封闭字段数。
 8. **13.3 回放本体（2026-11-22 增量）**：13.3 只做“驱动 + 用例装载 + 比对 + 失败报告”；契约 7 项封闭、执行层 `ReplayCase` 4 项、失败项 2 项/5 码；只调 4 个纯函数与常量 `FixedClock`，不重算门控、不做报表、不写生产计数；`tests/replay/` **不解禁**，用例落 `tests/gate_replay_driver.rs` 单文件；与 `tests/gate_replay.rs` 的 200 例**并存且零 diff**；`NEW_TARGETS` 24→25、脚本零改动；AC-B4-95~104 为 `pending`；不改既有 AC 01~94 与任何封闭字段数。
+9. **U-05 产品化接入（2026-11-22 增量，§28）**：设置侧只新增"6 命令 + 只读 DTO + 三端口"；凭据只进 Windows 凭据管理器（不采用 DPAPI，不自管密文文件），非敏感配置恰 4 键，探针只经 `ProbeExecutor` 端口调用既有网关，保存/清除由装配层执行且失败必显式降级；卡片侧只消费注入快照与既有 51 视图函数，点击 0 检索/0 LLM/0 外发/0 审计/0 存储、不抢焦点、投屏/遮蔽只留角标；不改 110 条既有 AC、不改任何封闭字段数、不新增 cargo test target（`NEW_TARGETS` 保持 25）；AC-B4-111~130 为 `pending`。
 
 ### §10.3 建议执行顺序（不含新任务编号）
 
 1. 先完成 **U-01**：AC-B4-48 方案 A 的 200 例回放与两次逐字节一致性，闭合 P3 遗留 pending。
 2. 再落 **U-02**：B4 关键词候选/卡片契约与 `click_state` 前置；只动契约与测试，不动 38/39/51 实体。
-3. 随后按 **U-03（已关闭，见 §15）→ U-04（已关闭，见 §13）→ U-05（规格已定、待实现，见 §16 点击 UI 与 §17 设置向导）** 接入 38 合成、39 校验、51 UI；每步以"只消费 B4 契约、不反写记录"为门禁。
-4. **U-06~U-08** 保持独立排期；U-06 已更新为“回放本体：规格已定，待实现（§20）”，U-07/U-08 保持 open；不宣称关键词卡片、回放平台或 B4 出口完成。
+3. 随后按 **U-03（已关闭，见 §15）→ U-04（已关闭，见 §13）→ U-05 离线契约（已实现，见 §16/§17/§19）→ U-05 产品化接入（规格已定、待实现，见 §28）** 接入 38 合成、39 校验、51 UI 的真实存储/网关/前端；每步以"只消费 B4 契约、不反写记录"为门禁。
+4. **U-06 已 closed（§23）；U-05 产品化缺口与 U-07/U-08 保持 open**；不宣称关键词卡片产品化、设置向导可用、回放平台或 B4 出口完成。
 
 ### §10.4 工作区与提交状态
 
@@ -1157,3 +1158,97 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 - 本次提交：`test(domain): 校准千对判定用例的 CI 容差（§27）`；提交面 3 文件（`merge_equivalence.rs`、本节文件、`b2-24-merge.md`）。
 - 未推送：远端 `rust (x86_64-pc-windows-msvc)` 与 `feature-coverage (C2)` 结论需 push 后回填。
 - 不宣称 CI 已绿；500 ms 只防数量级退化，200 ms 精度由开发机基准守护。
+
+## §28 U-05 产品化接入需求增量登记（2026-11-22）
+
+> 本节登记"设置向导接入真实平台存储/网关 + 关键词卡片前端渲染"的**需求规格增量**。本轮只新增 `.codeartsdoer/specs/ui_integration/spec.md` 与本节，**未改代码、未改配置、未提交**。
+
+### §28.1 增量规格落点
+
+| 文件 | 章节 | 内容 |
+|---|---|---|
+| `.codeartsdoer/specs/ui_integration/spec.md` | 全文 | 组件定位、术语、角色边界、DFX、两项核心能力、IPC 命令面、平台端口、失败降级矩阵、数据约束、AC-B4-111~130、裁决登记 |
+| `docs/progress/b4-status.md` | §10.1 / §10.2 / §10.3 / §28 | U-05 口径重述、口径约束第 9 条、执行顺序、本节 |
+
+**编号基线**：`b4_gate` AC-B4-01~104（103 passed + 1 not-applicable）＋ `ci_deny_repair` AC-B4-105~110（本地 passed）；合计 110 条不重排、不改语义。
+
+### §28.2 新增决策（D-B4-P144 ~ D-B4-P155）
+
+| 编号 | 决策 | 理由 | 影响面 |
+|---|---|---|---|
+| **D-B4-P144** | 凭据存储采用 **Windows 凭据管理器**（通用凭据、本机持久、唯一天然目标名），**不采用 DPAPI**；实现只落 `crates/platform-win/src/secure_store.rs`（`cfg(windows)`），非 Windows 返回 `Unsupported` | 凭据管理器由系统托管、按用户隔离、可显式删除、无自管密文文件；DPAPI 需自管密文文件与文件权限/备份/漫游策略，触碰"Key 不落盘"红线 | 仅 Windows；无自管密文文件；不新增 mac 分支 |
+| **D-B4-P145** | 非敏感配置落 Tauri 配置目录的 `settings.json`，**恰 4 键**（schema 版本/模型下标/端点下标/超时），原子写，损坏回默认 | 只持久化可公开的状态；下标化天然避免地址与模型名入库；原子写避免半配置 | 4 键封闭；不存凭据/地址/主机名/模型名 |
+| **D-B4-P146** | 探针由装配层经 `ProbeExecutor` 端口执行，生产适配器调用既有网关装配与鉴权头注入，启用既有 HTTPS feature（不新增 registry 包）；失败分类映射固定 | 两段式沿用 B4 口径；UI 不直连；不新增第二套重试/熔断/计时 | `application` 定端口；`app` 实现；51 与前端 0 网络符号 |
+| **D-B4-P147** | IPC 面固定 **6 个命令**；`SettingsIntent` 不跨 IPC；Key 仅一次性入参，不进全局状态 | 意图类型含内存凭据，不能作 DTO；命令内纯函数可单测；避免 Key 常驻 | 6 命令封闭；DTO 无凭据字段 |
+| **D-B4-P148** | 前端 IPC 采用 `@tauri-apps/api`（唯一新增 npm 依赖）；不启用 `withGlobalTauri` | 官方同代绑定、类型安全；全局面更大且无类型 | 新增 1 个 npm 依赖（见 C-UI-01） |
+| **D-B4-P149** | 新增 `KeywordCard`/`CardDetail` 组件，只读 DTO；禁用卡不绑定回调；隐藏态只渲染角标；详情为内联面板 | 与 51 视图契约一一对应；禁用语义与可访问性可在静态层判定 | `app/src/cards/**`；不改 51 视图 |
+| **D-B4-P150** | 屏蔽事实只来自注入（`screen_share`/`emergency_masked`）；本轮不实现真实投屏检测 API | 平台 API 不可离线判定；只消费事实可保持 51 边界 | `ViewFacts` 来源固定；不宣称真机 |
+| **D-B4-P151** | `SettingsFormState::Failed` 保持无载荷 6 态；失败类别与文案由独立 `ProbeReportDto`（5 项）承载，`SettingsView` 仍 8 项 | 不改既有封闭面；修正旧设计稿 `Failed{failure}` 与实现偏差 | 新增 DTO；既有枚举零 diff |
+| **D-B4-P152** | 平台口径仍 Windows 单平台、macOS"不适用（无设备）"；CI mac 编译观察项存废见 C-UI-02，未裁决前零改动 | 删除 mac CI 会与既有范围裁剪 AC 冲突，需独立变更单 | `ci.yml`/`deny.toml`/`platform-mac` 零 diff |
+| **D-B4-P153** | 不新增 cargo test target（`NEW_TARGETS` 保持 25）；单测落 `app/src-tauri/src/ipc/**` 与 `platform-win` 单测；新增 `scripts/check-ui-integration.sh` 六规则；`check-b4-gates.sh` 仅扩扫描面、规则仍 7 条 | 命令纯函数可直接单测；避免 target 清单与 X-05 口径漂移 | 新增脚本 1 个；`NEW_TARGETS` 不变 |
+| **D-B4-P154** | AC 追加 **111~130（20 条）**、汇总 **130**；U-05 口径改为"离线契约已实现；产品化接入规格已定、待实现（§28）" | 编号连续、不重排；产品化缺口需独立可见 | 本节 + §10.1~§10.3 |
+| **D-B4-P155** | 本轮显式不做：真实联网 E2E、Key 写文件、宣称真机体验、改 macOS 支持口径、卡片存储/审计/回放、真实投屏 API、点击触发检索/LLM | 与 N-UI-01~10 一致；避免以规划替代实现 | 见 §28.6 |
+
+### §28.3 AC 三态（增量 AC-B4-111~130）
+
+> 编号承接 AC-B4-110，不重排 01~110。规格正文：`ui_integration/spec.md` §7.2/§7.3。当前全部 `pending`（规格已定，待实现）。
+
+| AC | 状态 | 证据口径（待实现后取证） |
+|---|---|---|
+| AC-B4-111 | pending | `settings_snapshot` 响应 11 项封闭、无凭据/地址/模型原串；`ipc_settings_snapshot_is_closed_and_keyless` |
+| AC-B4-112 | pending | 凭据管理器唯一目标名 + 写/读/删；重复保存条目数 1；`secure_store_roundtrip_uses_fixed_target` |
+| AC-B4-113 | pending | `settings.json` 恰 4 键、原子写、损坏回默认；`ipc_settings_file_has_only_four_keys` |
+| AC-B4-114 | pending | 探针只经 `ProbeExecutor`；生产适配器复用既有网关；前端/51 0 网络符号；`probe_executor_is_port_only` |
+| AC-B4-115 | pending | 保存先安全存储后配置；失败回 `fallback="memory"` + notice；清除需确认且幂等；`save_receipt_reports_memory_fallback_without_plaintext` |
+| AC-B4-116 | pending | 四段顺序 + 首屏折叠 + 按钮只取后端 `canTest`/`canSave`；`--rule=settings-ux` |
+| AC-B4-117 | pending | 8 类失败映射固定文案、保留输入、冷却剩余；`ipc_probe_failure_maps_eight_kinds` |
+| AC-B4-118 | pending | Key 不进持久化/日志/审计/回放/错误/响应；`--rule=credential-redline` + 两份密钥扫描 |
+| AC-B4-119 | pending | 三端口在 application、实现分离、非 Windows 返回 `Unsupported`；`application_declares_three_ports` |
+| AC-B4-120 | pending | 6 命令封闭；四目录零 diff；`NEW_TARGETS`=25；AC 汇总=130；本节登记；README 不宣称 |
+| AC-B4-121 | pending | 卡片快照 10 项 / 详情 5 项封闭；`withdrawn` 不出现；`ipc_card_snapshot_is_closed_and_read_only` |
+| AC-B4-122 | pending | 仅 enabled 且正文可见绑定点击；禁用卡 `aria-disabled`；`--rule=card-render` |
+| AC-B4-123 | pending | 隐藏态只渲染角标、DOM/DTO 无正文；`--rule=body-hidden` |
+| AC-B4-124 | pending | 点击只调 `open_keyword_card_detail`；0 外发/0 LLM/0 审计/0 存储；`ipc_card_open_has_zero_side_effects` |
+| AC-B4-125 | pending | 内联详情、无自动聚焦/无 `focus()`/无滚动抢占；`--rule=no-focus-steal` |
+| AC-B4-126 | pending | 前端 0 网络 API、CSP 无连接源、能力集仅核心默认、白名单 6；`--rule=frontend-offline` |
+| AC-B4-127 | pending | 不持久化 Key/卡片正文、无 console 打印、不复活撤回卡；`frontend_persists_neither_key_nor_card_text` |
+| AC-B4-128 | pending | `api.rs` 4、10 类封闭字段数不变、`gate/cards/domain` 零 diff；`existing_closed_faces_are_unchanged` |
+| AC-B4-129 | pending | Windows 单平台、macOS 不适用、不新增 mac 分支、CI 零改动；`platform_scope_is_windows_only` |
+| AC-B4-130 | pending | 六规则全 0；汇总 130；`NEW_TARGETS` 25；本节含 U-05 产品化与 D-B4-P144~P155；不宣称 |
+
+### §28.4 产品化缺口拆分与关闭条件
+
+| 子项 | 范围 | 关闭条件 |
+|---|---|---|
+| U-05-1 | 设置向导接入（AC-B4-111~120） | 6 命令与 3 端口落盘；安全存储与 4 键配置可往返；探针映射 8 类；五规则中设置相关项退 0；`cargo test --workspace` 退 0 |
+| U-05-2 | 关键词卡片前端渲染（AC-B4-121~130） | 卡片快照/详情 DTO 封闭；前端离线/不抢焦点/不持久化；点击 0 副作用；既有 51 两 target 全绿 |
+| U-05 整体 | 两项同时满足 | AC-B4-111~130 全绿；AC 汇总 130；`NEW_TARGETS`=25；依赖项（C-UI-01/C-UI-04）经用户确认；仍不宣称真机与真实联网 |
+
+### §28.5 待用户确认（4 项）
+
+| 编号 | 待确认 | 默认建议 |
+|---|---|---|
+| C-UI-01 | 是否允许新增 `@tauri-apps/api` 作为唯一前端依赖 | 允许（官方同代绑定、类型安全） |
+| C-UI-02 | macOS CI 编译观察项：保留还是删除 | 本期**保留零改动**；删除需独立变更单并同步改写既有范围裁剪 AC |
+| C-UI-03 | 生产探针默认不启用（HTTPS feature 未启用时返回 `Unsupported`），真实公网连通性留给用户显式开启 | 确认默认关闭；AC 只用替身 |
+| C-UI-04 | 是否允许新增 `windows-sys`（仅 Windows，安全凭据与基础类型 feature）用于凭据管理器 API | 允许；同步 `deny.toml` 许可证检查面 |
+
+### §28.6 本轮明确不做（N-UI-01~10）
+
+1. 不做真实联网 E2E，不跑真实公网连通性、不取真实模型响应。
+2. 不把 Key 写入任何文件（含加密文件、备份、缓存、前端存储）。
+3. 不宣称真机体验（窗口/焦点/投屏/授权）已验收。
+4. 不改 macOS 支持口径（仍"不适用（无设备）"）。
+5. 不做卡片存储、展示审计、回放目录。
+6. 不做真实投屏/紧急遮蔽检测 API。
+7. 不把点击变成检索入口。
+8. 不新增门控计数/拒绝码/domain 契约。
+9. 不新增 cargo test target（`NEW_TARGETS` 保持 25）。
+10. 不做模型清单仓库内联、不做端点自由输入。
+
+### §28.7 工作区与提交状态
+
+- 本轮修改文件：`.codeartsdoer/specs/ui_integration/spec.md`（新增）、`docs/progress/b4-status.md`（§10.1/§10.2/§10.3 + 本节）。
+- 未修改：任何 `crates/**` 源码、`app/src/**`、`app/src-tauri/src/**`、`Cargo.toml`/`Cargo.lock`、`deny.toml`、`.github/workflows/ci.yml`、既有门禁脚本。
+- 未执行 `git commit`；如需提交本次规格增量，请确认后单独执行（范围仅上述 2 个文档）。
+- 结论：U-05 的**离线契约**已实现；**产品化接入**规格已定、待实现，AC-B4-111~130 全部 `pending`；**不宣称设置向导可用、不宣称产品级卡片已交付、不宣称真机或真实联网已通过**。
