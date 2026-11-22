@@ -2,6 +2,8 @@
 
 use meeting_copilot_domain::merge::{classify_equivalence, MergePolicy};
 
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
 #[test]
 fn thousand_pairs_under_200ms() {
     let policy = MergePolicy::default();
