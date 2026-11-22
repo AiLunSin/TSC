@@ -26,6 +26,8 @@ UI_KW_TEST="crates/ui-bridge/tests/keyword_card_view.rs"
 SETTINGS_APP_DIR="crates/ui-bridge/src/settings"
 SETTINGS_TEST="crates/ui-bridge/tests/llm_settings_view.rs"
 STATUS_FILE="docs/progress/b4-status.md"
+APP_SETTINGS_DIR="crates/application/src/settings"
+PLATFORM_STORE="crates/platform-win/src/secure_store.rs"
 SPEC_FILE=".codeartsdoer/specs/b4_gate/spec.md"
 RECORD_WHITELIST="schema_version trace_id session_id candidate_ref insight_ref trigger per_stage decision stopped_at budget_remaining cooldown_until_ms authorization_status skipped_stages decided_at_ms"
 
@@ -157,6 +159,37 @@ rule_source() {
   hits="$(scan_files 'Mutex|RwLock|AtomicU64' "${gate_list[@]}")"
   if [[ "${hits}" -ne 0 ]]; then
     fail "source: gate/ 命中锁或原子计数（${hits} 处）"
+  fi
+
+  # 装配层受限模式：允许 IO 与时钟，仍禁网络/环境变量/全局态/占位 panic。
+  if need_dir "app/src-tauri/src/ipc"; then
+    local ipc_file
+    while IFS= read -r ipc_file; do
+      [[ -f "${ipc_file}" ]] || continue
+      hits="$(strip_tests "${ipc_file}" | grep -cE 'reqwest::|hyper::|TcpStream|std::net|std::env|env::var|LLM_|todo!\(|unimplemented!\(|panic!\(|static mut|OnceLock|lazy_static|thread_local' || true)"
+      if [[ "${hits}" -ne 0 ]]; then
+        fail "source: ${ipc_file} 命中装配层禁用面（${hits} 处）"
+      fi
+    done < <(find "app/src-tauri/src/ipc" -type f -name '*.rs' 2>/dev/null)
+  fi
+
+  # 严格模式：应用层设置模块与 Windows 凭据适配。
+  if need_dir "${APP_SETTINGS_DIR}"; then
+    local settings_file
+    while IFS= read -r settings_file; do
+      [[ -f "${settings_file}" ]] || continue
+      hits="$(strip_tests "${settings_file}" | grep -cE 'std::fs|std::env|reqwest|TcpStream|Instant::now|SystemTime::now|keyring' || true)"
+      if [[ "${hits}" -ne 0 ]]; then
+        fail "source: ${settings_file} 命中严格禁词（${hits} 处）"
+      fi
+    done < <(find "${APP_SETTINGS_DIR}" -type f -name '*.rs' 2>/dev/null)
+  fi
+
+  if need_file "${PLATFORM_STORE}"; then
+    hits="$(strip_tests "${PLATFORM_STORE}" | grep -cE 'std::fs|keyring|reqwest|target_os = "macos"' || true)"
+    if [[ "${hits}" -ne 0 ]]; then
+      fail "source: platform-win/secure_store.rs 命中严格禁词（${hits} 处）"
+    fi
   fi
 }
 
