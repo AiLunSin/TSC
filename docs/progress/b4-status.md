@@ -1252,3 +1252,60 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 - 未修改：任何 `crates/**` 源码、`app/src/**`、`app/src-tauri/src/**`、`Cargo.toml`/`Cargo.lock`、`deny.toml`、`.github/workflows/ci.yml`、既有门禁脚本。
 - 未执行 `git commit`；如需提交本次规格增量，请确认后单独执行（范围仅上述 2 个文档）。
 - 结论：U-05 的**离线契约**已实现；**产品化接入**规格已定、待实现，AC-B4-111~130 全部 `pending`；**不宣称设置向导可用、不宣称产品级卡片已交付、不宣称真机或真实联网已通过**。
+## §29 P-UI 落地与门禁收口快照（2026-11-22）
+
+> 本节登记 W-UI-02~18 的实现落地与取证结果。**U-05 整体仍保持 `open`**；不宣称真机、不宣称真实联网。
+
+### §29.1 提交清单（本地，未 push）
+
+| 批次 | 提交 | 内容 |
+|---|---|---|
+| C1 | `ed0a644` | application 3 端口 + 3 事实源；Windows 凭据存储（0.45.0） |
+| C2 | `411337d` | 6 组只读 DTO、AppState、目录清单 |
+| C3a | `0d1e09f` | 4 键配置存储、设置快照/保存/清除 |
+| C3b | `9c4a87e` | 探针单飞、8 类映射、冷却相对值；llm-https 适配 |
+| C3c | `f4b0085` | 卡片快照/详情、`ClickState` 手工拆载 |
+| C4 | `4fd8b48` | 6 命令注册、`AppFactsSource`、`withGlobalTauri` |
+| C5a | `3e2e6fc` | 7 组前端 DTO、`tauri.ts` 手写全局调用 |
+| C5b | `3eeeaa2` | 设置页、卡片/详情组件、快照驱动 App |
+| C6a | `f6b7ba3` | 六规则静态门禁 `check-ui-integration.sh` |
+| C6b | `c3d99b4` | `--rule=source` 扩面（ipc 受限 + 两个严格面） |
+
+### §29.2 取证结果
+
+| 项 | 结果 | 取证方式 |
+|---|---|---|
+| 桌面层用例 | 24 passed / 0 failed | `cargo test -p meeting-copilot-desktop`（本轮末次全量） |
+| application settings | 6 passed | `cargo test -p meeting-copilot-application settings::` |
+| platform-win 凭据 | 4 passed | `cargo test -p meeting-copilot-platform-win` |
+| 六规则 | PASS，0 命中 | `bash scripts/check-ui-integration.sh` |
+| source 规则 | 0 | `bash scripts/check-b4-gates.sh --rule=source` |
+| 其余 6 规则 | 全 0 | budget / record / outbound / zero-transcript / targets / doc-plan |
+| 前端类型 | 通过 | `npm --prefix app run typecheck` |
+| 前端构建 | 通过（34 modules） | `npm --prefix app run build` |
+| 绑定契约 | 11 个 DTO 一致 | `npm --prefix app run check:bindings` |
+| AC 汇总 | 130 | 三份 spec 的 AC 并集 |
+| `NEW_TARGETS` | 25 | `scripts/test-name-inventory.sh` |
+
+### §29.3 AC 状态（111~130）
+
+20 条按离线口径全部 `passed`：AC-111/113/115（设置命令）、AC-112（凭据三例）、AC-114/117（探针六例）、AC-116/122/123/125/126/127（六规则）、AC-119（3+3 trait）、AC-121/124（卡片五例）、AC-128/129（closed faces / 平台范围）、AC-120/130（6 命令、汇总 130、NEW_TARGETS 25）。
+
+### §29.4 偏差登记（X-UI-11~16）
+
+| 编号 | 偏差 | 处置 |
+|---|---|---|
+| X-UI-11 | design 旧稿 `windows-sys = 0.59` | 以实况 **0.45.0** 落地，单版本、仅 Windows |
+| X-UI-12 | 脚本必须先于/后于代码的时序 | C6 严格晚于 C1~C5，分 C6a/C6b 落盘 |
+| X-UI-13 | 冷却相对/绝对双口径 | 端口 `remainingMs`（相对）与事实源 `cooldownUntilMs`（绝对镜像） |
+| X-UI-14 | AC 看板 DoD 正则覆盖 111~129 | AC-130 单独断言，不伪造计数 |
+| X-UI-15 | C3 拆为 C3a/b/c 三次提交 | 便于分批验证；任务编号未变 |
+| X-UI-16 | 装配层新增 `meeting-copilot-domain` path 依赖 | 仅用于 `CancelToken`；`Cargo.lock` 只增引用、无新版本 |
+
+### §29.5 未关闭项
+
+1. **U-05 整体仍 `open`**：未做真实联网 E2E、未做真机 WebView2 验证、未声明窗口/焦点/投屏已验收。
+2. C-UI-02（macOS CI 编译观察项存废）未裁决；`ci.yml` / `deny.toml` / `platform-mac` 零 diff。
+3. C-UI-03（生产探针）默认关闭，AC 仅用替身取证。
+4. 9 个 `#[ignore]` 与 `tests/replay/` 未解锁。
+5. 未执行 `git push`。
