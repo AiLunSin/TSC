@@ -5,6 +5,7 @@
 pub mod card;
 pub mod channel;
 pub mod enums;
+pub mod gate;
 pub mod governance;
 pub mod insight;
 pub mod insight_kind;
@@ -28,6 +29,7 @@ pub use channel::{
     ChannelStateSnapshot, GapReason, StateReason, SwitchReason, TransitionOutcome,
 };
 pub use enums::*;
+pub use gate::{GateRejectReason, Visibility};
 pub use governance::{AuditRecord, EffectivePolicy, LexiconTerm, OutboundGrant};
 pub use insight::{
     DecisionFields, Entity, Insight, InsightFields, QuestionFields, RollingSummary, TodoFields,
