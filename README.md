@@ -6,79 +6,98 @@
 
 ## 当前状态
 
-B0（工程基座与合规前置）已落地并在 Windows x64 验证：
+| 批次 | 状态 |
+|---|---|
+| B0 工程基座与合规前置 | 完成（Windows x64 验证） |
+| B1 技术验证（LLM 网关） | 完成：四类结构化任务、降级链路、真实 30 样本基线 |
+| B2 离线闭环 | 完成：通道状态机、仲裁、缺口与恢复、状态推送（43 项 AC） |
+| B2.24 双通道去重合并 | 完成：来源投影、四步相似度、三态合并、补充要点 |
+| B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重与回溯 |
+| CI 门禁加固 | 完成：C1~C4、B3 六条静态门禁 |
 
-- 五层 Rust 架构：`domain` → `application` / `infrastructure` / `platform-*` → `ui-bridge` → 桌面壳
-- 约束型值对象、领域模型、端口 SPI、错误码模型
-- Tauri 2 桌面壳可启动
-- SQLite 加密门禁 + 四 Repository（主表 / FTS5 / 向量表同事务）
-- HKDF 密钥派生与 AES-256-GCM 字段加密
-- 审计哈希链、脱敏日志白名单、10 项度量
-- CI：web / Rust 三 target / 合规三段流水线
+最近一次全量回归：**45 targets / 560 passed / 0 failed / 9 ignored**；`fmt`、`clippy -D warnings`、分层、密钥、许可证、用例名差集均通过。
 
-未闭合项见 [`docs/progress/b0-status.md`](docs/progress/b0-status.md)、[`docs/progress/b1-status.md`](docs/progress/b1-status.md) 与 [`docs/progress/ci-readiness.md`](docs/progress/ci-readiness.md)。
+未完成项按依赖分组记录在 [`docs/progress/b3-status.md`](docs/progress/b3-status.md) 与 [`docs/sdd/tasks.md`](docs/sdd/tasks.md)。
 
-## B1（M0 技术验证）当前状态
+### 仍未实测（需真实环境）
 
-已达成部分：
-
-- 稳定前缀策略（12.2）
-- OpenAI 兼容 LLM 网关的四类结构化任务已通过真实联调：8 个 ignored 用例 8/8 通过，四类任务均 `degraded=false`、`http_status=200`
-- 30 样本/任务真实基线已达成：四类首 token p95 均 ≤1.2s、总耗时 p95 均 ≤6s；minutes 29/30（1 次 timeout），其余 30/30（AC-20/AC-21/AC-22）
-- 离线测试基线 **265 passed / 0 failed**（阶段 G 门禁达成）；fmt / clippy / 层禁 / 密钥扫描 / 依赖许可门禁通过
-- LLM 调用默认关闭，端点、模型与凭据均通过运行期环境变量注入，不写入仓库
-
-未完成：
-
-- AC-23 / AC-24 / AC-25（429、人为截止、schema 违规对照）尚未实测
-- WASAPI 采集、平台字幕、ASR/VAD 等 B1 其余技术验证
-- M0 总评与 B2~B5 尚未开始
+- 真实端点的 429 观测、100ms 截止实测、三项三态落盘
+- Windows 真机上的音频捕获、字幕适配、OCR 与双通道去重
+- **G2**：Windows 单平台上腾讯/飞书/Zoom 各 30 分钟稳定运行
+- macOS 相关能力一律“不适用（无设备）”，CI 仅保留交叉编译观察，不作交付门禁
 
 ## 目录结构
 
 ```
 crates/
   domain/            领域模型、值对象、端口 trait（禁止依赖实现）
-  application/       应用编排（审计降级守卫）
-  infrastructure/    存储、加密、审计链、度量、日志
-  platform-win/      Windows 适配（WASAPI / UIA / OCR）
-  platform-mac/      macOS 适配（ScreenCaptureKit / AX / Vision）
+    src/model/       会话、片段、要点、通道、理解层策略与滚动摘要
+    src/merge/       双通道去重合并的纯函数内核
+  application/       应用编排：采集、治理、理解层（understand/）
+  infrastructure/    存储、加密、审计链、度量、日志、LLM 传输
+  platform-win/      Windows 适配（WASAPI / UIA / OCR）与能力矩阵
+  platform-mac/      macOS 适配（不适用，保留接口与能力矩阵）
   ui-bridge/         IPC DTO 与绑定契约
 app/                 React 19 + TypeScript + Vite 前端
 app/src-tauri/       Tauri 2 桌面壳
-docs/sdd/            需求规格、技术方案、任务清单
-docs/progress/       B0 状态与 CI 就绪记录
+docs/sdd/            需求规格、技术方案、任务清单（权威，只读）
+docs/progress/       各批次状态、验收记录与 CI 就绪
+docs/baseline/       LLM 与 ASR 基线
 docs/compliance/     许可证复核、SBOM
-scripts/             图标、SBOM、密钥扫描、分层校验、绑定校验
+scripts/             门禁：分层、密钥、许可证、采集离线、mac 范围、B3、用例名、SBOM
 ```
 
 ## 本地开发
 
+### 环境注意（Windows）
+
+本机 rustup shim 可能不可用；直接使用工具链内的可执行文件，或前置 PATH：
+
 ```bash
-# Rust
+export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
+export TEMP="$PWD/.tmp/test-temp"; export TMP="$TEMP"; mkdir -p "$TEMP"
+```
+
+### Rust
+
+```bash
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-rustfmt --edition 2021 --check $(git ls-files '*.rs')
+cargo fmt --all --check
+```
 
-# 前端
+### 前端
+
+```bash
 cd app
 npm ci
 npm run lint
 npm run typecheck
 npm run check:bindings
 npm run build
-
-# 合规
-bash scripts/scan-secrets.sh
-bash scripts/check-layering.sh
 ```
 
-桌面端开发调试：
+### 门禁脚本
+
+```bash
+bash scripts/check-layering.sh
+bash scripts/scan-secrets.sh
+bash scripts/scan-secrets-docs.sh --all-md
+bash scripts/check-capture-offline.sh --all
+bash scripts/check-mac-scope.sh --rule=na
+bash scripts/check-b3-gates.sh --rule=source
+bash scripts/check-g2-claims.sh
+CARGO="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/cargo.exe" \
+  bash scripts/test-name-inventory.sh --diff docs/progress/test-names-before.txt
+cargo deny --offline check licenses bans sources advisories
+```
+
+### 桌面端
 
 ```bash
 cd app
-npm run dev          # 前端开发服务器
+npm run dev
 cargo build -p meeting-copilot-desktop
 ```
 
@@ -90,9 +109,12 @@ cargo build -p meeting-copilot-desktop
 | `docs/sdd/design.md` | 技术方案（架构、时序、选型、追溯矩阵） |
 | `docs/sdd/tasks.md` | 分批次编码任务与门禁 |
 | `docs/progress/b0-status.md` | B0 执行状态与偏差 |
-| `docs/progress/b1-status.md` | B1 技术验证、LLM 联调与真实采样状态 |
-| `docs/progress/b2-status.md` | B2.23 离线通道状态机当前进度与剩余门禁 |
-| `docs/progress/ci-readiness.md` | CI 预检结果与剩余问题方案 |
+| `docs/progress/b1-status.md` | B1 技术验证、LLM 联调与真实采样 |
+| `docs/progress/b2-status.md` | B2 通道状态机进度 |
+| `docs/progress/b2-offline-closure.md` | B2 离线闭环 43 项 AC 与偏差 |
+| `docs/progress/b2-24-merge.md` | 双通道去重合并验收记录 |
+| `docs/progress/b3-status.md` | B3 理解层进度、门禁与回滚演练 |
+| `docs/progress/ci-readiness.md` | CI 预检结果与配置缺口 |
 | `docs/compliance/license-review.md` | 高风险组件许可证边界 |
 
 ## 安全与合规
@@ -101,6 +123,7 @@ cargo build -p meeting-copilot-desktop
 - 数据库打开前必须提供 OS 密钥库引用，禁止明文口令。
 - 日志仅允许白名单字段，原文、URL 全文、查询全文不得落日志。
 - 审计记录只追加，保留 180 天，不随会话删除。
+- LLM 默认关闭；端点、模型与凭据只经运行期环境变量注入，**不写入仓库任何文件**。测试记录也不得包含凭据、完整端点、模型名与 request_id。
 
 ## 许可证
 
