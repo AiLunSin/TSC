@@ -712,3 +712,24 @@ AC 三态（增量）：
 | U-06 / U-07 / U-08 | open |
 
 > 结论：51 点击 UI 的视图与点击契约已闭环；设置向导（API Key/模型）仍待 P8；不宣称真机交互质量。
+
+
+## §19 P8 设置向导骨架（51 API Key + LLM 配置）
+
+日期：2026-11-22。
+
+| 项 | 结果 |
+|---|---|
+| `settings` 4 文件 | `mod/view/input/probe` 已落盘并编译 |
+| 封闭面 | `SettingsView` 8 / `SettingsFacts` 6 / `SettingsDefaults` 4 / `SettingsInput` 5 / `ProbeRequest` 4 |
+| 纯函数 | 7 个（view 5 + probe 2） |
+| `llm_settings_view` | 18 passed / 0 failed |
+| `NEW_TARGETS` | 24 |
+| 七规则 | 7 × 0 |
+| 全量 | 797 passed / 0 failed / 9 ignored |
+
+AC 三态：AC-B4-85~94 均为 **passed**（18 用例）。
+
+未完成：U-06 / U-07 / U-08 保持 open；不宣称真机可用。
+
+> 结论：设置向导（Key 掩码/模型/端点/测试/意图/文案）离线契约已闭环；U-05 closed。

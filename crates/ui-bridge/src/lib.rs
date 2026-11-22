@@ -5,6 +5,7 @@
 
 pub mod dto;
 pub mod keyword_card;
+pub mod settings;
 
 /// IPC 协议版本。前端与后端不一致时拒绝建立会话（非配置类）。
 pub const IPC_PROTOCOL_VERSION: u16 = 1;

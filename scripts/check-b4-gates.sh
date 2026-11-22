@@ -23,6 +23,8 @@ CARDS="crates/application/src/cards/compose.rs"
 CARDS_TEST="crates/application/tests/card""_compose.rs"
 UI_KW_APP_DIR="crates/ui-bridge/src/keyword_card"
 UI_KW_TEST="crates/ui-bridge/tests/keyword_card_view.rs"
+SETTINGS_APP_DIR="crates/ui-bridge/src/settings"
+SETTINGS_TEST="crates/ui-bridge/tests/llm_settings_view.rs"
 STATUS_FILE="docs/progress/b4-status.md"
 SPEC_FILE=".codeartsdoer/specs/b4_gate/spec.md"
 RECORD_WHITELIST="schema_version trace_id session_id candidate_ref insight_ref trigger per_stage decision stopped_at budget_remaining cooldown_until_ms authorization_status skipped_stages decided_at_ms"
@@ -101,6 +103,7 @@ require_core_faces() {
   need_dir "${CARDS_APP_DIR}" || ok=1
   need_file "${CARDS}" || ok=1
   need_dir "${UI_KW_APP_DIR}" || ok=1
+  need_dir "${SETTINGS_APP_DIR}" || ok=1
   return "${ok}"
 }
 
@@ -124,6 +127,8 @@ core_files() {
   citation_files
   cards_files
   if [[ -d "${UI_KW_APP_DIR}" ]]; then for file in "${UI_KW_APP_DIR}"/*.rs; do [[ -f "${file}" ]] && printf '%s
+' "${file}"; done; fi
+  if [[ -d "${SETTINGS_APP_DIR}" ]]; then for file in "${SETTINGS_APP_DIR}"/*.rs; do [[ -f "${file}" ]] && printf '%s
 ' "${file}"; done; fi
 }
 
@@ -271,6 +276,11 @@ rule_zero_transcript() {
   done < <(if [[ -d "${UI_KW_APP_DIR}" ]]; then for f in "${UI_KW_APP_DIR}"/*.rs; do [[ -f "${f}" ]] && printf '%s
 ' "${f}"; done; fi)
   if [[ -f "${UI_KW_TEST}" ]]; then files+=("${UI_KW_TEST}"); fi
+  while IFS= read -r file; do
+    files+=("${file}")
+  done < <(if [[ -d "${SETTINGS_APP_DIR}" ]]; then for f in "${SETTINGS_APP_DIR}"/*.rs; do [[ -f "${f}" ]] && printf '%s
+' "${f}"; done; fi)
+  if [[ -f "${SETTINGS_TEST}" ]]; then files+=("${SETTINGS_TEST}"); fi
   if compgen -G "crates/application/tests/gate_*.rs" > /dev/null; then
     while IFS= read -r file; do
       files+=("${file}")
