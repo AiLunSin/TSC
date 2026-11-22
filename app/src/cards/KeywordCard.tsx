@@ -62,13 +62,7 @@ export function KeywordCard({ card, onOpen }: KeywordCardProps) {
         className="card-open"
         type="button"
         aria-disabled={!enabled}
-        onClick={
-          enabled
-            ? () => {
-                onOpen(card.cardId);
-              }
-            : undefined
-        }
+        onClick={enabled ? () => { onOpen(card.cardId); } : undefined}
       >
         {enabled ? "查看详情" : "不可点击"}
       </button>
