@@ -799,3 +799,70 @@ AC 三态：AC-B4-85~94 均为 **passed**（18 用例）。
 - 下一步入口：实现前先确认 §20.2 的 D-B4-P108~P117，特别是“`tests/replay/` 不解禁”“200 例零 diff”“只调 4 函数”“失败报告 2 项/5 码”“`NEW_TARGETS` 24→25 且脚本零改动”；确认后由 13.3 阶段建 `gate/replay.rs` + `tests/gate_replay_driver.rs` + `NEW_TARGETS` 1 行（同批提交）。
 
 > 结论：13.3 回放本体 **规格已定，待实现**；AC-B4-95~104 全部 `pending`；`tests/replay/` 仍不存在、200 例证据不变；**不宣称回放平台/报表/真机已交付**。
+## §21 CI `compliance` cargo-deny 失败修复需求登记（2026-11-22）
+
+> 本节登记 `compliance (licenses + sbom + secrets + layering)` 任务 `exit code 3` 的**根因实测**与**需求规格增量**。本轮只新增规格目录 `.codeartsdoer/specs/ci_deny_repair/spec.md` 并更新本文件，**未改代码、未改任何配置、未提交**。
+
+### §21.1 事实基线（实测，非推断）
+
+环境：`cargo 1.100.0`；`cargo-deny 0.22.0`（`~/.cargo/bin/cargo-deny.exe`；须前置 `~/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin` 到 `PATH`）。
+
+| 编号 | 命令 | 退出码 | 摘要 |
+|---|---|---|---|
+| F-01 | `cargo deny --version` | 0 | `cargo-deny 0.22.0`（与 CI `cargo-deny@0.22.0` 同版） |
+| F-02 | `cargo deny check licenses` | **0** | `licenses ok`；4 条 `warning[license-not-encountered]`（23/25/27/31 行） |
+| F-03 | `cargo deny check licenses -s` | **0** | `licenses ok: 0 errors, 4 warnings, 296 notes` |
+| F-04 | `cargo deny check bans` | **2** | `error[wildcard]`：`crates/ui-bridge/Cargo.toml` 的 2 个 path 依赖；`bans FAILED: 1 errors, 15 warnings` |
+| F-05 | `cargo deny check advisories` | **1** | `error[vulnerability]`：`RUSTSEC-2026-0592`，`url 2.5.8` |
+| F-06 | `cargo deny check sources` | **0** | `sources ok` |
+| F-07 | `cargo deny check licenses bans sources advisories` | **3** | `advisories FAILED, bans FAILED, licenses ok, sources ok` |
+| F-08 | 临时副本加 `[licenses] unused-allowed-license = "allow"` | **0** | `licenses ok: 0 errors, 0 warnings`；未命中计数 0 |
+| F-09 | 临时副本收紧白名单（移除 `MIT` 等） | **4** | `error[rejected]: failed to satisfy license requirements` |
+
+**退出码位掩码（实测归纳）**：`advisories=1`、`bans=2`、`licenses=4`、`sources=8`，按失败项累加。故 `1|2=3` 与 CI 的 `exit 3` 吻合。
+
+**根因定案**：
+
+| 编号 | 根因 | 证据 | 是否贡献 exit≠0 |
+|---|---|---|---|
+| R-1 | `[licenses]` 未声明 `unused-allowed-license`，0.22.0 默认 `warn`，4 项白名单未被依赖图命中 | F-02/F-03 | **否**（纯噪音） |
+| R-2 | advisory-db 每日更新，新增 `RUSTSEC-2026-0592`（`url 2.5.8` 嵌套 `blob:` URL 栈溢出） | F-05 | **是（1）** |
+| R-3 | `[bans] wildcards="deny"` 命中 ui-bridge 两个无 `version` 的 path 依赖 | F-04 | **是（2）** |
+
+**被否定的假设**：①"本地/CI 版本不同"不成立（均 0.22.0）；②"新版把 `unused-allowed-license` 默认按 deny"不成立（F-02 退 0，且 CI 无 `--deny warnings`）；③"删除未使用项即可"不推荐（未来依赖命中即红）。故 **仅改 `deny.toml` 不足以让 CI 变绿**，R-2、R-3 必须同批修复。
+
+**差异登记**：CI 截图 3 条未命中（`BSL-1.0`/`ISC`/`Unicode-DFS-2016`），本地实测 4 条（多 `BSD-2-Clause:23:4`）。验收不以条数为判据，以 `grep -c` 归零为判据。
+
+### §21.2 新增决策（D-B4-P131 ~ D-B4-P134）
+
+| 编号 | 决策 | 理由 | 影响面 |
+|---|---|---|---|
+| **D-B4-P131** | 采用"未命中即允许"：`[licenses]` 增 `unused-allowed-license = "allow"`；`allow` 15 项**原样保留** | F-08 实测退 0 且 0 warnings；F-09 实测白名单外仍退 4，证明未放松真实约束 | `deny.toml` +1 行；不删减白名单 |
+| **D-B4-P132** | 漏洞**不用 `ignore`**，将 `url` 升至 `>=2.5.9`（`cargo update -p url`）；不新增依赖 | `RUSTSEC-2026-0592` 在 Tauri 依赖链上被 `Url::origin()` 触达，`ignore` 属掩盖 | `Cargo.lock` 仅 `url` 版本行；包集合不变 |
+| **D-B4-P133** | 通配依赖**不放宽** `wildcards`，改为 ui-bridge 两个 path 依赖补 `version = "0.1.0"` | 保持供应链约束 `deny` 级别；符合 workspace 内依赖显式化 | `crates/ui-bridge/Cargo.toml` +2 行（属性） |
+| **D-B4-P134** | 本地/CI 一致性以"同版 + 同命令串 + 打印版本"保障，cargo-deny 固定 `0.22.0` 不浮动 | 版本不是本次根因，但浮动会在未来再次制造"本地绿/CI 红" | `ci.yml` licenses 步骤前 +1 行版本打印；命令串不变 |
+
+### §21.3 AC 三态（增量 AC-B4-105~110）
+
+> 编号承接 `b4_gate/spec.md` §7.16 的 AC-B4-104，不重排不改写 AC-B4-01~104；`b4_gate/spec.md` 的"AC 汇总=104"保持为 U-06 时点断言（同 D-B4-P117 口径）。规格正文：`.codeartsdoer/specs/ci_deny_repair/spec.md` §8。
+
+| AC | 状态 | 证据口径（待实现后取证） |
+|---|---|---|
+| AC-B4-105 | pending | `cargo deny check licenses` 退 0；`license-not-encountered` 计数 0；`-s` 汇总 `0 errors, 0 warnings`；`allow` 条目数 15 且与基线逐项相等 |
+| AC-B4-106 | pending | 临时收紧白名单配置 `cargo deny --config <TMP> check licenses` 退 **4** 且含 `error[rejected]`；负例配置不入库；高危许可证标识命中 0 |
+| AC-B4-107 | pending | `cargo deny check advisories` 退 0；`RUSTSEC-2026-0592` 命中 0；`url` ≥ 2.5.9；`Cargo.lock` 无新增 `name =` 条目 |
+| AC-B4-108 | pending | `cargo deny check bans` 退 0；`error[wildcard]` 计数 0；`wildcards = "deny"` 保持；ui-bridge 含 2 处 `version = "0.1.0"` |
+| AC-B4-109 | pending | 本地/CI 均 `cargo-deny 0.22.0`；命令串逐字符一致；本地四合一退 0；CI `compliance` 结论 success（远端判定） |
+| AC-B4-110 | pending | `deny.toml` 新增 ≤3 且删除 0；ui-bridge 仅 2 行；`crates/**/src/**` 零 diff；根 `Cargo.toml` 零 diff；本节含 AC-B4-105 与 D-B4-P131 |
+
+### §21.4 本轮边界与工作区状态
+
+1. **不做**：不删改白名单、不用 `ignore` 掩盖漏洞、不放宽 `wildcards`/`sources`、不升级/降级 cargo-deny、不改 `crates/**/src/**`、不新增依赖、不改 `scripts/**`、不新增测试 target。
+2. **出口判定**：`compliance` 退 0 需 R-1+R-2+R-3 三条同时修复；任一缺失则为 4/1/2 非 0。
+3. **不宣称**：`licenses ok` ≠ 法律合规结论；`advisories ok` 仅对当日 advisory-db 快照成立；`bans ok` 时 `multiple-versions` 仍为 warn（15 条 duplicate 保留）。
+4. **复跑纪律**：AC-B4-107 的 `passed` 必须标注取证日期；跨日须重跑，不得引用旧证据。
+5. 本轮修改文件：`.codeartsdoer/specs/ci_deny_repair/spec.md`（新增）、`docs/progress/b4-status.md`（本节）。
+6. 未修改：任何 `Cargo.toml`/`Cargo.lock`、`deny.toml`、`.github/workflows/ci.yml`、任何 `crates/**` 源码与脚本。
+7. 未执行 `git commit`；如需提交本次规格增量，请确认后单独提交（范围仅上述 2 个文档）。
+
+> 结论：CI `exit 3` 的直接来源是 **advisories(1) + bans(2)**，许可证未命中是 **warn 噪音**（0 贡献）；本次修复口径为 R-1/R-2/R-3 同批处理，AC-B4-105~110 全部 `pending`，**待确认后进入实现**。
