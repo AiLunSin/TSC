@@ -1105,3 +1105,55 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 
 - 本次提交：`fix(gate): 收敛 clippy 告警与 test-target 22 处（§26）`；恰 3 文件面。
 - 未推送：远端 CI 结论由用户 push 后回填。
+## §27 CI 共享 runner 性能用例容差校准（2026-11-22）
+
+> 本节登记 `thousand_pairs_under_200ms` 在 GitHub Actions Windows 共享 runner 上首次真正执行时的超时失败与修复。基线 `446a561`；提交面 3 文件。
+
+### §27.1 事实与根因
+
+| 项 | 事实 |
+|---|---|
+| CI 步骤顺序 | `fmt` → `clippy` → `build` → `test`（`ci.yml:91-98`） |
+| 首次真跑 | §26 修复前 clippy 恒退 101，`test` 从未执行；§26 后首次进入 `test` |
+| 失败用例 | `meeting-copilot-domain --test merge_equivalence` 的 `thousand_pairs_under_200ms`（`#[cfg(target_os = "windows")]`） |
+| 本机实测 | 空载 111 ms / 132 ms；全量并发历史最差 219/221 ms（D-B4-P12） |
+| 失效机理 | 绝对墙钟 + 无预热 + 单次测量；共享 runner（`windows-2022`）debug 构建下首次迭代含分配器与指令缓存预热 |
+| `feature-coverage (C2)` | 纯级联：rust 在 test 失败 → 无 coverage artifact → `missing platform=x86_64-pc-windows-msvc`；rust 转绿自愈，`ci.yml` 零改动 |
+
+### §27.2 决策与边界
+
+| 项 | 决策 |
+|---|---|
+| 设计预算 | **200 ms 不变**（开发机单线程基准，spec 4.1-1 原文不动） |
+| CI 断言 | **500 ms 容差**，`const CI_BUDGET_MS: u128 = 500` 置于函数体内 |
+| 函数名 | `thousand_pairs_under_200ms` **保留**，避免三处文档引用漂移 |
+| 不触碰 | `crates/domain/src/**`、AC、`NEW_TARGETS`、`#[ignore]`、`ci.yml`、`Cargo.*`、`scripts/**` |
+| 裕量 | 相对 129 ms 为 3.88×；相对历史最差 221 ms 为 2.26× |
+
+### §27.3 判据表
+
+| 判据 | 结果 |
+|---|---|
+| `cargo test -p meeting-copilot-domain --test merge_equivalence -- --nocapture` | `elapsed_ms=129 hits=1000 budget_ms=500`，1 passed |
+| `grep -c 'CI_BUDGET_MS'`（测试文件） | 3 |
+| `grep -c 'elapsed_ms < CI_BUDGET_MS'` / `elapsed_ms < 200` | 1 / 0 |
+| `cargo test --workspace` | 825 passed / 0 failed / 9 ignored |
+| `--list` / `--list --ignored` | 834 / 9 |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
+| `cargo fmt --all --check` | 0 |
+| 七条静态门禁 | 7×0 |
+| `NEW_TARGETS` / AC 汇总 | 25 / 104 |
+| `crates/domain/src` / `ci.yml` | 零 diff |
+| `test-name-inventory.sh --diff` | `removed=0` |
+
+### §27.4 偏差 X-36
+
+- 用例名保留 "200ms"，但 CI 断言为 500 ms；以 `CI_BUDGET_MS` 常量与 `budget_ms=500` 输出明示容差，避免误读为设计预算变更。
+- `tasks.md` 原证据路径 `--lib merge::equivalence::tests::...` 为陈旧路径（该用例已迁入 `crates/domain/tests/`），已改为 `--test merge_equivalence`，防止假绿。
+- 历史数字（111/219/221/200）零重写；`X-01~X-35` 不重排。
+
+### §27.5 提交记录与不宣称
+
+- 本次提交：`test(domain): 校准千对判定用例的 CI 容差（§27）`；提交面 3 文件（`merge_equivalence.rs`、本节文件、`b2-24-merge.md`）。
+- 未推送：远端 `rust (x86_64-pc-windows-msvc)` 与 `feature-coverage (C2)` 结论需 push 后回填。
+- 不宣称 CI 已绿；500 ms 只防数量级退化，200 ms 精度由开发机基准守护。

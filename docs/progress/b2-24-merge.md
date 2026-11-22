@@ -49,7 +49,7 @@
 | layering / capture-offline / mac-scope forbidden | 0 / 0 / 0 |
 | secrets / secrets-docs / deny | 0 / 0 / 0 |
 | 用例名差集 | `removed=0`，新增 86 |
-| 性能预算 | 1000 对判定 `elapsed_ms=111`（上限 200） |
+| 性能预算 | 1000 对判定 `elapsed_ms=111`（上限 200；CI 容差 500，见 `b4-status` §27 / X-36） |
 
 ## 3. 回滚演练
 
@@ -65,7 +65,7 @@
 | 编号 | 偏差 | 处置 |
 |---|---|---|
 | D-MB-01 | `capture_gap_gate.rs` 实际 14 个 `#[test]`（任务书写 12） | 改动前后均为 14，按实际取数 |
-| D-MB-02 | 性能用例含 `Instant::now`，与“源码禁计时”冲突 | 移入 `crates/domain/tests/merge_equivalence.rs` |
+| D-MB-02 | 性能用例含 `Instant::now`，与“源码禁计时”冲突 | 移入 `crates/domain/tests/merge_equivalence.rs`；CI 容差 500 ms 见 `b4-status` §27 / X-36（设计预算 200 ms 不变） |
 | D-MB-03 | `MergeCounters` 用 9 个具名字段而非 `[u64; 9]` | 语义等价，便于直接断言 |
 | D-MB-04 | `ObservationPayload::ValidText` 不含文本/引用/区间 | 新增 `ingest_text` 入口，`observe` 契约未改；“observe 第 6 步”未按形式落地 |
 
