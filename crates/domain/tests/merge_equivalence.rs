@@ -1,11 +1,10 @@
 //! 判定内核的性能预算用例（计时只允许出现在测试目标）。
 
-use meeting_copilot_domain::merge::{classify_equivalence, MergePolicy};
-
-#[cfg(target_os = "windows")]
 #[cfg(target_os = "windows")]
 #[test]
 fn thousand_pairs_under_200ms() {
+    use meeting_copilot_domain::merge::{classify_equivalence, MergePolicy};
+
     let policy = MergePolicy::default();
     let base = "会议决定下周三开始灰度上线并完成监控告警演练，由张三负责回滚方案。";
     let other = "会议决定下周三开始灰度上线并完成监控告警演练，由李四负责回滚方案。";
