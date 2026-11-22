@@ -40,7 +40,7 @@ const PROVIDER: &str = "provider-1";
 struct Arena {
     session: SessionId,
     trace: TraceId,
-    reference: UtteranceRef,
+
     fragments: Vec<NormalizedFragment>,
     fragments_low_confidence: Vec<NormalizedFragment>,
     lexicon_names: Vec<String>,
@@ -96,7 +96,7 @@ impl Arena {
         Self {
             session: session.clone(),
             trace,
-            reference: reference.clone(),
+
             fragments: vec![fragment(&session, &reference, 0.9)],
             fragments_low_confidence: vec![fragment(&session, &reference, 0.49)],
             lexicon_names: vec![TEXT.to_owned()],
@@ -230,10 +230,14 @@ fn build_self_check(arena: &Arena) -> Vec<ReplayCase<'_>> {
     use GateStage as S;
 
     let default_policy = GatePolicy::default;
-    let mut invalid_policy = GatePolicy::default();
-    invalid_policy.session_outbound_cap = 601;
-    let mut skip_dedupe = GatePolicy::default();
-    skip_dedupe.dedupe_enabled = false;
+    let invalid_policy = GatePolicy {
+        session_outbound_cap: 601,
+        ..GatePolicy::default()
+    };
+    let skip_dedupe = GatePolicy {
+        dedupe_enabled: false,
+        ..GatePolicy::default()
+    };
 
     let mut cases = Vec::new();
     cases.push(arena.case(
@@ -516,7 +520,7 @@ impl GateClock for ConstantClock {
 fn replay_driver_types_are_closed() {
     assert_eq!(ReplayMismatchCode::ALL.len(), 5);
     assert_eq!(ReplayLoadError::ALL.len(), 3);
-    let driver = ReplayDriver::default();
+    let driver: ReplayDriver = Default::default();
     let arena = Arena::new();
     let source = Source::forward(build_self_check(&arena), 13);
     let run: Result<ReplayRun, ReplayLoadError> = driver.run(&source);
@@ -535,7 +539,7 @@ fn replay_case_layers_are_separated() {
 #[test]
 fn replay_case_source_rejects_empty_set() {
     let source = Source::forward(Vec::new(), 13);
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
     assert_eq!(
         driver.run(&source).err(),
         Some(ReplayLoadError::EmptyCaseSet)
@@ -547,7 +551,7 @@ fn replay_case_source_rejects_empty_set() {
 #[test]
 fn replay_case_source_rejects_invalid_case_id() {
     let arena = Arena::new();
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
 
     let blank = arena.case(
         "",
@@ -587,7 +591,7 @@ fn replay_case_source_rejects_invalid_case_id() {
 #[test]
 fn replay_case_source_rejects_duplicate_ids() {
     let arena = Arena::new();
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
 
     let first = arena.case(
         "dup",
@@ -635,7 +639,7 @@ fn replay_case_source_rejects_duplicate_ids() {
 #[test]
 fn replay_case_set_is_sorted_by_case_id() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::reversed(build_probe(&arena), 13))
         .expect("run");
 
@@ -677,8 +681,10 @@ fn replay_driver_uses_only_four_functions() {
     );
     assert_eq!(relevance, parsed.relevance);
 
-    let mut strict = GatePolicy::default();
-    strict.threshold_profile = ThresholdProfile::Strict;
+    let strict = GatePolicy {
+        threshold_profile: ThresholdProfile::Strict,
+        ..GatePolicy::default()
+    };
     let mut low = build_self_check(&arena).into_iter().nth(12).expect("case");
     low.input.signals.relevance = RelevanceSnapshot {
         semantic_milli: 700,
@@ -703,7 +709,7 @@ fn replay_driver_uses_only_four_functions() {
 #[test]
 fn replay_driver_injects_constant_clock() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_self_check(&arena), 13))
         .expect("run");
     for record in &run.records {
@@ -718,7 +724,7 @@ fn replay_driver_injects_constant_clock() {
 #[test]
 fn replay_driver_records_are_closed() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_self_check(&arena), 13))
         .expect("run");
 
@@ -735,7 +741,7 @@ fn replay_driver_records_are_closed() {
 #[test]
 fn replay_driver_record_violation_is_reported() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_probe(&arena), 13))
         .expect("run");
     assert!(run.failures.iter().any(|item| {
@@ -747,7 +753,7 @@ fn replay_driver_record_violation_is_reported() {
 #[test]
 fn replay_record_check_rejects_illegal_skip_stage() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_self_check(&arena), 13))
         .expect("run");
     let base = run.records.first().expect("record").clone();
@@ -764,7 +770,7 @@ fn replay_record_check_rejects_illegal_skip_stage() {
 #[test]
 fn replay_failure_reports_case_id_and_code_only() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_probe(&arena), 13))
         .expect("run");
 
@@ -790,7 +796,7 @@ fn replay_failure_reports_case_id_and_code_only() {
 #[test]
 fn replay_failure_codes_cover_all_mismatch_kinds() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_probe(&arena), 13))
         .expect("run");
 
@@ -816,7 +822,7 @@ fn replay_failure_codes_cover_all_mismatch_kinds() {
 #[test]
 fn replay_driver_reports_totals_are_consistent() {
     let arena = Arena::new();
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
 
     let self_check = driver
         .run(&Source::forward(build_self_check(&arena), 13))
@@ -835,10 +841,7 @@ fn replay_driver_reports_totals_are_consistent() {
 
     for report in [&self_check.report, &probe.report] {
         assert_eq!(report.matched + report.mismatched, report.total);
-        assert_eq!(
-            report.mismatched as usize,
-            0.max(report.mismatch_cases.len())
-        );
+        assert_eq!(report.mismatched as usize, report.mismatch_cases.len());
     }
     assert_eq!(probe.report.mismatched as usize, probe.failures.len());
 }
@@ -846,7 +849,7 @@ fn replay_driver_reports_totals_are_consistent() {
 #[test]
 fn replay_driver_is_deterministic_twice() {
     let arena = Arena::new();
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
     let source = Source::forward(build_self_check(&arena), 13);
 
     let first = driver.run(&source).expect("run");
@@ -866,7 +869,7 @@ fn replay_driver_is_deterministic_twice() {
 #[test]
 fn replay_driver_is_order_insensitive() {
     let arena = Arena::new();
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
     let stored = build_self_check(&arena);
 
     let forward = driver
@@ -882,7 +885,7 @@ fn replay_driver_is_order_insensitive() {
 #[test]
 fn replay_driver_seed_is_report_only() {
     let arena = Arena::new();
-    let driver = ReplayDriver::default();
+    let driver = ReplayDriver;
     let stored = build_self_check(&arena);
 
     let low = driver
@@ -903,7 +906,7 @@ fn replay_driver_seed_is_report_only() {
 #[test]
 fn replay_driver_zero_transcript_boundary() {
     let arena = Arena::new();
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_self_check(&arena), 13))
         .expect("run");
 
@@ -922,7 +925,7 @@ fn replay_driver_debug_is_whitelisted() {
         format!("ReplayCase {{ case_id: \"{}\" }}", case.case_id)
     );
 
-    let run = ReplayDriver::default()
+    let run = ReplayDriver
         .run(&Source::forward(build_probe(&arena), 13))
         .expect("run");
     let run_text = format!("{:?}", run);

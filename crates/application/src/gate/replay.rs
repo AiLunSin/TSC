@@ -78,8 +78,8 @@ impl ReplayDriver {
             records.push(record);
         }
 
-        let total = u32::try_from(cases.len()).map_or(u32::MAX, |len| len);
-        let mismatched = u32::try_from(failures.len()).map_or(u32::MAX, |len| len);
+        let total = u32::try_from(cases.len()).unwrap_or(u32::MAX);
+        let mismatched = u32::try_from(failures.len()).unwrap_or(u32::MAX);
         let report = ReplayReport {
             total,
             matched: total.saturating_sub(mismatched),

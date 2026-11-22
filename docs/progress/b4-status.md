@@ -1055,3 +1055,53 @@ AC 三态：
 
 - 本次提交：`docs(status): 校准 README 实况并登记 P10 收口（§25）`；仅 `README.md` 与本节所在文件两个文件面。
 - 未推送：U-08 与 AC-B4-109 的远端取证需用户另行授权。
+## §26 CI clippy 修复与 test-target 告警收口（2026-11-22）
+
+> 本节登记 GitHub Actions `rust` matrix 全红与 `feature-coverage (C2)` 级联失败的修复。基线 `52c4bd3`；修复面恰 3 文件。
+
+### §26.1 根因与级联
+
+| 失败项 | 性质 | 根因 |
+|---|---|---|
+| `rust (x86_64-pc-windows-msvc)` | 真实缺陷 | `replay.rs:81,82` 的 `Result::map_or(u32::MAX, \|len\| len)` 触发 `clippy::map_or_identity`，`-D warnings` 下升级为 error |
+| `rust (aarch64-apple-darwin)` / `rust (x86_64-apple-darwin)` | 同因 | 同一源码与同一 clippy 版本，exit 101 |
+| `feature-coverage (C2)` | 纯级联 | `needs: rust` + `if: always()`；rust 在 clippy 步骤失败后未产出 coverage artifact，`test "${#files[@]}" -ge 1` 失败；rust 转绿即自愈，`ci.yml` 零改动 |
+
+lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` 后，`tests/gate_replay_driver.rs` 再暴露 22 处（`dead_code` 1、`field_reassign_with_default` 3、`default_constructed_unit_structs` 17、`unnecessary_min_or_max` 1）。
+
+### §26.2 最小改动
+
+| 文件 | 改动 |
+|---|---|
+| `crates/application/src/gate/replay.rs` | 2 行：`map_or(u32::MAX, \|len\| len)` → `unwrap_or(u32::MAX)`（语义等价） |
+| `crates/application/tests/gate_replay_driver.rs` | 删除未被读取的 `Arena.reference` 字段与初始化行；3 处改结构体更新语法；16 处 `ReplayDriver::default()` → `ReplayDriver`，第 17 处保留 `let driver: ReplayDriver = Default::default();` 作 `Default` 证据；`0.max(len)` → `len` |
+| `docs/progress/b4-status.md` | 本节 §26 |
+
+### §26.3 判据表
+
+| 判据 | 结果 |
+|---|---|
+| `grep -c 'map_or(' replay.rs` | 0 |
+| `grep -c 'unwrap_or(u32::MAX)' replay.rs` | 2 |
+| `grep -cE 'panic!\(\|unwrap\(\)\|expect\(' replay.rs` | 0 |
+| `grep -c 'ReplayDriver::default()' tests` / 留证行 | 0 / 1 |
+| `grep -c '0.max(' tests` | 0 |
+| `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
+| `cargo test --workspace` | 825 passed / 0 failed / 9 ignored |
+| `gate_replay_driver` | 22 passed / 0 failed |
+| `cargo fmt --all --check` | 0 |
+| 七条静态门禁 | 7×0 |
+| `--list` / `--list --ignored` | 834 / 9 |
+| `NEW_TARGETS` / AC 汇总 | 25 / 104 |
+| `test-name-inventory.sh --diff` | `removed=0` |
+
+### §26.4 边界与不宣称
+
+- 不改 `.github/workflows/ci.yml`、`scripts/**`、`Cargo.toml`/`Cargo.lock`、`deny.toml`；不新增 AC、target 或 `#[ignore]`；不以 `#[allow]`/`#[expect]` 规避告警。
+- `feature-coverage` 的自愈依赖 `rust` job 重新产出 artifact，需远端 run 复核。
+- 不宣称 macOS 已在本地实测；远端三平台转绿与 AC-B4-109 的远端取证仍需 push 后确认。
+
+### §26.5 提交记录
+
+- 本次提交：`fix(gate): 收敛 clippy 告警与 test-target 22 处（§26）`；恰 3 文件面。
+- 未推送：远端 CI 结论由用户 push 后回填。
