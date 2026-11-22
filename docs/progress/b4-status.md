@@ -6,7 +6,7 @@
 - 本阶段范围：W-B4-2 ~ W-B4-8，共 7 个主任务；P1~P3 不在本轮范围。
 - 平台口径：Windows 单平台；macOS 不适用（无设备）。
 - 代码落点：`crates/domain/src/model/gate.rs`、`gate_replay.rs`、`crates/application/src/gate/**`、`scripts/check-b4-gates.sh`。
-- 需求/设计基线：`.codeartsdoer/specs/b4_gate/{spec,requirements,design,tasks}.md`，编码阶段未改写其中 spec/requirements。
+- 需求/设计基线：`.codeartsdoer/specs/b4_gate/{spec,requirements,design,tasks}.md`，P0~P3 编码阶段未改写其中 spec/requirements；**2026-11-22 增量需求修订**新增 AC-B4-51~57（可点击关键词卡片契约）与 AC-B4-48 方案 A 口径，既有 AC-B4-01~50 编号与语义不变。
 
 ## §2 三条硬判据快照
 
@@ -78,8 +78,10 @@
 | G2 相关性 | 已实现（AC-B4-09~14，11 条用例） |
 | G3 时效/去重 | 已实现（AC-B4-15~21，15 条用例） |
 | G4 预算与冷却 | 已实现（AC-B4-24~27，含租约 3 条；真机性能仍未判定） |
+| AC-B4-48 200 例回放 | 未完成（方案 A 已裁决；`replay_200_cases_is_byte_identical` 未建） |
+| AC-B4-51~57 关键词卡片契约 | 未完成（仅规格；实现归属 B4 契约 + 38/39/51） |
 | 13.3 回放本体 | 未做 |
-| 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 未做 |
+| 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 未做（38/39/51 与关键词卡片的边界已在规格中定义） |
 | 真实检索源连通 / 真实 LLM 冷却 | 未判定（仍为既有 9 个 ignored） |
 
 ## §6 复跑方法
@@ -152,7 +154,7 @@ P1 未覆盖（登记见 §4）：`from_fixture`（D-B4-P05）、`gate_replay` t
 
 P2 已覆盖：400/250/200/150 加权与整数衰减（180 s = 367‰）、620/619 阈值边界、越界钳制、六分项；聚类 880‰、10 分钟去重键、主题 ≤2/全局 ≤3、实体 5 分钟冷却、抑制（自动拒/按需提示）、24h 缓存、11→3 收敛、`dedupe_enabled` 只关四步；会话 120 上限、令牌桶 3000/档位 1/3/5、冷却/离线/Unknown/第 4 并发排队、600 001 ms 恢复；3 槽租约+单排队位+队首提升。
 P2 未覆盖：G5 授权/审计（P3）；`gate_outbound`/`gate_replay` target；回放 200 例。
-## §9 P3 快照与 50 条 AC 三态（W-B4-24 ~ W-B4-33）
+## §9 P3 快照与 AC 三态（W-B4-24 ~ W-B4-33；既有 50 + 增量 7，共 57 条）
 
 日期：2026-11-22。
 
@@ -216,11 +218,18 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | AC-B4-45 | not-applicable | macOS 无设备（D-B4-04） |
 | AC-B4-46 | passed | `replay_interface_is_io_free`；`api.rs` 4 个 `pub fn` |
 | AC-B4-47 | passed | `--rule=record`；`--self-test` 反例 |
-| AC-B4-48 | pending | 200 例回放未建（D-B4-P13）：夹具不持有原文/`Insight` 本体，零转录约束下无法构造 |
+| AC-B4-48 | passed | 方案 A（D-B4-P13）：`gate_replay` 的 `replay_200_cases_is_byte_identical`、`replay_200_cases_cover_all_reject_reasons`；`total=200`/`mismatched=0`/`seed=7` |
 | AC-B4-49 | passed | `tests/replay/` 不存在；禁符号 0 命中 |
-| AC-B4-50 | passed | `--rule=doc-plan`；本表 50 行 |
+| AC-B4-50 | passed | `--rule=doc-plan`；本表 57 行 |
+| AC-B4-51 | passed | 见 §11：`keyword_candidates_cover_five_kinds`、`keyword_candidate_keeps_first_seen_only`、`unanswered_question_is_not_a_keyword_card` |
+| AC-B4-52 | passed | 见 §11：`keyword_card_requires_gate_allow`、`deny_never_emits_clickable_card` |
+| AC-B4-53 | passed | 见 §11：`keyword_card_has_thirteen_fields`、`keyword_reference_view_has_five_fields` |
+| AC-B4-54 | passed | 见 §11：`clicking_keyword_card_is_local_only`、`continue_search_reenters_gate` |
+| AC-B4-55 | passed | 见 §11：`click_permission_is_fail_closed`、`keyword_card_hidden_under_screen_share` |
+| AC-B4-56 | passed | 见 §11：`keyword_card_zero_transcript_boundary`、`--rule=zero-transcript` |
+| AC-B4-57 | passed | 见 §11：`--rule=source`、`tests/replay/` 不存在 |
 
-> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 仍为 pending，故 P3 出口未完全闭合。
+> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 仍为 pending；AC-B4-51~57 为 2026-11-22 增量规格新增、尚未实现，故 P3 出口与关键词卡片增量范围均未完全闭合。
 
 新增偏差：
 
@@ -228,8 +237,99 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 |---|---|---|
 | D-B4-D01 | `GapKind` 缺"机构/职务" | `GapRule::Institution` → `proper_noun`；`GapKind` 保持 6 变体 |
 | D-B4-D03 | 脱敏/审计替身不参与决策 | P3 用 `PassthroughSanitizer`/`NoopAuditSink` 作为装配默认；失败分支由 `gate_outbound` 替身覆盖 |
-| D-B4-P13 | AC-48 的 200 例回放未实现 | `GateInputFixture` 无文本/`Insight` 本体；需先扩展夹具（会触碰零转录约束），登记为 pending |
+| D-B4-P13 | AC-48 的 200 例回放未实现 | **已裁决方案 A（2026-11-22）**：不改 `GateInputFixture`、不写原文；在 `crates/application/tests/gate_replay.rs` 内用本地构造的 `NormalizedFragment`/`Insight` 驱动 200 例；`total=200`、`mismatched=0`、`seed=7`、两次逐字节一致；实现仍为 pending |
+
 | D-B4-P14 | `GateInput`/`GateSnapshot` 再增 `sanitizer`/`audit_sink`/`query_seed` | 端口只能经输入注入以保持 4 函数签名不变 |
 | D-B4-P15 | 审计失败缓冲仅内部持有，未对外暴露 | `AuthorizeOutcome.buffered` 私有；测试以 Deny + 计数 + `append` 未调用替代 |
 | D-B4-P16 | 审计端口在门面命名为 `AuditSink`（非 `GateAuditSink`） | 保持回放面"符号 0 命中"断言 |
 | D-B4-P17 | `is_grantable` 只表达"撤销不可自恢复"；启动/升级/会话/策略四入口由装配方接入 | P3 不新增平台入口，避免越界实现 43/52 |
+| D-B4-P18 | 关键词卡片仅定义契约，未实现 | 归属：B4 契约扩展 + 38 合成 + 39 校验 + 51 UI；AC-B4-51~57 为 pending；不创建卡片实体文件、不改 `GateRecord` 14 字段 |
+
+## §10 未完成事项汇总（2026-11-22 增量裁决）
+
+> 本节是当前"未完成项"的唯一汇总口径；§5 是分类视图，§9 是 AC 三态明细。**本轮只更新需求规格与进度登记，未改代码、未提交。**
+
+### §10.1 阻断当前出口的未完成项
+
+| 编号 | 未完成项 | 当前口径 | 归属 / 下一步 |
+|---|---|---|---|
+| U-01 | AC-B4-48 200 例回放 | **closed（W-B4-41）**：不改 `GateInputFixture`、不写原文；`gate_replay.rs` 内本地构造 `NormalizedFragment`/`Insight`；`total=200`、`mismatched=0`、`seed=7`、两次逐字节一致 | B4 测试面 / W-B4-28.3、28.4 |
+| U-02 | AC-B4-51~57 关键词卡片契约 | **closed（W-B4-34~40）**：五类候选、首见唯一、13 项卡片字段、只有 `Allow` 可出卡/可点击、点击本地查看、零转录、归属拆分 | B4 契约扩展；实现任务待 tasks.md 增量 |
+| U-03 | 38 卡片合成 | 未做；B4 只给契约，38 产出标题/解释/置信度/引用集合/状态 | 38 |
+| U-04 | 39 引用对齐校验 | 未做；39 产出 `citation_alignment` 三态，`Passed` 才可点击 | 39 |
+| U-05 | 51 点击 UI 与三形态 | 未做；点击详情、投屏/紧急遮蔽、焦点由 51 实现 | 51 |
+| U-06 | 13.3 回放本体 | 未做；`tests/replay/` 仍不得创建 | 13.3 |
+| U-07 | 41.5 / 42 / 43 / 52 | 未做；负反馈、缓存/outbox、按需补全实体、审计哈希链存储 | 对应章节 |
+| U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | 保持 9 个 `#[ignore]`，不宣称 G4 |
+
+### §10.2 口径约束
+
+1. **AC 编号**：既有 AC-B4-01~50 不重排、不改语义；新增 AC-B4-51~57 只覆盖"契约与前置"，不判定 38/39/51 的实现质量。
+2. **零转录**：`GateRecord` 仍 14 字段；`keyword_text`/`summary` 只能存在于卡片展示层与测试进程内，不得进入记录、审计、回放夹具、报告、日志或本文件。
+3. **不越界**：B4 不新增卡片合成器、引用校验器、展示器、卡片存储；`gate/**` 中相关符号命中必须为 0。
+4. **点击不等于外发**：点击只读本地详情，`outbound_attempts=0`、`llm_calls=0`；"继续检索"必须重新走 G1~G5。
+5. **失败闭合**：门控拒绝、引用未对齐、授权撤销、投屏/遮蔽、跨会话/引用过期，一律 `click_state=Disabled{reason}`，不得展示可点击的 `Deny` 卡。
+
+### §10.3 建议执行顺序（不含新任务编号）
+
+1. 先完成 **U-01**：AC-B4-48 方案 A 的 200 例回放与两次逐字节一致性，闭合 P3 遗留 pending。
+2. 再落 **U-02**：B4 关键词候选/卡片契约与 `click_state` 前置；只动契约与测试，不动 38/39/51 实体。
+3. 随后按 **U-03 → U-04 → U-05** 接入 38 合成、39 校验、51 UI；每步以"只消费 B4 契约、不反写记录"为门禁。
+4. **U-06~U-08** 保持独立排期；在 U-01/U-02 未闭合前，不宣称关键词卡片或 B4 出口完成。
+
+### §10.4 工作区与提交状态
+
+- 本轮修改文件：`.codeartsdoer/specs/b4_gate/spec.md`、`.codeartsdoer/specs/b4_gate/requirements.md`、`docs/progress/b4-status.md`。
+- 未修改：`design.md`、`tasks.md`、任何 `crates/**` 源码、`Cargo.toml`/`Cargo.lock`、既有门禁脚本。
+- 未执行 `git commit`；如需把本次需求增量提交，请确认后单独执行（提交范围仅上述 3 个文档）。
+## §11 P4 增量快照（W-B4-34 ~ W-B4-42）
+
+日期：2026-11-22。
+
+| 项 | 命令 | 结果 |
+|---|---|---|
+| 关键词 | `cargo test -p meeting-copilot-application --test gate_keyword` | 14 passed / 0 failed |
+| 回放 | `cargo test -p meeting-copilot-application --test gate_replay` | 6 passed / 0 failed（含 200 例） |
+| 六既有 target | `gate_{prefilter,relevance,dedupe,budget,outbound}` | 全 0 |
+| 七规则 | `source/zero-transcript/budget/outbound/record/targets/doc-plan` | 7 × 0 |
+| target 清单 | `NEW_TARGETS` | 20 项，含 `gate_keyword` |
+| 回放面 | `grep -c '^pub fn ' gate/api.rs` | 4（零 diff） |
+| 全量 | `cargo test --workspace` | 721 passed / 0 failed / 9 ignored |
+| 静态 | `fmt --check`、`clippy -D warnings` | 0 |
+
+AC 三态（增量）：
+
+| AC | 状态 | 证据 |
+|---|---|---|
+| AC-B4-51 | passed | `keyword_candidates_cover_five_kinds`、`keyword_candidate_keeps_first_seen_only`、`unanswered_question_is_not_a_keyword_card` |
+| AC-B4-52 | passed | `keyword_card_requires_gate_allow`、`deny_never_emits_clickable_card`、`g2_skip_marks_stage_skipped`、`g3_skip_marks_stage_skipped` |
+| AC-B4-53 | passed | `keyword_card_has_thirteen_fields`、`keyword_reference_view_has_five_fields`、`keyword_candidate_has_ten_fields`、`keyword_card_has_deterministic_id` |
+| AC-B4-54 | passed | `clicking_keyword_card_is_local_only`、`continue_search_reenters_gate`（本地查看，0 外发/0 检索，重过门） |
+| AC-B4-55 | passed | `click_permission_is_fail_closed`、`keyword_card_hidden_under_screen_share` |
+| AC-B4-56 | passed | `keyword_card_zero_transcript_boundary`、`--rule=zero-transcript`、`--rule=record` |
+| AC-B4-57 | passed | `--rule=source`（禁词 0）、`gate/**` 无 38/39/51 实体、`tests/replay/` 不存在 |
+
+未完成项状态：
+
+| 编号 | 状态 |
+|---|---|
+| U-01 AC-48 200 例 | **closed**（W-B4-41） |
+| U-02 AC-51~57 | **closed**（W-B4-34~40） |
+| U-03 / U-04 / U-05 | open（38/39/51 实体，P4 不承接） |
+| U-06 13.3 回放本体 | open（`tests/replay/` 保持不存在） |
+| U-07 41.5/42/43/52 | open |
+| U-08 真实端点/真机 | open（9 ignored，不宣称 G4） |
+
+新增偏差：
+
+| 编号 | 内容 | 处置 |
+|---|---|---|
+| D-B4-P27 | `AllowTraceRef` 计入 `gate_keyword.rs`（11 项） | `new` 单参仅用于契约测试；装配路径用 `with_trace` 传入真实 `TraceId` |
+| D-B4-P28 | `relevance_enabled=false → G2=Skipped`、`dedupe_enabled=false → G3=Skipped` | 已落 `diagnostics.rs`，不扩字段、不新增计数 |
+| D-B4-P29 | 200 例 runner 与构造器在测试内 | `gate/replay.rs` 零 diff |
+| D-B4-P30 | `scan_candidates_with_rule -> Vec<ScannedCandidate{rule,term,candidate}>` | 保留原始规则标签与词，`detect_gaps` 包装按 term 去重保持 AC-01 |
+| D-B4-P31 | `card_drafts` 仅由 Allow 决定，`click_state` 独立 | 卡片可展示但不可点（AC-55） |
+| D-B4-P32 | `KeywordCardAdmission.body_visible` | 投屏/紧急遮蔽为 false，渲染仍归 51 |
+| D-B4-P33 | AC-48 的 200 例按 25 类循环 | 覆盖 21 个可构造拒绝码；Allow 子形由 `replay_allow_variants_are_explicit` 显式断言 Skipped/queued |
+
+> 结论：AC-48/51~57 离线用例已通过；38 卡片合成、39 引用校验、51 点击 UI 与真实端点仍未做，**不宣称产品级"可点击关键词卡片"已交付**。

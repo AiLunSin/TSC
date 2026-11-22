@@ -118,9 +118,26 @@ pub fn detect_gaps_with_counters(
     scan_candidates(scan, counters)
 }
 
+pub(crate) struct ScannedCandidate {
+    pub rule: GapRule,
+    pub term: String,
+    pub candidate: GapCandidate,
+}
+
 fn scan_candidates(scan: &GapScanInput<'_>, counters: &mut GateCounters) -> Vec<GapCandidate> {
-    let mut out = Vec::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
+    scan_candidates_with_rule(scan, counters)
+        .into_iter()
+        .filter(|item| seen.insert(item.term.clone()))
+        .map(|item| item.candidate)
+        .collect()
+}
+
+pub(crate) fn scan_candidates_with_rule(
+    scan: &GapScanInput<'_>,
+    counters: &mut GateCounters,
+) -> Vec<ScannedCandidate> {
+    let mut out = Vec::new();
 
     for fragment in scan.fragments {
         let reference = fragment.reference.clone();
@@ -141,9 +158,6 @@ fn scan_candidates(scan: &GapScanInput<'_>, counters: &mut GateCounters) -> Vec<
         }
 
         for (rule, term) in detect_terms(scan, text) {
-            if !seen.insert(term.clone()) {
-                continue;
-            }
             if scan.explained_terms.iter().any(|known| known == &term) {
                 continue;
             }
@@ -157,12 +171,16 @@ fn scan_candidates(scan: &GapScanInput<'_>, counters: &mut GateCounters) -> Vec<
                 counters.bump(GateCounter::GateL0LowConfidence);
                 continue;
             }
-            out.push(GapCandidate {
-                kind: gap_kind(rule),
-                trigger_span: fragment.span,
-                confidence,
-                dedupe_key: derive_dedupe_key(rule, &term, fragment.span),
-                state: GapState::Detected,
+            out.push(ScannedCandidate {
+                rule,
+                term: term.clone(),
+                candidate: GapCandidate {
+                    kind: gap_kind(rule),
+                    trigger_span: fragment.span,
+                    confidence,
+                    dedupe_key: derive_dedupe_key(rule, &term, fragment.span),
+                    state: GapState::Detected,
+                },
             });
         }
 
@@ -173,16 +191,20 @@ fn scan_candidates(scan: &GapScanInput<'_>, counters: &mut GateCounters) -> Vec<
                 >= GapScanInput::QUESTION_WAIT_MS
             {
                 let confidence = Confidence::new(0.85).unwrap_or(Confidence::ZERO);
-                out.push(GapCandidate {
-                    kind: GapKind::UnansweredQuestion,
-                    trigger_span: fragment.span,
-                    confidence,
-                    dedupe_key: derive_dedupe_key(
-                        GapRule::UnansweredQuestion,
-                        "unanswered_question",
-                        fragment.span,
-                    ),
-                    state: GapState::Detected,
+                out.push(ScannedCandidate {
+                    rule: GapRule::UnansweredQuestion,
+                    term: "unanswered_question".to_owned(),
+                    candidate: GapCandidate {
+                        kind: GapKind::UnansweredQuestion,
+                        trigger_span: fragment.span,
+                        confidence,
+                        dedupe_key: derive_dedupe_key(
+                            GapRule::UnansweredQuestion,
+                            "unanswered_question",
+                            fragment.span,
+                        ),
+                        state: GapState::Detected,
+                    },
                 });
             }
         }
@@ -190,11 +212,22 @@ fn scan_candidates(scan: &GapScanInput<'_>, counters: &mut GateCounters) -> Vec<
 
     out.sort_by(|left, right| {
         right
+            .candidate
             .confidence
-            .partial_cmp(&left.confidence)
+            .partial_cmp(&left.candidate.confidence)
             .unwrap_or(Ordering::Equal)
-            .then(left.trigger_span.start_ms.cmp(&right.trigger_span.start_ms))
-            .then(left.dedupe_key.as_str().cmp(right.dedupe_key.as_str()))
+            .then(
+                left.candidate
+                    .trigger_span
+                    .start_ms
+                    .cmp(&right.candidate.trigger_span.start_ms),
+            )
+            .then(
+                left.candidate
+                    .dedupe_key
+                    .as_str()
+                    .cmp(right.candidate.dedupe_key.as_str()),
+            )
     });
 
     for _ in 0..out.len() {

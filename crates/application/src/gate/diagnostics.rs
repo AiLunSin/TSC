@@ -68,6 +68,7 @@ pub fn evaluate_gate_with_counters(
     per_stage.0[0] = trace(StageResult::Allow, None, elapsed);
 
     let threshold = policy.threshold_milli();
+    let g2_skipped = !policy.relevance_enabled;
     let g2_started = clock.now_ms();
     let mut scored = Vec::new();
     for candidate in g1.candidates {
@@ -81,7 +82,7 @@ pub fn evaluate_gate_with_counters(
             threshold_profile: policy.threshold_profile,
         };
         let score = relevance::compute(&relevance_input, policy);
-        if score.score_milli < threshold {
+        if !g2_skipped && score.score_milli < threshold {
             counters.bump(GateCounter::GateL2LowRelevance);
             counters.bump(GateCounter::GateDenyTotal);
             per_stage.0[1] = trace(
@@ -110,11 +111,20 @@ pub fn evaluate_gate_with_counters(
             relevance: score,
         });
     }
-    per_stage.0[1] = StageTrace {
-        calls: u16::try_from(scored.len()).unwrap_or(u16::MAX),
-        result: StageResult::Allow,
-        reason: None,
-        elapsed_ms: elapsed_ms(g2_started, clock.now_ms()),
+    per_stage.0[1] = if g2_skipped {
+        StageTrace {
+            calls: 0,
+            result: StageResult::Skipped,
+            reason: None,
+            elapsed_ms: 0,
+        }
+    } else {
+        StageTrace {
+            calls: u16::try_from(scored.len()).unwrap_or(u16::MAX),
+            result: StageResult::Allow,
+            reason: None,
+            elapsed_ms: elapsed_ms(g2_started, clock.now_ms()),
+        }
     };
 
     let g3_started = clock.now_ms();
@@ -128,7 +138,11 @@ pub fn evaluate_gate_with_counters(
         per_stage.0[2] = trace(StageResult::Deny, Some(reason), g3_elapsed);
         return deny_outcome(reason, GateStage::G3, cooldown, per_stage, counters);
     }
-    per_stage.0[2] = trace(StageResult::Allow, None, g3_elapsed);
+    per_stage.0[2] = if g3.skipped {
+        trace(StageResult::Skipped, None, g3_elapsed)
+    } else {
+        trace(StageResult::Allow, None, g3_elapsed)
+    };
     if g3.skipped {
         counters.bump(GateCounter::GateStageSkippedTotal);
     }

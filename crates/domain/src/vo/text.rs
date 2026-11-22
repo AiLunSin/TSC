@@ -92,6 +92,7 @@ bounded_text!(ShortText, "要点文本", 60);
 bounded_text!(TitleText, "标题", 40);
 bounded_text!(ConclusionText, "一句话结论", 80);
 bounded_text!(UtteranceText, "对话片段", 2000);
+bounded_text!(NormalizedTerm, "归一化术语", 120);
 
 impl ShortText {
     /// 无法判定类型时的安全降级：截断到上限并保留可读前缀。

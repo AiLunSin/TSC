@@ -6,6 +6,7 @@ pub mod card;
 pub mod channel;
 pub mod enums;
 pub mod gate;
+pub mod gate_keyword;
 pub mod gate_replay;
 pub mod governance;
 pub mod insight;
@@ -32,6 +33,7 @@ pub use channel::{
 pub use enums::*;
 pub use gate::*;
 pub use gate::{GateRejectReason, Visibility};
+pub use gate_keyword::*;
 pub use gate_replay::*;
 pub use governance::{AuditRecord, EffectivePolicy, LexiconTerm, OutboundGrant};
 pub use insight::{

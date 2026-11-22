@@ -26,6 +26,7 @@ pub(crate) mod clock;
 pub(crate) mod dedupe;
 pub(crate) mod diagnostics;
 pub mod input;
+pub mod keyword;
 pub(crate) mod lease;
 pub(crate) mod outbound;
 pub(crate) mod prefilter;

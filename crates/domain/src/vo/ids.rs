@@ -85,6 +85,7 @@ id_type!(ProviderId, "检索源 ID");
 id_type!(TaskId, "任务 ID");
 id_type!(AuditId, "审计 ID");
 id_type!(ReferenceRef, "来源引用");
+id_type!(KeywordRef, "关键词引用");
 id_type!(ActorRef, "操作者");
 id_type!(ResourceRef, "操作对象");
 

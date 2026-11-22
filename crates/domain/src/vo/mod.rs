@@ -11,9 +11,11 @@ mod time;
 
 pub use confidence::Confidence;
 pub use ids::{
-    ActorRef, AuditId, CardRef, InsightRef, ProviderId, ReferenceRef, ResourceRef, SessionId,
-    TaskId, TraceId, UtteranceRef,
+    ActorRef, AuditId, CardRef, InsightRef, KeywordRef, ProviderId, ReferenceRef, ResourceRef,
+    SessionId, TaskId, TraceId, UtteranceRef,
 };
 pub use sanitized::{SanitizedQuery, URL_LIMIT};
-pub use text::{ConclusionText, ShortText, TextBoundError, TitleText, UtteranceText};
+pub use text::{
+    ConclusionText, NormalizedTerm, ShortText, TextBoundError, TitleText, UtteranceText,
+};
 pub use time::{AudioClock, ClockError, MonoMillis, WallClock};

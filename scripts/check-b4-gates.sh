@@ -14,6 +14,7 @@ MISSING=0
 GATE_DIR="crates/application/src/gate"
 GATE_MODEL="crates/domain/src/model/gate.rs"
 GATE_REPLAY="crates/domain/src/model/gate_replay.rs"
+GATE_KEYWORD="crates/domain/src/model/gate_keyword.rs"
 STATUS_FILE="docs/progress/b4-status.md"
 SPEC_FILE=".codeartsdoer/specs/b4_gate/spec.md"
 RECORD_WHITELIST="schema_version trace_id session_id candidate_ref insight_ref trigger per_stage decision stopped_at budget_remaining cooldown_until_ms authorization_status skipped_stages decided_at_ms"
@@ -86,11 +87,12 @@ require_core_faces() {
   need_dir "${GATE_DIR}" || ok=1
   need_file "${GATE_MODEL}" || ok=1
   need_file "${GATE_REPLAY}" || ok=1
+  need_file "${GATE_KEYWORD}" || ok=1
   return "${ok}"
 }
 
 core_files() {
-  printf '%s\n' "${GATE_MODEL}" "${GATE_REPLAY}"
+  printf '%s\n' "${GATE_MODEL}" "${GATE_REPLAY}" "${GATE_KEYWORD}"
   gate_files
 }
 
@@ -212,6 +214,9 @@ rule_zero_transcript() {
   while IFS= read -r file; do
     files+=("${file}")
   done < <(gate_files)
+  if [[ -f "${GATE_KEYWORD}" ]]; then
+    files+=("${GATE_KEYWORD}")
+  fi
   if compgen -G "crates/application/tests/gate_*.rs" > /dev/null; then
     while IFS= read -r file; do
       files+=("${file}")
@@ -235,7 +240,7 @@ rule_targets() {
   local names
   names="$(grep -m1 '^NEW_TARGETS=' "${inventory}" | sed -E "s/^NEW_TARGETS='//; s/'$//" | tr ' ' '\n')"
   local target
-  for target in gate_prefilter gate_relevance gate_dedupe gate_budget gate_outbound gate_replay; do
+  for target in gate_prefilter gate_relevance gate_dedupe gate_budget gate_outbound gate_replay gate_keyword; do
     if ! printf '%s\n' "${names}" | grep -qx "${target}"; then
       echo "TARGETS-MISSING: ${target}"
       FAIL=1
