@@ -177,6 +177,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 | 文档 | 说明 |
 |---|---|
+| `docs/ABOUT.md` | 项目简介、当前状态与能力边界 |
 | `docs/sdd/spec.md` | 需求规格与验收标准 |
 | `docs/sdd/design.md` | 技术方案与追溯矩阵 |
 | `docs/sdd/tasks.md` | 分批次任务与门禁 |
