@@ -8,16 +8,22 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jieba_rs::{Jieba, KeywordExtract, KeywordExtractConfig, TfIdf};
+use meeting_copilot_application::gate::keyword::{keyword_card_admission, KeywordCardEnv};
 use meeting_copilot_application::settings::{CardSnapshotEntry, CardSnapshotSource};
-use meeting_copilot_domain::model::enums::TriggerKind;
+use meeting_copilot_domain::model::card::DedupeKey;
+use meeting_copilot_domain::model::enums::{GapState, TriggerKind};
+use meeting_copilot_domain::model::gate::{AuthorizationStatus, GateDecision};
 use meeting_copilot_domain::model::gate_keyword::{
-    AllowTraceRef, CitationAlignment, ClickState, KeywordCardDraft, KeywordCardStatus, KeywordKind,
+    CitationAlignment, KeywordCandidate, KeywordCardDraft, KeywordCardStatus, KeywordKind,
     ReferenceAccessStatus, ReferenceTrustTier, ReferenceView,
 };
+use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::vo::{
-    CardRef, ConclusionText, Confidence, NormalizedTerm, ReferenceRef, TitleText, TraceId,
+    CardRef, ConclusionText, Confidence, KeywordRef, NormalizedTerm, ReferenceRef, SessionId,
+    TitleText,
 };
 
+use crate::ipc::card_gate::{self, LocalGate};
 use crate::ipc::dto::IpcErrorDto;
 
 const STOPWORDS: &[&str] = &[
@@ -61,6 +67,14 @@ impl CardStore {
             ));
         }
         let excerpt: String = text.trim().chars().take(80).collect();
+        let now = now_ms();
+        let Some(gate) = card_gate::evaluate(text, self.sequence.load(Ordering::Relaxed), now)
+        else {
+            return Ok(0);
+        };
+        if matches!(&gate.decision, GateDecision::Deny { .. }) {
+            return Ok(0);
+        }
         let mut store = self
             .cards
             .lock()
@@ -71,7 +85,7 @@ impl CardStore {
                 store.remove(0);
             }
             let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
-            match build_draft(sequence, &keyword, &excerpt) {
+            match build_draft(sequence, &keyword, &excerpt, &gate) {
                 Some(draft) => {
                     store.push(CardSnapshotEntry::Draft(draft));
                     added += 1;
@@ -117,15 +131,55 @@ impl CardSnapshotSource for CardStore {
     }
 }
 
-fn build_draft(sequence: u64, keyword: &str, excerpt: &str) -> Option<KeywordCardDraft> {
+fn build_draft(
+    sequence: u64,
+    keyword: &str,
+    excerpt: &str,
+    gate: &LocalGate,
+) -> Option<KeywordCardDraft> {
     let title: String = keyword.chars().take(TitleText::LIMIT).collect();
     let summary: String = excerpt.chars().take(ConclusionText::LIMIT).collect();
+    let keyword_text = TitleText::new(title).ok()?;
+    let normalized_term = NormalizedTerm::new(keyword).ok()?;
+    let candidate = KeywordCandidate {
+        keyword_ref: KeywordRef::new(format!("kw-{sequence:016}")).ok()?,
+        keyword_text: keyword_text.clone(),
+        normalized_term: normalized_term.clone(),
+        keyword_kind: classify_kind(keyword),
+        trigger_span: TextRange {
+            start_ms: 0,
+            end_ms: 1,
+        },
+        confidence: Confidence::new(0.9).ok()?,
+        dedupe_key: DedupeKey::new(format!("{sequence:032x}")).ok()?,
+        state: GapState::Detected,
+        session_id: gate.session_id.clone(),
+        source_insight_ref: None,
+    };
+    let env = KeywordCardEnv {
+        authorization_status: AuthorizationStatus::Granted,
+        authorization_revoked: false,
+        screen_share: false,
+        emergency_masked: false,
+        current_session: &gate.session_id,
+        card_status: KeywordCardStatus::Displayed,
+    };
+    let admission = keyword_card_admission(
+        &candidate,
+        &gate.decision,
+        &gate.trace_id,
+        CitationAlignment::Passed,
+        &env,
+    );
+    if !admission.card_drafts {
+        return None;
+    }
     Some(KeywordCardDraft {
         card_id: CardRef::new(format!("card-{sequence}")).ok()?,
-        keyword_text: TitleText::new(title).ok()?,
-        normalized_term: NormalizedTerm::new(keyword).ok()?,
+        keyword_text,
+        normalized_term,
         keyword_kind: classify_kind(keyword),
-        trigger: TriggerKind::Auto,
+        trigger: TriggerKind::OnDemand,
         triggered_at_ms: now_ms(),
         confidence: Confidence::new(0.9).ok()?,
         summary: ConclusionText::new(summary).ok(),
@@ -137,12 +191,9 @@ fn build_draft(sequence: u64, keyword: &str, excerpt: &str) -> Option<KeywordCar
             alignment: CitationAlignment::Passed,
         }],
         citation_alignment: CitationAlignment::Passed,
-        gate_decision_ref: AllowTraceRef::with_trace(
-            TraceId::new(format!("trace-{sequence}")).ok()?,
-            None,
-        ),
+        gate_decision_ref: admission.allow_ref?,
         card_status: KeywordCardStatus::Displayed,
-        click_state: ClickState::Enabled,
+        click_state: admission.click_state,
     })
 }
 
@@ -205,10 +256,16 @@ mod tests {
     }
 
     #[test]
-    fn builds_clickable_card_with_local_source() {
-        let draft = build_draft(1, "阿里云", "会议讨论阿里云方案").expect("draft");
-        assert_eq!(draft.click_state, ClickState::Enabled);
+    fn gate_allows_local_clickable_card_with_real_allow_trace() {
+        let gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000).expect("gate");
+        assert!(matches!(&gate.decision, GateDecision::Allow { .. }));
+        let draft = build_draft(1, "阿里云", "会议讨论阿里云方案", &gate).expect("draft");
+        assert_eq!(
+            draft.click_state,
+            meeting_copilot_domain::model::gate_keyword::ClickState::Enabled
+        );
         assert_eq!(draft.citation_alignment, CitationAlignment::Passed);
+        assert_eq!(draft.gate_decision_ref.trace_id(), &gate.trace_id);
         assert_eq!(draft.references.len(), 1);
         assert_eq!(
             draft.references[0].trust_tier,
@@ -216,6 +273,18 @@ mod tests {
         );
         assert!(draft.click_state_is_consistent());
         assert!(draft.summary_is_consistent());
+    }
+
+    #[test]
+    fn denied_gate_produces_no_card() {
+        let mut gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000).expect("gate");
+        gate.decision = GateDecision::Deny {
+            reason: meeting_copilot_domain::model::gate::GateRejectReason::ConsentMissing,
+            stopped_at: meeting_copilot_domain::model::gate::GateStage::G1,
+            per_stage: meeting_copilot_domain::model::gate::PerStageResults::empty(),
+            cooldown_until_ms: None,
+        };
+        assert!(build_draft(1, "阿里云", "会议讨论阿里云方案", &gate).is_none());
     }
 
     #[test]

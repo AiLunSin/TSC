@@ -2,6 +2,7 @@
 
 pub mod asr;
 pub mod capture;
+mod card_gate;
 pub mod card_store;
 pub mod cards;
 pub mod catalog;
