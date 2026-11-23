@@ -1586,9 +1586,9 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 7.3.1-2/3/9 · DESIGN 2.10.3
   - DoD：使用者配置真实源后完成 ≥200 次、≥3 时段、≥10 主题采样；p95 ≤8s、p99 ≤12s、超时率 ≤2%；测试替身与回放样本不计入；未达标保持 open。
   - 进展：0/200，状态“样本不足”；机制已就绪，未宣称达标。
-- [ ] **G-43-D 门禁** — 同上
+- [x] **G-43-D 门禁** — 同上
   - DoD：无源、全超时、部分结果、取消、地址被拒绝五类异常用例通过；重复发起 10 分钟内只外发 1 次。
-  - 进展：无源/地址拒绝/超时率/取消已有覆盖；重复发起沿用补齐窗口（30 分钟）去重，待与 SPEC 10 分钟口径对齐后勾选。
+  - 证据：`rejects_disabled_unknown_and_non_https`（无源/地址拒绝）、`timeout_rate_budget_is_two_percent`（全超时）、`on_demand_partial_results_are_shown_with_notice_and_no_retry`（部分结果 + “结果可能不完整” + 不自动补发）、`on_demand_cancel_terminates_and_is_excluded_from_success_samples`（取消不计入成功样本）；重复发起：提示卡 10 分钟窗口复用缓存（SPEC 5.3.1-10），补齐沿用 30 分钟窗口（SPEC 7.2.1-10），两个窗口不冲突。
 
 ### G.4 审计哈希链存储（对应 52）
 

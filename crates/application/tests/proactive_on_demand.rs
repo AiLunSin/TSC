@@ -3,6 +3,9 @@
 use std::net::IpAddr;
 use std::sync::Mutex;
 
+use meeting_copilot_application::proactive::on_demand::{
+    decide, OnDemandDecision, ProviderAttempt,
+};
 use meeting_copilot_application::proactive::on_demand_probe::{
     measure_first_card_ms, summarize, OnDemandSampler, SampleStatus,
 };
@@ -237,4 +240,43 @@ fn sampler_records_and_reports_samples() {
     let mut invalid = sample(2, 900, OnDemandOutcome::Success);
     invalid.sample_id = "  ".to_owned();
     assert!(sampler.record(&invalid).is_err());
+}
+
+fn attempt(outcome: OnDemandOutcome, count: usize) -> ProviderAttempt {
+    ProviderAttempt::new(
+        ProviderId::new("provider-1").expect("provider"),
+        outcome,
+        count,
+    )
+}
+
+#[test]
+fn on_demand_without_enabled_source_is_not_a_failed_fetch() {
+    assert_eq!(decide(false, &[]), OnDemandDecision::NoSource);
+}
+
+#[test]
+fn on_demand_partial_results_are_shown_with_notice_and_no_retry() {
+    let decision = decide(
+        false,
+        &[
+            attempt(OnDemandOutcome::Success, 2),
+            attempt(OnDemandOutcome::Failed, 0),
+        ],
+    );
+    assert_eq!(decision, OnDemandDecision::Partial { sources: 1 });
+    assert_eq!(decision.notice(), Some("结果可能不完整"));
+}
+
+#[test]
+fn on_demand_cancel_terminates_and_is_excluded_from_success_samples() {
+    let decision = decide(true, &[attempt(OnDemandOutcome::Success, 3)]);
+    assert_eq!(decision, OnDemandDecision::Canceled);
+
+    let samples = vec![
+        sample(1, 400, OnDemandOutcome::Canceled),
+        sample(2, 900, OnDemandOutcome::Success),
+    ];
+    let report = summarize(&samples);
+    assert_eq!(report.real_sample_count, 1);
 }
