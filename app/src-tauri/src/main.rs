@@ -139,6 +139,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             ipc_version,
             ipc::log::open_log,
+            ipc::meeting::meeting_status,
             ipc::settings_snapshot,
             ipc::settings_probe,
             ipc::settings_save,

@@ -1179,7 +1179,7 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | **D-B4-P144** | 凭据存储采用 **Windows 凭据管理器**（通用凭据、本机持久、唯一天然目标名），**不采用 DPAPI**；实现只落 `crates/platform-win/src/secure_store.rs`（`cfg(windows)`），非 Windows 返回 `Unsupported` | 凭据管理器由系统托管、按用户隔离、可显式删除、无自管密文文件；DPAPI 需自管密文文件与文件权限/备份/漫游策略，触碰"Key 不落盘"红线 | 仅 Windows；无自管密文文件；不新增 mac 分支 |
 | **D-B4-P145** | 非敏感配置落 Tauri 配置目录的 `settings.json`，**恰 4 键**（schema 版本/模型下标/端点下标/超时），原子写，损坏回默认 | 只持久化可公开的状态；下标化天然避免地址与模型名入库；原子写避免半配置 | 4 键封闭；不存凭据/地址/主机名/模型名 |
 | **D-B4-P146** | 探针由装配层经 `ProbeExecutor` 端口执行，生产适配器调用既有网关装配与鉴权头注入，启用既有 HTTPS feature（不新增 registry 包）；失败分类映射固定 | 两段式沿用 B4 口径；UI 不直连；不新增第二套重试/熔断/计时 | `application` 定端口；`app` 实现；51 与前端 0 网络符号 |
-| **D-B4-P147** | IPC 面固定 **6 个命令**（2026-11-23 增补 `open_log` 为第 7 个，用于设置页"打开日志"，见 `open-items.md X-AUD-08`）；`SettingsIntent` 不跨 IPC；Key 仅一次性入参，不进全局状态 | 意图类型含内存凭据，不能作 DTO；命令内纯函数可单测；避免 Key 常驻 | 6 命令封闭（现为 7）；DTO 无凭据字段 |
+| **D-B4-P147** | IPC 面固定 **6 个命令**（2026-11-23 增补 `open_log` 与 `meeting_status` 为第 7、8 个，见 `open-items.md X-AUD-08`）；`SettingsIntent` 不跨 IPC；Key 仅一次性入参，不进全局状态 | 意图类型含内存凭据，不能作 DTO；命令内纯函数可单测；避免 Key 常驻 | 6 命令封闭（现为 8）；DTO 无凭据字段 |
 | **D-B4-P148** | 前端 IPC 采用 `@tauri-apps/api`（唯一新增 npm 依赖）；不启用 `withGlobalTauri` | 官方同代绑定、类型安全；全局面更大且无类型 | 新增 1 个 npm 依赖（见 C-UI-01） |
 | **D-B4-P149** | 新增 `KeywordCard`/`CardDetail` 组件，只读 DTO；禁用卡不绑定回调；隐藏态只渲染角标；详情为内联面板 | 与 51 视图契约一一对应；禁用语义与可访问性可在静态层判定 | `app/src/cards/**`；不改 51 视图 |
 | **D-B4-P150** | 屏蔽事实只来自注入（`screen_share`/`emergency_masked`）；本轮不实现真实投屏检测 API | 平台 API 不可离线判定；只消费事实可保持 51 边界 | `ViewFacts` 来源固定；不宣称真机 |

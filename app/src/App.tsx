@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { invokeCommand } from "./bridge/tauri";
 import type { CardDetailDto, KeywordCardViewDto } from "./bridge/types";
@@ -20,12 +20,25 @@ const STATE_TEXT: Record<ChannelState, string> = {
   off: "未启用",
 };
 
+function formatElapsed(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number): string => String(value).padStart(2, "0");
+  return hours > 0
+    ? `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+    : `${pad(minutes)}:${pad(seconds)}`;
+}
+
 export default function App() {
   const [active, setActive] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [cards, setCards] = useState<readonly KeywordCardViewDto[]>([]);
   const [cardError, setCardError] = useState<string | null>(null);
   const [detail, setDetail] = useState<CardDetailDto | null>(null);
+  const [meetingApp, setMeetingApp] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const meetingStartedAt = useRef<number | null>(null);
 
   const loadCards = useCallback(async () => {
     try {
@@ -40,6 +53,49 @@ export default function App() {
   useEffect(() => {
     void loadCards();
   }, [loadCards]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshMeeting(): Promise<void> {
+      try {
+        const app = await invokeCommand<string | null>("meeting_status");
+        if (!cancelled) {
+          setMeetingApp(app);
+        }
+      } catch {
+        if (!cancelled) {
+          setMeetingApp(null);
+        }
+      }
+    }
+    void refreshMeeting();
+    const id = window.setInterval(() => {
+      void refreshMeeting();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (meetingApp === null) {
+      meetingStartedAt.current = null;
+      setElapsedSeconds(0);
+      return;
+    }
+    if (meetingStartedAt.current === null) {
+      meetingStartedAt.current = Date.now();
+    }
+    const id = window.setInterval(() => {
+      if (meetingStartedAt.current !== null) {
+        setElapsedSeconds(Math.floor((Date.now() - meetingStartedAt.current) / 1000));
+      }
+    }, 1000);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [meetingApp]);
 
   async function openCard(cardId: string): Promise<void> {
     try {
@@ -63,8 +119,12 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-meta">
-          <span className="pill">未检测到会议</span>
-          <span className="timer">--:--</span>
+          <span className="pill">
+            {meetingApp === null ? "未检测到会议" : `检测到会议：${meetingApp}`}
+          </span>
+          <span className="timer">
+            {meetingApp === null ? "--:--" : formatElapsed(elapsedSeconds)}
+          </span>
           <button
             className="btn"
             type="button"

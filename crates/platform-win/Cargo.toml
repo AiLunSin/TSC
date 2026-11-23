@@ -8,6 +8,8 @@ description = "Windows 平台：WASAPI 环回、UI Automation 字幕读取、Win
 
 [dependencies]
 meeting-copilot-application = { version = "0.1.0", path = "../application" }
+meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.45.0", features = ["Win32_Security_Credentials", "Win32_Foundation"] }
+windows = { version = "0.58", features = ["Win32_Media_Audio", "Win32_System_Com", "Win32_Foundation", "Win32_System_Com_StructuredStorage"] }
+windows-sys = { version = "0.45.0", features = ["Win32_Security_Credentials", "Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_WindowsAndMessaging"] }
