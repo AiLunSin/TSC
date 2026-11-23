@@ -59,15 +59,30 @@ pub fn settings_snapshot_impl(state: &AppState) -> Result<SettingsSnapshotDto, I
     Ok(to_snapshot_dto(state, &view))
 }
 
-/// 保存：先写安全存储，失败降级内存并如实回执。
+/// 保存：Key 留空时复用现有凭据；新 Key 先写安全存储，失败降级内存并如实回执。
 pub fn settings_save_impl(
     state: &AppState,
     input: SaveInputDto,
 ) -> Result<SettingsSaveReceiptDto, IpcErrorDto> {
-    let secret_input = SecretInput::from_draft(&input.key);
-    if let Some(issue) = secret_input.draft_issue() {
-        return Err(field_error(issue));
-    }
+    let raw_key = input.key.trim().to_owned();
+    let existing_memory_key = if raw_key.is_empty() {
+        let memory_has_key = state
+            .memory_key
+            .lock()
+            .map_err(|_| internal_error())?
+            .is_some();
+        let stored_has_key = state.secure.read().is_ok_and(|value| value.is_some());
+        if !memory_has_key && !stored_has_key {
+            return Err(field_error(FieldIssue::ApiKeyMissing));
+        }
+        Some(memory_has_key)
+    } else {
+        let secret_input = SecretInput::from_draft(&input.key);
+        if let Some(issue) = secret_input.draft_issue() {
+            return Err(field_error(issue));
+        }
+        None
+    };
     if input.model_index >= state.catalog.model_count() {
         return Err(field_error(FieldIssue::ModelMissing));
     }
@@ -75,7 +90,6 @@ pub fn settings_save_impl(
         return Err(field_error(FieldIssue::EndpointUnavailable));
     }
 
-    let raw_key = input.key.trim().to_owned();
     let timeout_ms = SettingsConfig {
         schema_version: 1,
         model_index: input.model_index,
@@ -89,13 +103,19 @@ pub fn settings_save_impl(
         endpoint_index: input.endpoint_index,
         timeout_ms,
     };
-    let secret = SecretBytes::new(raw_key.as_bytes().to_vec());
-    let persisted = state.secure.write(&secret).is_ok();
-    if persisted {
-        *state.memory_key.lock().map_err(|_| internal_error())? = None;
+    let persisted = if let Some(memory_has_key) = existing_memory_key {
+        // 留空表示沿用现有凭据；内存降级凭据不能误报为已持久化。
+        !memory_has_key
     } else {
-        *state.memory_key.lock().map_err(|_| internal_error())? = Some(raw_key);
-    }
+        let secret = SecretBytes::new(raw_key.as_bytes().to_vec());
+        let persisted = state.secure.write(&secret).is_ok();
+        if persisted {
+            *state.memory_key.lock().map_err(|_| internal_error())? = None;
+        } else {
+            *state.memory_key.lock().map_err(|_| internal_error())? = Some(raw_key);
+        }
+        persisted
+    };
     state
         .config
         .save(&config)
@@ -134,6 +154,8 @@ pub fn settings_clear_impl(
     }
     let delete_ok = state.secure.delete().is_ok();
     let reset_ok = state.config.reset().is_ok();
+    // 即使安全存储或配置清理失败，也不能把明文副本遗留在内存中。
+    *state.memory_key.lock().map_err(|_| internal_error())? = None;
     if !delete_ok || !reset_ok {
         return Err(IpcErrorDto::new(
             "clear_failed",
@@ -141,7 +163,6 @@ pub fn settings_clear_impl(
             true,
         ));
     }
-    *state.memory_key.lock().map_err(|_| internal_error())? = None;
     *state
         .last_probe_report
         .lock()
@@ -486,6 +507,49 @@ mod tests {
     }
 
     #[test]
+    fn save_with_empty_key_reuses_stored_credential() {
+        let secure = memory_secure(false);
+        let state = app_state(
+            Arc::clone(&secure) as Arc<dyn SecureStore>,
+            memory_config(),
+            true,
+        );
+        settings_save_impl(&state, save_input("test-key-0123456789")).expect("initial save");
+
+        let receipt = settings_save_impl(&state, save_input("")).expect("reuse stored key");
+
+        assert!(receipt.persisted);
+        assert_eq!(receipt.fallback, None);
+        assert!(receipt.has_key);
+        assert_eq!(
+            secure.value.lock().expect("lock").as_deref(),
+            Some(b"test-key-0123456789".as_slice())
+        );
+    }
+
+    #[test]
+    fn save_with_empty_key_preserves_memory_fallback() {
+        let state = app_state(memory_secure(true), memory_config(), true);
+        settings_save_impl(&state, save_input("test-key-0123456789")).expect("initial save");
+
+        let receipt = settings_save_impl(&state, save_input("")).expect("reuse memory key");
+
+        assert!(!receipt.persisted);
+        assert_eq!(receipt.fallback.as_deref(), Some("memory"));
+        assert_eq!(
+            state.memory_key.lock().expect("lock").as_deref(),
+            Some("test-key-0123456789")
+        );
+    }
+
+    #[test]
+    fn save_with_empty_key_still_requires_an_existing_credential() {
+        let state = app_state(memory_secure(false), memory_config(), false);
+        let error = settings_save_impl(&state, save_input("")).expect_err("missing key");
+        assert_eq!(error.code, "api_key_missing");
+    }
+
+    #[test]
     fn clear_requires_confirmation_and_deletes_target() {
         let secure = memory_secure(false);
         let state = app_state(
@@ -559,10 +623,12 @@ mod tests {
             Arc::new(FailingResetConfig),
             true,
         );
+        *state.memory_key.lock().expect("lock") = Some("test-key-0123456789".to_owned());
         let error = settings_clear_impl(&state, ClearInputDto { confirm: true })
             .expect_err("reset failure must be reported");
         assert_eq!(error.code, "clear_failed");
         assert!(secure.value.lock().expect("lock").is_none());
+        assert!(state.memory_key.lock().expect("lock").is_none());
     }
 
     #[test]
