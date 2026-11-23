@@ -1,8 +1,17 @@
 # 未完成事项总表（2026-11-23）
 
-> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `87eea33`、跟踪文件 **281**、`test-names-before.txt` **365** 行。
+> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `8b6b7b5`、跟踪文件 **285**、`docs/progress/test-names-before.txt` **365** 行。
+> CI 取证：run **#56**（`8b6b7b5`，2026-11-23）8 个 job 全部 `success`，经 GitHub Actions API 复核。
 > 上游事实源：`docs/progress/b4-status.md` §25.3 / §29.5 / §30、`docs/progress/handoff-2026-11-22-pui.md`、`.codeartsdoer/specs/repo_audit_cleanup/`。
 > 审计证据：`.tmp/audit/`（本地产物，未入库）。
+
+## 0. 状态速览
+
+- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证。
+- **仍 open**：U-05（真机/联网）、U-07 四项、U-08、`platform-win` 三项占位、9 个 `#[ignore]`、`tests/replay/`。
+- **待裁决**：Q-01 ~ Q-06；**治理项**：Q-07、AUD-17。
+- **本机残留**：sqlcipher 编译失败（`0xc0000142`）；`git push` 到 `github.com:443` 的 Git 传输被重置（HTTPS API 可用）。
+- **执行顺序**：先做 P1（§8.2 / §8.3），再做 P2（§8.4）；Q-01（`cargo clean`）放到最后，避免拖慢前面的验证。
 
 ## 1. 产品能力缺口
 
@@ -37,18 +46,20 @@
 
 | 项 | 状态 | 缺口 | 关闭条件 |
 |---|---|---|---|
-| AC-B4-109 远端 CI | 仅本地 `passed` | 远端 run 结论未取证 | push 后在 Actions 页面确认结论文本或截图 |
+| AC-B4-109 远端 CI | **已关闭（远端 `success`）** | 无；run #56 的 `compliance` job 为 `success` | 已完成；如需留档，补存 Actions 运行页截图 |
 | AC 汇总 130 | 本地一致 | — | 无 |
 | `#[ignore]` 9 个 | 保持不解锁 | 真实端点/真机缺位 | 明确解锁授权 + 真实环境 |
 | `tests/replay/` | 保持不存在 | 纪律项 | 明确创建授权 |
+
+> 说明：默认构建下 `#[ignore]` 为 9 个；启用 `--features llm-https` 后 `llm_live_baseline.rs` 参与编译，会额外出现 1 个 ignored（共 10）。这是预期差异，不是新增纪律项。
 
 ## 4. 文档与治理偏差
 
 | 编号 | 事项 | 现状 | 处置 |
 |---|---|---|---|
 | ERR-01 | C-UI-02 口径冲突 | §29.5-2 与 §29.6 表述不一致；§30.6 已登记采用 §29.6"保留"，并在 §29.5 追加指针行 | 无需再改；后续修改不得回退 |
-| AUD-15 / Q-07 | `.codeartsdoer/` 未入库 | `git ls-files .codeartsdoer` = 0 | 独立变更单裁决 |
-| AUD-17 | 本地专属门禁未纳入 CI | `check-b4-gates` / `check-ui-integration` / `check-mac-scope` / `check-b3-gates` 未进 CI | 明确"仅本地执行"或另立 CI 变更 |
+| AUD-15 / Q-07 | `.codeartsdoer/` 未入库 | `git ls-files .codeartsdoer` = 0 | 独立变更单裁决（步骤见 §8.6） |
+| AUD-17 | 本地专属门禁未纳入 CI | `check-b4-gates` / `check-ui-integration` / `check-mac-scope` / `check-b3-gates` 未进 CI | 明确"仅本地执行"或另立 CI 变更（步骤见 §8.6） |
 | X-AUD-01 | `.tmp/asr.json` 未在设计清单 | B-1 按五准则判为可删并已删 | **已补登**：`design.md §2.14` |
 | X-AUD-02 | 全量基线漂移 | 实测 859 passed / 0 failed / 9 ignored，README 已校准 | 后续以 859 为对照，不改基线文件 |
 | X-AUD-03 | 数量偏差 | `llm-live` 13 run（设计写 6）；`ui-store-tests` 5 文件（设计写 6） | **已补登**：`design.md §2.14` |
@@ -59,19 +70,20 @@
 
 | 项 | 现象 | 原因 | 处理 |
 |---|---|---|---|
-| GitHub Actions 全红 | **已恢复**：run #52 全部 8 个 job `success` | 此前账户预算设为 $0，Actions 使用被阻止；公开后公共仓库免费额度生效 | 已关闭 |
+| GitHub Actions 全红 | **已恢复**：run #56 全部 8 个 job `success` | 此前账户预算设为 $0，Actions 使用被阻止；公开后公共仓库免费额度生效 | 已关闭 |
 | 仓库可见性 | **已公开**（2026-11-23） | 用户要求公开 | 已完成；About 描述与 topics 已同步 |
 | LICENSE | 已补 `LICENSE-MIT` 与 `LICENSE-APACHE` | README 声称 MIT OR Apache-2.0 | 已完成（GitHub 识别为 Apache-2.0） |
 | 本机 sqlcipher 编译 | `perl`/OpenSSL 配置失败（`0xc0000142`） | 本机工具链环境，非代码 | 如需本地验证，改用 Linux/WSL 或安装可用 OpenSSL 构建链 |
-| 本机绝对路径 | 已脱敏 | 历史记录曾含本机绝对路径 | 已完成：`b2-offline-closure.md` 改为 `<USER_HOME>`/`<REPO>`；历史提交仍含旧值，如需彻底清除需改写历史 |
+| 本机绝对路径 | **已完成历史改写** | 历史提交曾含本机绝对路径 | 已完成：全历史检索旧路径 0 命中；备份分支与 bundle 已删、reflog 已清、gc 已做 |
+| 本机 `git push` | 到 `github.com:443` 的连接被重置，`git push` 失败 | 本机网络/代理对 Git 传输的限制 | HTTPS API 可写入；按 §8.7 的推送说明处理，不要反复重试 |
 
 ## 6. 关闭条件优先级
 
-1. **P0 环境**：**已完成**——仓库公开后 Actions 恢复，run #52 的 8 个 job 全部 `success`。
-2. **P1 外部条件**：提供端点凭据与真机 → 关闭 U-05 / U-08 与 AC-B4-109 远端取证。
-3. **P2 裁决**：Q-01~Q-06 → 执行 B-3/B-4/B-5；预计可回收约 0.86 M + 5.6 G。
-4. **P3 规格**：U-07 四项逐项立项（先规格、后实现）。
-5. **P4 治理**：Q-07（`.codeartsdoer/` 入库）、AUD-17（本地门禁进 CI）。
+1. **P0 环境**：**已完成**——仓库公开后 Actions 恢复，run #56 的 8 个 job 全部 `success`；AC-B4-109 远端已取证。
+2. **P1 外部条件**：提供端点凭据与真机 → 关闭 U-05 / U-08 的对应子项（步骤见 §8.2、§8.3）。
+3. **P2 裁决**：Q-01 ~ Q-06 → 执行 B-3/B-4/B-5；预计可回收约 0.86 M + 5.6 G（步骤见 §8.4）。
+4. **P3 规格**：U-07 四项逐项立项（先规格、后实现，步骤见 §8.5）。
+5. **P4 治理**：Q-07（`.codeartsdoer/` 入库）、AUD-17（本地门禁进 CI，步骤见 §8.6）。
 
 ## 7. 恢复入口
 
@@ -80,3 +92,283 @@
 - 交接说明：`docs/progress/handoff-2026-11-22-pui.md`。
 - 本次规格与任务：`.codeartsdoer/specs/repo_audit_cleanup/{spec.md,design.md,tasks.md}`。
 - 本地证据：`.tmp/audit/`（manifest、ledger、record、evidence）。
+
+## 8. 逐项关闭操作手册（手把手）
+
+> 约定：命令默认在仓库根目录执行；Windows 上使用 Git Bash（`C:\Program Files\Git\bin\bash.exe`），PowerShell 命令单独标注。
+> 纪律：不把凭据、真实端点、模型名、请求标识、原文样例写入仓库或提交信息；证据只记结论与日期。
+
+### 8.1 动手前先确认基线
+
+```bash
+cd "<仓库根>"
+export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
+export TEMP="$PWD/.tmp/test-temp"; export TMP="$TEMP"; mkdir -p "$TEMP"
+
+cargo test --workspace
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+bash scripts/check-g2-claims.sh
+bash scripts/scan-secrets-docs.sh --all-md
+bash scripts/check-b4-gates.sh --rule=zero-transcript
+bash scripts/check-mac-scope.sh --rule=claims
+```
+
+验收：测试为 `859 passed / 0 failed / 9 ignored`，四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
+
+### 8.2 关闭 U-08 的"真实 LLM 采样"子项
+
+前置：准备一个可用的 OpenAI 兼容端点，拿到 `base_url`、`api_key`、`model` 三项；只在当前终端使用，不落文件、不进仓库。
+
+1. 设置环境变量（占位符替换为真实值）：
+
+```bash
+export LLM_LIVE=1
+export LLM_BASE_URL="https://<your-host>/v1"
+export LLM_API_KEY="<your-key>"
+export LLM_MODEL="<your-model>"
+export LLM_MODEL_CONFIRMED="<与上一行完全相同>"
+export LLM_ALLOWLIST="<your-host>"
+export LLM_LIVE_CALL_CAP=10
+```
+
+2. 先做不联网的预检，确认记录目录可写：
+
+```bash
+bash scripts/run-llm-live.sh --print-record-roots
+```
+
+预期输出两行：`crates/infrastructure/.tmp/llm-live`、`.tmp/llm-live`。
+
+3. 正式采样（串行、失败即停）：
+
+```bash
+bash scripts/run-llm-live.sh; echo "rc=$?"
+```
+
+退出码含义：`0`=通过；`1`=泄漏命中（立即停止，清理记录并轮换 Key）；`2`=不可判定（凭据为空、目录缺失、扫描超时等）；其他=采样失败码。
+
+4. 归档结论（只写这些，不写端点/模型/Key）：日期、run 数、通过/失败、`leak_hits=0`、退出码。写入 `docs/progress/b4-status.md` 新增小节（建议 §31），并同步本表 U-08 的对应子项。
+
+5. 关闭口径：本步只关闭"真实 LLM 采样"；U-08 仍包含真实检索源、真实冷却、真机性能与误触发率，未取得样本前 U-08 整体保持 `open`。
+
+6. 记录目录属于 Q-03，归档完成并按 §8.4 扫描无命中后再删除。
+
+> 说明：设置页的"一键测试"走 `GatewayProbeExecutor`；默认桌面构建未启用 `llm-https` 时探针返回 Unsupported。若要用界面按钮完成联网验证，需用 `cargo run -p meeting-copilot-desktop --features llm-https` 构建；否则以本节的脚本结果为准。
+
+### 8.3 关闭 U-05 的真机 WebView2 验收
+
+1. 构建前端与桌面壳：
+
+```bash
+cd app
+npm ci
+npm run lint && npm run typecheck && npm run check:bindings && npm run build
+cd ..
+cargo build -p meeting-copilot-desktop
+```
+
+2. 启动桌面应用（需要真实桌面会话，不能只跑 headless）：
+
+```bash
+cargo run -p meeting-copilot-desktop
+```
+
+如需联网探针，改用：
+
+```bash
+cargo run -p meeting-copilot-desktop --features llm-https
+```
+
+3. 按清单逐项验收并记录"通过/失败"：
+
+| 检查项 | 操作 | 通过标准 |
+|---|---|---|
+| 窗口 | 启动后观察 | 标题"会议副驾 Meeting Copilot"，默认 1240×820，最小 960×640，居中 |
+| 设置入口 | 点顶栏"设置" | 进入设置页；"返回卡片"可返回 |
+| Key 掩码 | 输入 Key 后保存并重开 | 界面只显示掩码，不显示明文 |
+| 保存/清除 | 点"保存设置"/"清除设置" | 分别提示"设置已保存"/"设置已清除"；重开应用状态保持 |
+| 凭据落点 | PowerShell 执行 `cmdkey /list`，筛选 meeting-copilot | 存在目标 `meeting-copilot/llm-api-key` |
+| 配置文件 | PowerShell：`Get-Content "$env:APPDATA\com.meetingcopilot.desktop\settings.json"` | 恰 4 键；无 Key、无地址、无模型名 |
+| 卡片渲染 | 触发出卡后观察 | 禁用卡不可点；详情内联展开；不抢焦点 |
+| 投屏/紧急遮蔽 | 模拟投屏或紧急态 | 正文隐藏，只留条数角标 |
+| 联网 E2E | 用 `--features llm-https` 构建后点"测试" | 成功提示"连接成功"；失败时落到 8 类可读原因 |
+
+4. 证据留存：截图只放本机（外层 `.screenshots/` 或 `.tmp/`），不要提交；在 `b4-status.md` 记录日期、构建命令、每项结论。注意：若截图放在外层 `.screenshots/`，先归档再执行 Q-06。
+
+5. 关闭口径：只有"联网 E2E + 真机 WebView2 + 窗口/焦点/投屏结论"三项都有记录，才可把 U-05 改为 `closed`；否则保持 `open`。
+
+### 8.4 裁决并执行 Q-01 ~ Q-06
+
+统一原则：先预览、再归档、最后删除；一次只处理一项，删完立即记录。
+
+**Q-02 `.tmp/ui-integration/ac-board.md`**
+
+1. 打开文件，把 20 条 AC 结论逐条写入 `docs/progress/b4-status.md` §30（已有表格就续行）。
+2. 复核条数为 20 后删除：
+
+```powershell
+Get-ChildItem .tmp\ui-integration\ac-board.md | Select-Object FullName,Length
+Remove-Item .tmp\ui-integration\ac-board.md
+```
+
+**Q-03 `crates/infrastructure/.tmp/llm-live/`**
+
+1. 统计并归档：run 数、日期范围、通过/失败结论（不写端点/模型/Key）。
+2. 敏感扫描必须 rc=0：
+
+```bash
+bash scripts/scan-secrets-docs.sh --artifacts crates/infrastructure/.tmp/llm-live
+```
+
+3. 删除：
+
+```powershell
+Get-ChildItem crates\infrastructure\.tmp\llm-live -Recurse | Measure-Object -Property Length -Sum
+Remove-Item crates\infrastructure\.tmp\llm-live -Recurse -Force
+```
+
+**Q-04 `.tmp/rollback/*.bak`**
+
+1. 列出备份，并逐个确认对应变更已在 `main`：
+
+```powershell
+Get-ChildItem .tmp\rollback -Filter *.bak
+git log --oneline -- <对应文件路径>
+```
+
+2. 全部确认后删除：
+
+```powershell
+Remove-Item .tmp\rollback\*.bak
+```
+
+**Q-05 `.tmp/url-2.5.9-meta/`**
+
+1. 确认所需信息已落到 `docs/`，或网络可重新获取。
+2. 删除：
+
+```powershell
+Get-ChildItem .tmp\url-2.5.9-meta -Recurse | Measure-Object -Property Length -Sum
+Remove-Item .tmp\url-2.5.9-meta -Recurse -Force
+```
+
+**Q-01 `target/`（最后做）**
+
+1. 先记录可重建指纹：
+
+```powershell
+New-Item -ItemType Directory -Force .tmp\archive | Out-Null
+rustc -Vv | Out-File .tmp\archive\toolchain.txt
+cargo -V | Out-File .tmp\archive\toolchain.txt -Append
+Get-FileHash Cargo.lock -Algorithm SHA256 | Out-File .tmp\archive\cargo-lock.sha256
+```
+
+2. 清理并重建回归：
+
+```bash
+cargo clean
+cargo build --workspace
+cargo test --workspace
+```
+
+验收：测试回到 `859 passed / 0 failed / 9 ignored`，四条门禁仍 rc=0。回收约 5.6 G，重建耗时较长，放在当天最后执行。
+
+**Q-06 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/`**
+
+1. 只读确认无交付文件：
+
+```powershell
+Get-ChildItem ..\.screenshots -Recurse -ErrorAction SilentlyContinue
+Get-ChildItem ..\.codeartsdoer\temp\accept -Recurse -ErrorAction SilentlyContinue
+```
+
+2. 确认后只删这两个目录；**不要**删除外层 `.codeartsdoer` 的其他内容：
+
+```powershell
+Remove-Item ..\.screenshots -Recurse -Force
+Remove-Item ..\.codeartsdoer\temp\accept -Recurse -Force
+```
+
+3. 每完成一项，在本表 §2 对应行标记"已执行 + 日期"，并在 §30.3 追加一行台账。
+
+### 8.5 立项 U-07 四项规格（先规格、后实现）
+
+四项都不能直接写代码，先补 b4 级增量规格。统一模板：
+
+1. 在 `docs/sdd/spec.md` 补需求条目：字段、枚举、边界、零转录约束。
+2. 在 `docs/sdd/design.md` 补设计与追溯矩阵：端口、表结构/介质、保留策略、失败降级。
+3. 在 `docs/sdd/tasks.md` 补任务与门禁。
+4. 实现后用 `check-b4-gates.sh --rule=zero-transcript` 与全量测试验收。
+
+逐项需要你拍板的点：
+
+| 项 | 你必须先决定 | 规格里必须写清 |
+|---|---|---|
+| U-07-41.5 负反馈加权 | 负反馈枚举值、是否影响排序、是否需要去重键 | 字段清单、加权公式边界、不得改变 Deny、不得落原文 |
+| U-07-42 缓存 / outbox | 介质（现有 SQLCipher/SQLite 或文件）、保留上限 | "重启不丢"的判定方式、清理策略、失败重试上限 |
+| U-07-43 按需补全实体 | 真实检索源（开放 SPI 接入） | 8s p95 的样本量与统计口径、超时降级、外发白名单 |
+| U-07-52 审计哈希链存储 | 落库介质、180 天保留的起算点 | 哈希链字段、追加语义、保留期清理与不可篡改校验 |
+
+实操建议：一次只立一项；规格评审通过后再写实现，避免四项互相牵连。
+
+### 8.6 治理项 Q-07 与 AUD-17
+
+**Q-07 把 `.codeartsdoer/` 纳入版本库**
+
+1. 先确认当前未跟踪、且体积可控：
+
+```bash
+git ls-files .codeartsdoer
+```
+
+```powershell
+Get-ChildItem .codeartsdoer -Recurse | Measure-Object -Property Length -Sum
+```
+
+2. 跑敏感扫描（当前脚本会扫描未跟踪目录）：
+
+```bash
+bash scripts/scan-secrets.sh
+```
+
+3. rc=0 后，删除 `.gitignore` 第 11 行 `.codeartsdoer/`，再单独提交：
+
+```bash
+git add .gitignore .codeartsdoer
+git status
+git commit -m "chore: 纳入 .codeartsdoer 规格目录"
+```
+
+注意：这是独立变更单，不要和功能改动混在一个提交里；若扫描有命中，先处理命中再入库。
+
+**AUD-17 本地门禁进 CI 或明确仅本地**
+
+二选一，并写进 `docs/progress/ci-readiness.md`：
+
+- 方案 A（进 CI）：在 `.github/workflows/ci.yml` 的 `compliance` job 增加四步——`check-b4-gates.sh --rule=zero-transcript`、`check-ui-integration.sh`、`check-mac-scope.sh --rule=claims`、`check-b3-gates.sh --rule=zero-transcript`，然后观察一次远端 run 是否全绿。
+- 方案 B（仅本地）：在 `ci-readiness.md` 明确"上述门禁为本地专属"，并把本表 AUD-17 标记为"已裁决"。
+
+### 8.7 每次修改后的统一验证、提交与推送
+
+1. 四条快检（必须全 rc=0）：
+
+```bash
+bash scripts/check-g2-claims.sh
+bash scripts/scan-secrets-docs.sh --all-md
+bash scripts/check-b4-gates.sh --rule=zero-transcript
+bash scripts/check-mac-scope.sh --rule=claims
+```
+
+2. 改了代码再补：`cargo fmt --all -- --check`、`cargo clippy --workspace --all-targets -- -D warnings`、`cargo test --workspace`。
+
+3. 提交（只提交本次相关文件）：
+
+```bash
+git add docs/progress/open-items.md  # 以及本次其他改动文件
+git commit -m "docs: 更新未完成事项并补充关闭步骤"
+```
+
+4. 推送：先尝试 `git push origin main`。若仍出现 `github.com:443` 连接重置，不要反复重试；改用 GitHub HTTPS API 写入（blob → tree → commit → 更新 ref），随后 `git update-ref refs/remotes/origin/main <sha>`，再在 Actions 页面确认新 run 的 8 个 job 是否全绿。
+
+5. 推送后复核：`git rev-parse HEAD` 与 `git rev-parse origin/main` 相同；Actions 最新 run 为 `success`；本表 §5 的推送阻塞行按实际结果更新。
