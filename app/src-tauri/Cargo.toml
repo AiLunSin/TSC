@@ -10,6 +10,7 @@ description = "Tauri 2 桌面壳与 IPC 注册入口。"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+jieba-rs = { version = "0.7", features = ["tfidf"] }
 meeting-copilot-application = { version = "0.1.0", path = "../../crates/application" }
 meeting-copilot-domain = { version = "0.1.0", path = "../../crates/domain" }
 meeting-copilot-infrastructure = { version = "0.1.0", path = "../../crates/infrastructure", default-features = false, features = ["bundled-sqlite"] }

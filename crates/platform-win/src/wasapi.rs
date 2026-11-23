@@ -3,7 +3,7 @@
 //! 只读取默认输出设备的环回流，不注入、不录制麦克风；无新数据时返回 `None`。
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use meeting_copilot_domain::error::CopilotError;
 use meeting_copilot_domain::model::enums::Platform;
@@ -110,23 +110,33 @@ struct MonoFrame {
     samples: Vec<f32>,
 }
 
-struct ComGuard;
+const RPC_E_CHANGED_MODE: i32 = 0x8001_0106u32 as i32;
+
+struct ComGuard {
+    owned: bool,
+}
 
 impl ComGuard {
     fn init() -> Result<Self, String> {
-        // SAFETY: 在当前线程初始化 COM；Drop 时成对调用 CoUninitialize。
+        // SAFETY: 在当前线程初始化 COM；只有本结构体真正初始化成功时才在 Drop 配对释放。
         let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
-        if result.is_err() {
-            return Err(format!("COM 初始化失败：{result:?}"));
+        if result.is_ok() {
+            return Ok(Self { owned: true });
         }
-        Ok(Self)
+        if result.0 == RPC_E_CHANGED_MODE {
+            // 线程已按其它套间模型初始化 COM；接口仍可用，不能重复 CoUninitialize。
+            return Ok(Self { owned: false });
+        }
+        Err(format!("COM 初始化失败：{result:?}"))
     }
 }
 
 impl Drop for ComGuard {
     fn drop(&mut self) {
-        // SAFETY: 与 ComGuard::init 的 CoInitializeEx 成对。
-        unsafe { CoUninitialize() };
+        if self.owned {
+            // SAFETY: 与 ComGuard::init 的 CoInitializeEx 成对。
+            unsafe { CoUninitialize() };
+        }
     }
 }
 
@@ -329,6 +339,22 @@ impl AudioSource for WasapiLoopbackSource {
             .lock()
             .map(|health| health.clone())
             .unwrap_or_else(|_| SourceHealth::Unavailable("状态不可用".to_owned()))
+    }
+}
+
+static SYSTEM_AUDIO: OnceLock<WasapiLoopbackSource> = OnceLock::new();
+
+/// 系统音频通道只读状态：首次调用时尝试打开默认输出设备。
+pub fn system_audio_status() -> &'static str {
+    let source = SYSTEM_AUDIO.get_or_init(|| {
+        let source = WasapiLoopbackSource::new(Platform::TencentMeeting);
+        let _ = source.open(None);
+        source
+    });
+    match source.health() {
+        SourceHealth::Ready => "ready",
+        SourceHealth::Degraded(_) => "degraded",
+        SourceHealth::Unavailable(_) => "off",
     }
 }
 

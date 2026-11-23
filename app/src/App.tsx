@@ -8,10 +8,10 @@ import { SettingsPage } from "./settings/SettingsPage";
 
 type ChannelState = "ready" | "degraded" | "off";
 
-const CHANNELS: readonly { name: string; state: ChannelState; detail: string }[] = [
-  { name: "字幕文本通道", state: "off", detail: "未接入会议检测" },
-  { name: "系统音频通道", state: "off", detail: "WASAPI 未接入" },
-  { name: "本地 ASR", state: "off", detail: "模型未接入" },
+const DEFAULT_CHANNELS: readonly { name: string; state: ChannelState }[] = [
+  { name: "字幕文本通道", state: "off" },
+  { name: "系统音频通道", state: "off" },
+  { name: "本地 ASR", state: "off" },
 ];
 
 const STATE_TEXT: Record<ChannelState, string> = {
@@ -19,6 +19,19 @@ const STATE_TEXT: Record<ChannelState, string> = {
   degraded: "降级",
   off: "未启用",
 };
+
+const CHANNEL_DETAIL: Record<ChannelState, string> = {
+  ready: "运行就绪",
+  degraded: "运行中降级",
+  off: "未接入实现",
+};
+
+function toChannelState(value: string): ChannelState {
+  if (value === "ready" || value === "degraded") {
+    return value;
+  }
+  return "off";
+}
 
 function formatElapsed(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
@@ -36,9 +49,17 @@ export default function App() {
   const [cards, setCards] = useState<readonly KeywordCardViewDto[]>([]);
   const [cardError, setCardError] = useState<string | null>(null);
   const [detail, setDetail] = useState<CardDetailDto | null>(null);
-  const [meetingApp, setMeetingApp] = useState<string | null>(null);
+  const [meeting, setMeeting] = useState<{ app: string; title: string } | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [channels, setChannels] = useState<readonly { name: string; state: ChannelState }[]>(
+    DEFAULT_CHANNELS,
+  );
   const meetingStartedAt = useRef<number | null>(null);
+  const [ingestText, setIngestText] = useState("");
+  const [ingestBusy, setIngestBusy] = useState(false);
+  const [ingestNotice, setIngestNotice] = useState<string | null>(null);
+  const [asrRunning, setAsrRunning] = useState(false);
+  const [asrText, setAsrText] = useState("");
 
   const loadCards = useCallback(async () => {
     try {
@@ -52,26 +73,32 @@ export default function App() {
 
   useEffect(() => {
     void loadCards();
+    const id = window.setInterval(() => {
+      void loadCards();
+    }, 1000);
+    return () => {
+      window.clearInterval(id);
+    };
   }, [loadCards]);
 
   useEffect(() => {
     let cancelled = false;
     async function refreshMeeting(): Promise<void> {
       try {
-        const app = await invokeCommand<string | null>("meeting_status");
+        const info = await invokeCommand<[string, string] | null>("meeting_status");
         if (!cancelled) {
-          setMeetingApp(app);
+          setMeeting(info === null ? null : { app: info[0], title: info[1] });
         }
       } catch {
         if (!cancelled) {
-          setMeetingApp(null);
+          setMeeting(null);
         }
       }
     }
     void refreshMeeting();
     const id = window.setInterval(() => {
       void refreshMeeting();
-    }, 5000);
+    }, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -79,7 +106,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (meetingApp === null) {
+    let cancelled = false;
+    async function refreshCapture(): Promise<void> {
+      try {
+        const rows = await invokeCommand<Array<[string, string]>>("capture_status");
+        if (!cancelled) {
+          setChannels(rows.map(([name, state]) => ({ name, state: toChannelState(state) })));
+        }
+      } catch {
+        // 保留上一次状态
+      }
+    }
+    void refreshCapture();
+    const id = window.setInterval(() => {
+      void refreshCapture();
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (meeting === null) {
       meetingStartedAt.current = null;
       setElapsedSeconds(0);
       return;
@@ -95,7 +144,7 @@ export default function App() {
     return () => {
       window.clearInterval(id);
     };
-  }, [meetingApp]);
+  }, [meeting]);
 
   async function openCard(cardId: string): Promise<void> {
     try {
@@ -105,6 +154,56 @@ export default function App() {
       setDetail(next);
     } catch {
       setCardError("详情暂不可用。");
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshAsr(): Promise<void> {
+      try {
+        const [running, text] = await invokeCommand<[boolean, string]>("asr_status");
+        if (!cancelled) {
+          setAsrRunning(running);
+          setAsrText(text);
+        }
+      } catch {
+        // 保留上一次状态
+      }
+    }
+    void refreshAsr();
+    const id = window.setInterval(() => {
+      void refreshAsr();
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  async function toggleAsr(): Promise<void> {
+    try {
+      await invokeCommand(asrRunning ? "stop_asr" : "start_asr");
+      setAsrRunning(!asrRunning);
+    } catch {
+      setCardError("实时转写启动失败，请稍后重试。");
+    }
+  }
+
+  async function ingest(): Promise<void> {
+    if (ingestBusy || ingestText.trim() === "") {
+      return;
+    }
+    setIngestBusy(true);
+    try {
+      const added = await invokeCommand<number>("ingest_text", { text: ingestText });
+      setIngestText("");
+      setIngestNotice(`已生成 ${String(added)} 张卡片。`);
+      await loadCards();
+    } catch {
+      setIngestNotice(null);
+      setCardError("生成卡片失败，请稍后重试。");
+    } finally {
+      setIngestBusy(false);
     }
   }
 
@@ -120,10 +219,14 @@ export default function App() {
         </div>
         <div className="topbar-meta">
           <span className="pill">
-            {meetingApp === null ? "未检测到会议" : `检测到会议：${meetingApp}`}
+            {meeting === null
+              ? "未检测到会议"
+              : meeting.title === ""
+                ? `检测到会议：${meeting.app}`
+                : `检测到会议：${meeting.app} · ${meeting.title}`}
           </span>
           <span className="timer">
-            {meetingApp === null ? "--:--" : formatElapsed(elapsedSeconds)}
+            {meeting === null ? "--:--" : formatElapsed(elapsedSeconds)}
           </span>
           <button
             className="btn"
@@ -151,12 +254,12 @@ export default function App() {
         <aside className="panel session">
           <h2>采集状态</h2>
           <ul className="channel-list">
-            {CHANNELS.map((channel) => (
+            {channels.map((channel) => (
               <li key={channel.name} className={`channel channel-${channel.state}`}>
                 <span className="dot" aria-hidden="true" />
                 <div>
                   <span className="channel-name">{channel.name}</span>
-                  <span className="channel-detail">{channel.detail}</span>
+                  <span className="channel-detail">{CHANNEL_DETAIL[channel.state]}</span>
                 </div>
                 <span className="state-tag">{STATE_TEXT[channel.state]}</span>
               </li>
@@ -186,7 +289,53 @@ export default function App() {
           <section className="panel cards">
             <div className="panel-head">
               <h2>关键词卡片</h2>
-              <span className="hint">按会议内容实时生成</span>
+              <span className="hint">粘贴会议文本，自动提取关键词并生成卡片</span>
+            </div>
+            <div className="settings-section">
+              <div className="settings-actions">
+                <button
+                  className="btn btn-start"
+                  type="button"
+                  onClick={() => {
+                    void toggleAsr();
+                  }}
+                >
+                  {asrRunning ? "停止实时转写" : "开始实时转写"}
+                </button>
+                <span className="hint">
+                  {asrText === "" ? "系统音频实时识别，等待说话…" : asrText}
+                </span>
+              </div>
+            </div>
+            <div className="settings-section">
+              <label className="field">
+                <span>会议文本</span>
+                <textarea
+                  rows={3}
+                  value={ingestText}
+                  placeholder="粘贴会议转写文本，例如：我们确认 SLA 99.9%，灰度范围限定华东两站点。"
+                  onChange={(event) => {
+                    setIngestText(event.target.value);
+                  }}
+                />
+              </label>
+              <div className="settings-actions">
+                <button
+                  className="btn btn-start"
+                  type="button"
+                  disabled={ingestBusy || ingestText.trim() === ""}
+                  onClick={() => {
+                    void ingest();
+                  }}
+                >
+                  {ingestBusy ? "生成中…" : "生成卡片"}
+                </button>
+              </div>
+              {ingestNotice === null ? null : (
+                <p className="settings-notice" role="status">
+                  {ingestNotice}
+                </p>
+              )}
             </div>
             {cardError === null ? null : (
               <p className="settings-error" role="alert">

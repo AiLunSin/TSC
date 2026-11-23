@@ -135,6 +135,11 @@ export const IPC_COMMANDS = [
   "keyword_card_open",
   "open_log",
   "meeting_status",
+  "capture_status",
+  "ingest_text",
+  "start_asr",
+  "stop_asr",
+  "asr_status",
 ] as const;
 
 export type IpcCommand = (typeof IPC_COMMANDS)[number];

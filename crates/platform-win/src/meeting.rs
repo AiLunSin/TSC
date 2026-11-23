@@ -63,11 +63,11 @@ mod imp {
 
     struct ScanContext {
         targets: Vec<TargetProcess>,
-        found: Option<&'static str>,
+        found: Option<(&'static str, String)>,
     }
 
     /// 当前是否有已知会议客户端处于会议窗口状态。
-    pub fn detect_running() -> Option<&'static str> {
+    pub fn detect_running() -> Option<(&'static str, String)> {
         let targets = collect_target_processes();
         if targets.is_empty() {
             return None;
@@ -110,7 +110,7 @@ mod imp {
         if target.requires_title && !title_has_meeting_keyword(&title) {
             return 1;
         }
-        context.found = Some(target.display_name);
+        context.found = Some((target.display_name, title));
         0
     }
 
@@ -156,7 +156,7 @@ mod imp {
 #[cfg(not(windows))]
 mod imp {
     /// 非 Windows 目标恒为未检测。
-    pub fn detect_running() -> Option<&'static str> {
+    pub fn detect_running() -> Option<(&'static str, String)> {
         None
     }
 }

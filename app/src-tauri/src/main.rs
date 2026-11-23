@@ -70,9 +70,7 @@ fn build_state(config_dir: PathBuf, presets: Vec<String>) -> AppState {
         config: Arc::new(FileSettingsConfigStore::new(config_dir)),
         probe: Arc::new(GatewayProbeExecutor),
         facts,
-        cards: Arc::new(UsingPendingSources {
-            view: pending_view(),
-        }),
+        cards: ipc::card_store::card_store(),
         view_facts: Arc::new(UsingPendingSources {
             view: pending_view(),
         }),
@@ -140,6 +138,11 @@ fn main() {
             ipc_version,
             ipc::log::open_log,
             ipc::meeting::meeting_status,
+            ipc::capture::capture_status,
+            ipc::card_store::ingest_text,
+            ipc::asr::start_asr,
+            ipc::asr::stop_asr,
+            ipc::asr::asr_status,
             ipc::settings_snapshot,
             ipc::settings_probe,
             ipc::settings_save,

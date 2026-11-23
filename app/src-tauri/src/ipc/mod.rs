@@ -1,5 +1,8 @@
-//! IPC 装配层：只读 DTO、运行态、目录清单与 8 个固定命令。
+//! IPC 装配层：只读 DTO、运行态、目录清单与 13 个固定命令。
 
+pub mod asr;
+pub mod capture;
+pub mod card_store;
 pub mod cards;
 pub mod catalog;
 pub mod dto;

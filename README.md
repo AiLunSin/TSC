@@ -24,11 +24,11 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测**：AC-B4-111~130 离线通过；8 命令（含打开日志、会议检测）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时出卡**：AC-B4-111~130 离线通过；13 命令（含打开日志、会议检测、采集状态、文本出卡、实时转写）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线：**869 passed / 0 failed / 10 ignored**（含 P-UI 桌面层 **28 例**、平台层 **10 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量基线：**877 passed / 0 failed / 10 ignored**（含 P-UI 桌面层 **36 例**、平台层 **10 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 仍未完成：
 
@@ -159,7 +159,8 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（8 命令，含 `open_log`、`meeting_status`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（13 命令，含 `open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`/`stop_asr`/`asr_status`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
+- 采集状态栏由 `capture_status` 驱动：系统音频通道读取 WASAPI 环回健康度（可用即"就绪"），字幕文本通道与本地 ASR 尚未实现，如实显示"未启用"。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 5 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。
 - 凭据经 `crates/platform-win/src/secure_store.rs` 写入 Windows 凭据管理器（唯一目标名）；非敏感配置为 `settings.json` **恰 4 键**、原子写、损坏回默认；Key 固定掩码 `***`、不落盘明文、不进日志/审计/回放。
 - 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；设置页真机第 1~6、9、10 项已通过，卡片渲染与投屏遮蔽仍未判定，**不宣称整体界面已验收**。
@@ -167,6 +168,10 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 ## 关键词卡片
 
 链路：`B3 片段/要点 → B4 门控（G1~G5）→ 候选派生 → 38 卡片数据 → 39 引用对齐 → 51 视图/点击`。
+
+- 实时入口：卡片区"开始实时转写"——WASAPI 环回 → 16 kHz 单声道 → vosk 流式识别 → `jieba-rs` 关键词 → 卡片；端到端延迟约 1~2 秒。运行期依赖 Python 3.13 + `vosk` 与 `.tmp/asr/` 下的中文小模型（约 42 MB，不入库）。
+- 手动入口："粘贴会议文本 → 生成卡片"，复用同一 `ingest_text` 链路。
+- 卡片列表每 1 秒自动刷新；来源为 `UserGenerated`（本地片段），因此可点击，不伪造外部检索来源。
 
 - 仅 B4 `Allow` 才允许出卡/可点击；任一 Deny → 0 卡。
 - 38 只产 11 项卡片数据；39 只产 `citation_alignment`（`Passed`/`Failed`/`Unknown`，`Unknown` 唯一投影为 `Unverified`）；51 只产视图（10 项）与点击详情（5 项）。
