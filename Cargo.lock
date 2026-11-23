@@ -2359,6 +2359,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "hkdf",
+ "meeting-copilot-application",
  "meeting-copilot-domain",
  "native-tls",
  "rusqlite",

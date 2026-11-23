@@ -30,3 +30,6 @@ thiserror.workspace = true
 native-tls = { version = "0.2", optional = true }
 [target."cfg(target_os = \"macos\")".dependencies]
 native-tls = { version = "0.2", optional = true }
+
+[dev-dependencies]
+meeting-copilot-application = { version = "0.1.0", path = "../application" }

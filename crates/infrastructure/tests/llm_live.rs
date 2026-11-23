@@ -157,7 +157,7 @@ fn live_call(
         .map_err(|_| "gateway_failed".to_string())?;
     let total_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
 
-    if matches!(outcome.http_status, Some(401 | 402 | 403)) {
+    if matches!(outcome.http_status, Some(401..=403)) {
         AbortFlag::global().set("aborted_unauthorized");
     }
     if matches!(

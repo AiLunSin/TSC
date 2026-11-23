@@ -1545,7 +1545,7 @@ U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，�
 | U-07-41.5 负反馈加权 | `domain/model/feedback.rs`、`application/proactive/feedback.rs`、`store/repo/feedback.rs`、`metrics/feedback.rs` | 两次 dismissed 1000→750→500；adopted +100 上限 1000；reported 撤回 + 7 天抑制；三维统计分母 0 显示“样本不足” | 实现完成 |
 | U-07-42 缓存/outbox | `domain/model/proactive.rs`、`application/proactive/{cache,outbox,backfill,degrade_queue}.rs`、`store/repo/{cache,outbox}.rs`、v2 迁移 | 24h TTL；2,001 条淘汰最久未用；20 MiB 上限；重启后 pending+failed 集合一致；3 次退避转 dead；500 条上限 | 实现完成；真实断网指标待取证 |
 | U-07-43 按需补全 | `application/proactive/{outbound_guard,on_demand_probe}.rs`、`store/repo/on_demand.rs` | 仅启用源/HTTPS/主机一致；环回/私网/链路本地拒绝；跨主机重定向拒绝；199 样本“样本不足”，200 样本才评估 p95 | 机制完成，真实样本 **0/200** |
-| U-07-52 审计哈希链 | `store/migrations/v2_audit.sql`、`audit/store.rs`、`audit/retention.rs` | 篡改定位到具体 `audit-*`；10 线程 ×10 并发 100 条链连续；UPDATE/未归档 DELETE 被拒；整月归档校验后移出在线行 | 实现完成；5 年保留待法务 |
+| U-07-52 审计哈希链 | `store/migrations/v2_audit.sql`、`audit/store.rs`、`audit/retention.rs` | 篡改定位到具体 `audit-*`；10 线程 ×10 并发 100 条链连续；UPDATE/未归档 DELETE 被拒；整月归档校验后移出在线行 | 已关闭（2026-11-24）：方案 B 5 年，个人自用简化确认 |
 
 统一测试口径（本轮新增）：
 

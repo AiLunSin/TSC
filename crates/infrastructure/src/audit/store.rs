@@ -224,6 +224,16 @@ impl<'a> SqliteAuditLog<'a> {
         }
         Ok(None)
     }
+
+    /// 已写入的审计记录条数；仅供验收入口核对条数，不暴露任何摘要内容。
+    pub fn record_count(&self) -> Result<usize, StoreError> {
+        let count: i64 = self
+            .store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM audit_record", [], |row| row.get(0))
+            .map_err(sql_error)?;
+        usize::try_from(count).map_err(|_| StoreError::Serialization("审计条数溢出".to_owned()))
+    }
 }
 
 fn now_ms() -> i64 {
@@ -284,6 +294,11 @@ impl<'a> AuditStore<'a> {
 
     pub fn is_available(&self) -> bool {
         !self.unavailable.load(Ordering::SeqCst)
+    }
+
+    /// 已写入的审计记录条数；仅供验收入口核对条数，不暴露任何摘要内容。
+    pub fn record_count(&self) -> Result<usize, CopilotError> {
+        self.log.record_count().map_err(CopilotError::from)
     }
 
     /// 敏感操作前置检查：审计不可用时 fail-closed。

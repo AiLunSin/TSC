@@ -1885,7 +1885,7 @@ audit_archive(
   bundle_path       TEXT NOT NULL,
   bundle_sha256     TEXT NOT NULL,
   sealed_at_ms      INTEGER NOT NULL,
-  disposal_state    TEXT NOT NULL      -- retained | pending_disposal
+  disposal_state    TEXT NOT NULL      -- retained（保留中） | pending_disposal
 );
 ```
 
@@ -1905,7 +1905,7 @@ BEGIN SELECT RAISE(ABORT, 'audit append-only'); END;
 - 校验：按 `seq` 流式重算，返回首个不一致 `audit_id`；启动、归档前、手动校验三处调用。
 - 归档：每日 02:00 选取 `occurred_at_ms + 180 天 < now` 的自然月分段 → 全链校验 → 生成 AES-256-GCM 归档包（AAD 绑定 `month:first_seq:last_seq`）→ 写入 `audit_archive` → 事务删除在线行；任一步失败保留在线数据并告警。
 - 写失败：设置进程级 `audit_unavailable`，敏感操作入口统一检查并拒绝；缓冲补写只补事件，不改变 `occurred_at`。
-- 保留：在线 180 天固定；归档 5 年暂定，未获法务确认时 `disposal_state=retained`，不自动销毁。
+- 保留：在线 180 天固定；归档 5 年（2026-11-24 选定方案 B，个人自用简化已确认）；保留期内 `disposal_state=retained`，不自动销毁。
 - 零转录：`sanitized_summary` 只由固定模板与 ID/长度/分类拼接；检索类审计禁止记录查询文本、URL、页面标题与正文。
 
 ### 2.10.5 追溯矩阵

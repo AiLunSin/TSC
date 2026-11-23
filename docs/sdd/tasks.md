@@ -1607,7 +1607,7 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 证据：`appends_build_a_verifiable_chain`、`tampering_is_detected`、`concurrent_appends_keep_chain_continuous`、`audit_unavailable_blocks_sensitive_operations`。
 - [x] **G-52-C 180 天归档** — `crates/infrastructure/src/audit/retention.rs`
   - 追溯 SPEC 7.4.1-5/6/7 · DESIGN 2.10.4
-  - DoD：按自然月封存；归档包含首尾 `seq`/条数/末端哈希/锚点；校验通过才移出在线行；归档 5 年标记 `retained`，不自动销毁。
+  - DoD：按自然月封存；归档包含首尾 `seq`/条数/末端哈希/锚点；校验通过才移出在线行；归档保留 5 年（方案 B，2026-11-24 选定），`disposal_state=retained` 表示"保留中"，不自动销毁。
   - 证据：`old_months_are_sealed_then_removed`、`write_failure_keeps_online_rows`。
 - [x] **G-52-D 门禁** — 同上
   - 证据：`tampering_is_detected`、`write_failure_keeps_online_rows`、`audit_unavailable_blocks_sensitive_operations`；运行时摘要扫描已落在 `summary_violation`（拒绝控制字符与 URL，错误只带分类），用例 `summary_with_url_or_multiline_is_rejected`；`crates/infrastructure/src/audit/**` 已纳入 `check-b4-gates.sh --rule=zero-transcript` 扫描面。
@@ -1632,7 +1632,7 @@ cargo test --workspace
 ```
 
 3. 验收底线：在既有 **877 passed / 0 failed / 10 ignored** 基线上不新增失败；新增用例逐项对应本附录 DoD；零转录唯一标记扫描 0 命中。
-4. 宣称边界：U-07-43 未取得真实 200 样本前，文档与提交信息只能写“规格已立项/实现进行中”，不得写“按需补全已完成”或“8s 已达标”；U-07-52 归档 5 年未获法务确认前，不得对外宣称该期限。
+4. 宣称边界：U-07-43 未取得真实 200 样本前，文档与提交信息只能写“规格已立项/实现进行中”，不得写“按需补全已完成”或“8s 已达标”；U-07-52 已确认 5 年（2026-11-24，方案 B，个人自用简化），对外仅描述为项目自用设置。
 
 ## 附录 H：U-09 检索源接入（任务 34 立项，2026-11-24）
 
@@ -1682,6 +1682,8 @@ cargo test --workspace
 - [ ] **H-34-G 手工验收** — `docs/progress/b4-status.md` 增量记录
   - DoD：配置 1 个真实 HTTPS 源，完成 3 次按需检索；样本表新增 3 条、报表“样本不足”；审计 3 条且不含查询文本；随后按 SPEC 8.5-4 启动 200 样本采集。
   - 前置：使用者提供真实端点与凭据引用；自动化用例全部通过。
+  - 验收入口：`crates/infrastructure/tests/search_live.rs`（`#[ignore]`）；注入 `SEARCH_PROVIDERS_FILE`、`SEARCH_QUERIES_FILE`、`<authRef>` 后执行 `cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live -- --ignored`。
+  - 自动判定：`smoke_three_rounds` 断言 3 条样本、≥3 条审计且哈希链完整、报表判定“样本不足”；`collect_200_real_samples` 断言真实成功样本 200 条、审计 ≥200 条。可选 `SEARCH_REPORT_PATH` 输出只含计数与时延的 JSON。当前阻塞：真实端点与凭据。
 
 ---
 

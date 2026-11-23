@@ -1,7 +1,7 @@
 //! 审计留存与按月归档（SPEC 7.4.1-6、DESIGN 2.10.4）。
 //!
 //! 线上保留 180 天；到期自然月整月加密封存后才允许删除在线行。
-//! 归档包再保留 5 年的期限仍待法务确认，因此只标记 `retained`。
+//! 归档包保留 5 年（2026-11-24 选定方案 B，个人自用简化确认），保留期内不自动销毁。
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +15,7 @@ use crate::store::{SqliteStore, StoreError};
 
 /// 线上审计保留天数。
 pub const ONLINE_RETENTION_DAYS: i64 = 180;
-/// 归档保留年限（待法务确认，仅标记）。
+/// 归档保留年限（方案 B，个人自用简化确认）。
 pub const ARCHIVE_RETENTION_YEARS: u16 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
