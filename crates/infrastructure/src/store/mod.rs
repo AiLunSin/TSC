@@ -1,9 +1,9 @@
 //! 本地存储（SPEC 4.3-3、DESIGN 2.3.1）。
 //!
-//! 打开前强制校验密钥引用，禁止静默降级为明文库。
-//! 启用 `sqlcipher` feature 时（`cargo build --features sqlcipher`），由
-//! SQLCipher 后端接管页级加密，`SqliteStore::open_with_key` 需要传入 L1 派生密钥；
-//! 未启用时退化为"密钥门禁 + 字段级加密"。
+//! 打开前强制校验密钥引用与实际密钥，禁止静默降级为明文库。
+//! 默认后端对 sessions/utterances/insights/summaries/cards 的载荷执行
+//! 字段级 AES-256-GCM；启用 `sqlcipher` feature 时再由 SQLCipher 接管页级加密。
+//! 注意：FTS5 索引中的分词文本仍由 SQLite 维护，需页级加密才能覆盖。
 
 use meeting_copilot_domain::error::CopilotError;
 
@@ -13,7 +13,7 @@ pub mod repo;
 
 pub use repo::SqliteStore;
 
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// L1 派生的 32 字节数据库密钥。仅内存持有，日志与 Debug 输出一律脱敏。
 #[derive(Clone, PartialEq, Eq)]

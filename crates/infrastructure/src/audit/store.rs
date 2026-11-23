@@ -3,6 +3,7 @@
 //! 追加与校验都在同一 SQLite 连接上完成；表级触发器保证线上记录不可改、
 //! 未归档前不可删。写失败或断链后置"审计不可用"，敏感操作由调用方拒绝。
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -41,6 +42,10 @@ fn sql_error(error: rusqlite::Error) -> StoreError {
 
 fn id_from_raw(raw: String) -> Result<AuditId, StoreError> {
     AuditId::new(raw).map_err(|error| StoreError::Serialization(error.to_string()))
+}
+
+fn anchor_id(up_to_seq: i64) -> Result<AuditId, StoreError> {
+    id_from_raw(format!("audit-anchor-{up_to_seq:016}"))
 }
 
 pub struct SqliteAuditLog<'a> {
@@ -135,10 +140,49 @@ impl<'a> SqliteAuditLog<'a> {
         id_from_raw(audit_id)
     }
 
-    /// 按 `seq` 全链重算；返回首个不一致的审计 ID。归档前移出的分段用
-    /// `audit_archive.terminal_self_hash` 衔接。
+    /// 按 `seq` 全链重算，并校验锚点公式、在线锚点哈希与周期检查点完整性。
+    /// 返回首个不一致的审计 ID；锚点问题返回 `audit-anchor-<seq>` 标记。
     pub fn verify(&self) -> Result<Option<AuditId>, StoreError> {
         let conn = self.store.connection();
+        let mut anchors = BTreeMap::new();
+        {
+            let mut statement = conn
+                .prepare(
+                    "SELECT up_to_seq, last_self_hash, anchor_hash
+                     FROM audit_anchor ORDER BY up_to_seq ASC",
+                )
+                .map_err(sql_error)?;
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(sql_error)?;
+            for row in rows {
+                let (up_to_seq, last_self_hash, anchor_hash) = row.map_err(sql_error)?;
+                let expected = digest(&last_self_hash, &format!("anchor|{up_to_seq}"));
+                if anchor_hash != expected || anchors.insert(up_to_seq, last_self_hash).is_some() {
+                    return Ok(Some(anchor_id(up_to_seq)?));
+                }
+            }
+        }
+
+        let mut archived_ranges = Vec::new();
+        {
+            let mut statement = conn
+                .prepare("SELECT first_seq, last_seq FROM audit_archive ORDER BY first_seq ASC")
+                .map_err(sql_error)?;
+            let rows = statement
+                .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))
+                .map_err(sql_error)?;
+            for row in rows {
+                archived_ranges.push(row.map_err(sql_error)?);
+            }
+        }
+
         let first: Option<(String, String, i64)> = conn
             .query_row(
                 "SELECT audit_id, prev_hash, seq FROM audit_record ORDER BY seq ASC LIMIT 1",
@@ -147,80 +191,119 @@ impl<'a> SqliteAuditLog<'a> {
             )
             .optional()
             .map_err(sql_error)?;
-        let Some((first_id, first_prev, first_seq)) = first else {
-            return Ok(None);
-        };
 
-        if first_seq == 1 {
-            if first_prev != GENESIS_HASH {
-                return Ok(Some(id_from_raw(first_id)?));
+        let mut online_hashes = BTreeMap::new();
+        if let Some((first_id, first_prev, first_seq)) = first {
+            if first_seq == 1 {
+                if first_prev != GENESIS_HASH {
+                    return Ok(Some(id_from_raw(first_id)?));
+                }
+            } else {
+                let archived = archived_ranges
+                    .iter()
+                    .find(|(_, last_seq)| *last_seq == first_seq.saturating_sub(1))
+                    .map(|(_, last_seq)| *last_seq);
+                if archived.is_none() {
+                    return Ok(Some(id_from_raw(first_id)?));
+                }
+                let terminal: String = conn
+                    .query_row(
+                        "SELECT terminal_self_hash FROM audit_archive WHERE last_seq = ?1",
+                        params![first_seq.saturating_sub(1)],
+                        |row| row.get(0),
+                    )
+                    .map_err(sql_error)?;
+                if terminal != first_prev {
+                    return Ok(Some(id_from_raw(first_id)?));
+                }
             }
-        } else {
-            let archived: Option<String> = conn
-                .query_row(
-                    "SELECT terminal_self_hash FROM audit_archive WHERE last_seq = ?1",
-                    params![first_seq.saturating_sub(1)],
-                    |row| row.get(0),
+
+            let mut statement = conn
+                .prepare(
+                    "SELECT audit_id, action, actor, occurred_at_ms, target,
+                            sanitized_summary, prev_hash, self_hash, seq
+                     FROM audit_record ORDER BY seq ASC",
                 )
-                .optional()
                 .map_err(sql_error)?;
-            if archived.as_deref() != Some(first_prev.as_str()) {
-                return Ok(Some(id_from_raw(first_id)?));
+            let rows = statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
+                        row.get::<_, String>(7)?,
+                        row.get::<_, i64>(8)?,
+                    ))
+                })
+                .map_err(sql_error)?;
+
+            let mut previous = first_prev;
+            let mut expected_seq = first_seq;
+            for row in rows {
+                let (
+                    audit_id,
+                    action_raw,
+                    actor,
+                    occurred_at_ms,
+                    target,
+                    summary,
+                    prev_hash,
+                    self_hash,
+                    seq,
+                ) = row.map_err(sql_error)?;
+                let Some(action) = AuditAction::parse(&action_raw) else {
+                    return Ok(Some(id_from_raw(audit_id)?));
+                };
+                if seq != expected_seq || prev_hash != previous {
+                    return Ok(Some(id_from_raw(audit_id)?));
+                }
+                let expected = digest(
+                    &previous,
+                    &canonical_fields(action, &actor, occurred_at_ms, &target, &summary),
+                );
+                if self_hash != expected {
+                    return Ok(Some(id_from_raw(audit_id)?));
+                }
+                online_hashes.insert(seq, self_hash.clone());
+                previous = self_hash;
+                expected_seq = expected_seq.saturating_add(1);
             }
         }
 
-        let mut statement = conn
-            .prepare(
-                "SELECT audit_id, action, actor, occurred_at_ms, target,
-                        sanitized_summary, prev_hash, self_hash, seq
-                 FROM audit_record ORDER BY seq ASC",
-            )
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                    row.get::<_, String>(6)?,
-                    row.get::<_, String>(7)?,
-                    row.get::<_, i64>(8)?,
-                ))
-            })
-            .map_err(sql_error)?;
+        let covered = |seq: i64| {
+            online_hashes.contains_key(&seq)
+                || archived_ranges
+                    .iter()
+                    .any(|(first, last)| *first <= seq && seq <= *last)
+        };
+        for (up_to_seq, anchored_hash) in &anchors {
+            if !covered(*up_to_seq) {
+                return Ok(Some(anchor_id(*up_to_seq)?));
+            }
+            if let Some(online_hash) = online_hashes.get(up_to_seq) {
+                if online_hash != anchored_hash {
+                    return Ok(Some(anchor_id(*up_to_seq)?));
+                }
+            }
+        }
 
-        let mut previous = first_prev;
-        let mut expected_seq = first_seq;
-        for row in rows {
-            let (
-                audit_id,
-                action_raw,
-                actor,
-                occurred_at_ms,
-                target,
-                summary,
-                prev_hash,
-                self_hash,
-                seq,
-            ) = row.map_err(sql_error)?;
-            let Some(action) = AuditAction::parse(&action_raw) else {
-                return Ok(Some(id_from_raw(audit_id)?));
-            };
-            if seq != expected_seq || prev_hash != previous {
-                return Ok(Some(id_from_raw(audit_id)?));
+        let max_seq = online_hashes.keys().next_back().copied().unwrap_or(0).max(
+            archived_ranges
+                .iter()
+                .map(|(_, last)| *last)
+                .max()
+                .unwrap_or(0),
+        );
+        let mut checkpoint = ANCHOR_INTERVAL;
+        while checkpoint <= max_seq {
+            if covered(checkpoint) && !anchors.contains_key(&checkpoint) {
+                return Ok(Some(anchor_id(checkpoint)?));
             }
-            let expected = digest(
-                &previous,
-                &canonical_fields(action, &actor, occurred_at_ms, &target, &summary),
-            );
-            if self_hash != expected {
-                return Ok(Some(id_from_raw(audit_id)?));
-            }
-            previous = self_hash;
-            expected_seq = expected_seq.saturating_add(1);
+            checkpoint = checkpoint.saturating_add(ANCHOR_INTERVAL);
         }
         Ok(None)
     }
@@ -370,7 +453,10 @@ mod tests {
                 "{summary}"
             );
         }
-        assert_eq!(store.schema_version().expect("version"), 2);
+        assert_eq!(
+            store.schema_version().expect("version"),
+            crate::store::SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -401,6 +487,33 @@ mod tests {
         assert_eq!(
             broken,
             Some(AuditId::new("audit-0000000000000003").expect("id"))
+        );
+    }
+
+    #[test]
+    fn tampered_anchor_is_detected() {
+        let store = store();
+        let log = SqliteAuditLog::new(&store);
+        for index in 0..1_000 {
+            log.append_record(
+                AuditAction::CardShown,
+                "actor-1",
+                index,
+                "card-1",
+                "展示卡片",
+            )
+            .expect("append");
+        }
+        store
+            .connection()
+            .execute(
+                "UPDATE audit_anchor SET last_self_hash = 'tampered' WHERE up_to_seq = 1000",
+                [],
+            )
+            .expect("tamper anchor");
+        assert_eq!(
+            log.verify().expect("verify"),
+            Some(AuditId::new("audit-anchor-0000000000001000").expect("anchor id"))
         );
     }
 

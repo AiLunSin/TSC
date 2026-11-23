@@ -326,6 +326,20 @@ mod tests {
         assert_eq!(bundle.record_count, 3);
         assert_eq!(bundle.records.len(), 3);
         assert_eq!(bundle.month, outcomes[0].month);
+
+        // 归档后同月新增的尾部记录不在 first_seq..last_seq 内，必须拒绝删除。
+        log.append_record(
+            AuditAction::CardShown,
+            "actor-1",
+            old + 10,
+            "card-late",
+            "归档后新增",
+        )
+        .expect("append tail");
+        let blocked = store
+            .connection()
+            .execute("DELETE FROM audit_record WHERE seq = 5", []);
+        assert!(blocked.is_err(), "不得删除已归档区间之外的尾部记录");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

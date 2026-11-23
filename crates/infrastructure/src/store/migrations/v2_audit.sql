@@ -1,5 +1,5 @@
 -- v2：持久化审计哈希链、锚点与归档（SPEC 7.4、DESIGN 2.10.4）。
--- UPDATE 一律拒绝；DELETE 仅当所属自然月已存在归档行时放行（DESIGN 2.10.6）。
+-- UPDATE 一律拒绝；DELETE 仅当记录序号落在已归档区间内时放行（DESIGN 2.10.6）。
 
 CREATE TABLE IF NOT EXISTS audit_record (
   seq               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,6 +46,7 @@ BEFORE DELETE ON audit_record
 WHEN NOT EXISTS (
   SELECT 1 FROM audit_archive
   WHERE month = strftime('%Y-%m', OLD.occurred_at_ms / 1000, 'unixepoch')
+    AND OLD.seq BETWEEN first_seq AND last_seq
 )
 BEGIN
   SELECT RAISE(ABORT, 'audit append-only');

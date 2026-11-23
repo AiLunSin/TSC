@@ -27,6 +27,10 @@ mod outbox;
 const SCHEMA_V2_CACHE_OUTBOX: &str = include_str!("../migrations/v2_cache_outbox.sql");
 const SCHEMA_V2_FEEDBACK: &str = include_str!("../migrations/v2_feedback.sql");
 const SCHEMA_V2_AUDIT: &str = include_str!("../migrations/v2_audit.sql");
+const SCHEMA_V3_AUDIT_HARDENING: &str = include_str!("../migrations/v3_audit_hardening.sql");
+
+/// 字段级密文前缀；无前缀行视为旧版明文，仅用于兼容读取。
+const FIELD_CIPHER_PREFIX: &str = "enc:v1:";
 
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
@@ -86,18 +90,44 @@ fn encode<T: Serialize>(value: &T) -> Result<String, StoreError> {
     serde_json::to_string(value).map_err(|error| StoreError::Serialization(error.to_string()))
 }
 
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push_str(&format!("{byte:02x}"));
+    }
+    output
+}
+
+fn hex_decode(raw: &str) -> Result<Vec<u8>, StoreError> {
+    if !raw.len().is_multiple_of(2) {
+        return Err(StoreError::Serialization("字段密文编码非法".to_owned()));
+    }
+    let mut bytes = Vec::with_capacity(raw.len() / 2);
+    for chunk in raw.as_bytes().as_chunks::<2>().0 {
+        let text = std::str::from_utf8(chunk)
+            .map_err(|_| StoreError::Serialization("字段密文编码非法".to_owned()))?;
+        bytes.push(
+            u8::from_str_radix(text, 16)
+                .map_err(|_| StoreError::Serialization("字段密文编码非法".to_owned()))?,
+        );
+    }
+    Ok(bytes)
+}
+
 pub struct SqliteStore {
     conn: Mutex<Connection>,
+    field_key: StoreKey,
 }
 
 impl SqliteStore {
-    /// 打开库。启用 `sqlcipher` feature 时必须改用 [`SqliteStore::open_with_key`]，
-    /// 否则因缺少密钥直接失败，不会静默生成明文库。
+    /// 打开库但不提供密钥。任何构建下都会失败，禁止静默生成明文业务库；
+    /// 调用方必须使用 [`SqliteStore::open_with_key`]。
     pub fn open(config: &StoreConfig) -> Result<Self, StoreError> {
         Self::open_with_key(config, None)
     }
 
     /// 打开库并注入 L1 派生的 32B 数据库密钥（`crypto::derive_l1` 的输出）。
+    /// 默认后端用该密钥加密业务载荷；SQLCipher 后端额外启用页级加密。
     pub fn open_with_key(config: &StoreConfig, key: Option<&StoreKey>) -> Result<Self, StoreError> {
         config.validate()?;
         let conn = Connection::open(&config.path).map_err(sql_error)?;
@@ -108,8 +138,8 @@ impl SqliteStore {
     /// 因此此处生成一次性随机密钥；库销毁后密钥随之丢失。
     pub fn open_in_memory() -> Result<Self, StoreError> {
         let conn = Connection::open_in_memory().map_err(sql_error)?;
-        let key = memory_key();
-        Self::prepare(conn, false, key.as_ref())
+        let key = StoreKey::new(crate::crypto::generate_master());
+        Self::prepare(conn, false, Some(&key))
     }
 
     fn prepare(
@@ -117,10 +147,9 @@ impl SqliteStore {
         wal_enabled: bool,
         key: Option<&StoreKey>,
     ) -> Result<Self, StoreError> {
+        let field_key = key.cloned().ok_or(StoreError::MissingKey)?;
         #[cfg(feature = "sqlcipher")]
-        apply_key(&conn, key)?;
-        #[cfg(not(feature = "sqlcipher"))]
-        let _ = key;
+        apply_key(&conn, Some(&field_key))?;
         if wal_enabled {
             let _ = conn.pragma_update(None, "journal_mode", "WAL");
         }
@@ -129,7 +158,40 @@ impl SqliteStore {
         migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
+            field_key,
         })
+    }
+
+    fn encode_payload<T: Serialize>(
+        &self,
+        session_id: &str,
+        value: &T,
+    ) -> Result<String, StoreError> {
+        let plaintext = encode(value)?;
+        let envelope = crate::crypto::encrypt_field(
+            self.field_key.as_bytes(),
+            session_id,
+            plaintext.as_bytes(),
+        )
+        .map_err(|error| StoreError::Serialization(error.to_string()))?;
+        Ok(format!("{FIELD_CIPHER_PREFIX}{}", hex_encode(&envelope)))
+    }
+
+    fn decode_payload<T: for<'de> Deserialize<'de>>(
+        &self,
+        session_id: &str,
+        payload: &str,
+    ) -> Result<T, StoreError> {
+        let Some(encoded) = payload.strip_prefix(FIELD_CIPHER_PREFIX) else {
+            // 兼容升级前已存在的明文行；所有新写入均为字段级密文。
+            return decode(payload);
+        };
+        let envelope = hex_decode(encoded)?;
+        let plaintext =
+            crate::crypto::decrypt_field(self.field_key.as_bytes(), session_id, &envelope)
+                .map_err(|error| StoreError::Serialization(error.to_string()))?;
+        serde_json::from_slice(&plaintext)
+            .map_err(|error| StoreError::Serialization(error.to_string()))
     }
 
     pub fn schema_version(&self) -> Result<u32, StoreError> {
@@ -157,7 +219,7 @@ impl SqliteStore {
         utterance: &Utterance,
         fail_before_vector: bool,
     ) -> Result<(), StoreError> {
-        let payload = encode(utterance)?;
+        let payload = self.encode_payload(session.as_str(), utterance)?;
         let mut conn = self.lock();
         let tx = conn.transaction().map_err(sql_error)?;
         tx.execute(
@@ -227,16 +289,6 @@ impl SqliteStore {
     }
 }
 
-#[cfg(feature = "sqlcipher")]
-fn memory_key() -> Option<StoreKey> {
-    Some(StoreKey::new(crate::crypto::generate_master()))
-}
-
-#[cfg(not(feature = "sqlcipher"))]
-fn memory_key() -> Option<StoreKey> {
-    None
-}
-
 /// 在读取任何数据页之前下发 SQLCipher 原始密钥，并用一次元数据读取校验密钥。
 #[cfg(feature = "sqlcipher")]
 fn apply_key(conn: &Connection, key: Option<&StoreKey>) -> Result<(), StoreError> {
@@ -272,13 +324,19 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
         conn.pragma_update(None, "user_version", 2)
             .map_err(sql_error)?;
     }
-    debug_assert_eq!(SCHEMA_VERSION, 2);
+    if version < 3 {
+        conn.execute_batch(SCHEMA_V3_AUDIT_HARDENING)
+            .map_err(sql_error)?;
+        conn.pragma_update(None, "user_version", 3)
+            .map_err(sql_error)?;
+    }
+    debug_assert_eq!(SCHEMA_VERSION, 3);
     Ok(())
 }
 
 impl SessionRepository for SqliteStore {
     fn create(&self, session: &Session) -> Result<(), CopilotError> {
-        let payload = encode(session)?;
+        let payload = self.encode_payload(session.id.as_str(), session)?;
         self.lock()
             .execute(
                 "INSERT INTO sessions (id, state, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
@@ -299,7 +357,7 @@ impl SessionRepository for SqliteStore {
                 detail: format!("会话 {id} 不存在"),
             })?;
         let updated = current.transition(next)?;
-        let payload = encode(&updated)?;
+        let payload = self.encode_payload(id.as_str(), &updated)?;
         self.lock()
             .execute(
                 "UPDATE sessions SET state = ?1, payload = ?2 WHERE id = ?3",
@@ -320,7 +378,10 @@ impl SessionRepository for SqliteStore {
             .optional()
             .map_err(|error| CopilotError::from(sql_error(error)))?;
         payload
-            .map(|value| decode(&value).map_err(CopilotError::from))
+            .map(|value| {
+                self.decode_payload::<Session>(id.as_str(), &value)
+                    .map_err(CopilotError::from)
+            })
             .transpose()
     }
 
@@ -375,10 +436,10 @@ impl UtteranceRepository for SqliteStore {
         let raw = payload.ok_or_else(|| CopilotError::StoreFailure {
             detail: "被修订片段不存在".into(),
         })?;
-        let mut utterance: Utterance = decode(&raw)?;
+        let mut utterance: Utterance = self.decode_payload(session.as_str(), &raw)?;
         utterance.text = correction.revised_text.clone();
         utterance.confidence = correction.confidence;
-        let updated = encode(&utterance)?;
+        let updated = self.encode_payload(session.as_str(), &utterance)?;
         tx.execute(
             "UPDATE utterances SET payload = ?1 WHERE session_id = ?2 AND reference = ?3",
             params![updated, session.as_str(), correction.replaces.as_str()],
@@ -409,7 +470,7 @@ impl UtteranceRepository for SqliteStore {
         let mut items = Vec::new();
         for row in rows {
             let payload = row.map_err(|e| CopilotError::from(sql_error(e)))?;
-            items.push(decode(&payload)?);
+            items.push(self.decode_payload(session.as_str(), &payload)?);
         }
         Ok(items)
     }
@@ -427,7 +488,7 @@ impl UtteranceRepository for SqliteStore {
                 .map_err(|e| CopilotError::from(sql_error(e)))?
         };
         for payload in payloads {
-            let insight: Insight = decode(&payload)?;
+            let insight: Insight = self.decode_payload(session.as_str(), &payload)?;
             if insight.sources.iter().any(|item| item == reference) {
                 return Err(CopilotError::StoreFailure {
                     detail: "片段被要点引用，禁止删除".into(),
@@ -453,7 +514,7 @@ impl UtteranceRepository for SqliteStore {
 
 impl InsightRepository for SqliteStore {
     fn save(&self, session: &SessionId, insight: &Insight) -> Result<(), CopilotError> {
-        let payload = encode(insight)?;
+        let payload = self.encode_payload(session.as_str(), insight)?;
         self.lock()
             .execute(
                 "INSERT INTO insights (session_id, reference, payload) VALUES (?1, ?2, ?3)
@@ -479,7 +540,7 @@ impl InsightRepository for SqliteStore {
             .optional()
             .map_err(|e| CopilotError::from(sql_error(e)))?;
         payload
-            .map(|value| decode(&value))
+            .map(|value| self.decode_payload(session.as_str(), &value))
             .transpose()
             .map_err(CopilotError::from)
     }
@@ -495,7 +556,7 @@ impl InsightRepository for SqliteStore {
         let mut items = Vec::new();
         for row in rows {
             let payload = row.map_err(|e| CopilotError::from(sql_error(e)))?;
-            items.push(decode(&payload)?);
+            items.push(self.decode_payload(session.as_str(), &payload)?);
         }
         Ok(items)
     }
@@ -505,7 +566,7 @@ impl InsightRepository for SqliteStore {
         session: &SessionId,
         summary: &RollingSummary,
     ) -> Result<(), CopilotError> {
-        let payload = encode(summary)?;
+        let payload = self.encode_payload(session.as_str(), summary)?;
         self.lock()
             .execute(
                 "INSERT INTO summaries (session_id, version, payload) VALUES (?1, ?2, ?3)
@@ -523,7 +584,7 @@ impl CardRepository for SqliteStore {
             .map_err(|error| CopilotError::PrivacyViolation {
                 detail: error.to_string(),
             })?;
-        let payload = encode(card)?;
+        let payload = self.encode_payload(session.as_str(), card)?;
         self.lock()
             .execute(
                 "INSERT INTO cards (session_id, reference, payload) VALUES (?1, ?2, ?3)",
@@ -548,13 +609,13 @@ impl CardRepository for SqliteStore {
             .optional()
             .map_err(|e| CopilotError::from(sql_error(e)))?;
         payload
-            .map(|value| decode(&value))
+            .map(|value| self.decode_payload(session.as_str(), &value))
             .transpose()
             .map_err(CopilotError::from)
     }
 
     fn update(&self, session: &SessionId, card: &SuggestionCard) -> Result<(), CopilotError> {
-        let payload = encode(card)?;
+        let payload = self.encode_payload(session.as_str(), card)?;
         self.lock()
             .execute(
                 "UPDATE cards SET payload = ?1 WHERE session_id = ?2 AND reference = ?3",
@@ -682,6 +743,28 @@ mod tests {
     }
 
     #[test]
+    fn business_payload_is_encrypted_at_rest_and_readable() {
+        let store = store();
+        let item = utterance("utt-secret", "客户的私有转录内容");
+        UtteranceRepository::append(&store, &session_id(), &item).expect("append");
+
+        let payload: String = store
+            .lock()
+            .query_row(
+                "SELECT payload FROM utterances WHERE reference = 'utt-secret'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("payload");
+        assert!(payload.starts_with(FIELD_CIPHER_PREFIX));
+        assert!(!payload.contains("客户的私有转录内容"));
+
+        let listed = UtteranceRepository::list(&store, &session_id()).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].text.as_str(), "客户的私有转录内容");
+    }
+
+    #[test]
     fn failed_write_rolls_back_all_three_tables() {
         let store = store();
         let item = utterance("utt-rollback", "这条不该落库");
@@ -747,7 +830,6 @@ mod tests {
 
     // 样本库是明文 SQLite，仅在非 SQLCipher 构建下有意义。
     #[cfg(not(feature = "sqlcipher"))]
-    #[cfg(not(feature = "sqlcipher"))]
     #[test]
     fn v0_database_is_migrated_and_preserves_rows() {
         let stamp = std::time::SystemTime::now()
@@ -783,7 +865,8 @@ mod tests {
             key_ref: Some("keychain://test/db".into()),
             wal_enabled: false,
         };
-        let store = SqliteStore::open(&config).expect("migrate");
+        let key = StoreKey::new([3_u8; crate::crypto::MASTER_KEY_LEN]);
+        let store = SqliteStore::open_with_key(&config, Some(&key)).expect("migrate");
         assert_eq!(store.schema_version().expect("version"), SCHEMA_VERSION);
 
         let count: i64 = store
