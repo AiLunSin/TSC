@@ -11,9 +11,9 @@
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB)
 
-当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路已接通；设置页真机第 1~6、9、10 项已通过，UIA 字幕/OCR、卡片渲染/投屏遮蔽真机结论与真实检索端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路已接通；检索源接入（U-09 A~F）已实现，真实端点验收待进行；设置页真机第 1~6、9、10 项已通过，UIA 字幕/OCR、卡片渲染/投屏遮蔽真机结论仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
-仓库状态（2026-11-23）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。同日完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。
+仓库状态（2026-11-24）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（2026-11-23：web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。2026-11-23 完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。2026-11-24 完成检索源接入 A~F 与归档保留期确认（方案 B，在线 180 天 + 归档 5 年，U-07-52 关闭）。
 
 ## 当前进度
 
@@ -26,17 +26,18 @@
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
 | P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时出卡**：AC-B4-111~130 离线通过；13 命令（含打开日志、会议检测、采集状态、文本出卡、实时转写）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
+| U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线：**877 passed / 0 failed / 10 ignored**（含 P-UI 桌面层 **36 例**、平台层 **10 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量基线（2026-11-24 实测）：**970 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **36 例**、平台层 **10 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
 
 仍未完成：
 
 - **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。
-- **U-07**：负反馈、缓存/outbox、按需补全、审计存储。
-- **U-08**：真实检索源、真实 LLM 冷却、真机性能与误触发率；9 个 `#[ignore]` 用例保持不跑。
+- **U-07**：负反馈加权、缓存/outbox 已实现；按需补全机制完成，真实 200 样本未采集（U-07-43 `open`）；审计哈希链与 5 年归档已关闭（U-07-52）。
+- **U-08**：真实检索源（由 U-09 承接，待 H-34-G）、真实 LLM 冷却、真机性能与误触发率；12 个 `#[ignore]` 用例保持不跑（含 H-34-G 两个手工入口）。
 - **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`）、进程名 + 窗口标题会议检测（`meeting`）与 WASAPI 共享模式环回采集（`wasapi`，`AudioSource` 实现，含混音/单声道解码单测）；UIA 字幕与 OCR 仍为接口占位；`platform-mac` 不适用（保留占位）。
 - **产品能力口径**：38/39/51 只交付契约与视图；前端已只读消费 DTO，但仍不宣称“产品级可点击卡片”或真机可用。
 
@@ -46,7 +47,7 @@ U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_rep
 crates/
   domain/            领域模型、值对象、端口 trait（禁止依赖实现）
   application/       应用编排：采集、治理、理解层、门控、卡片、引用对齐、设置端口
-  infrastructure/    存储、加密、审计链、度量、日志、LLM 传输
+  infrastructure/    存储、加密、审计链、度量、日志、LLM 传输、检索源装配
   platform-win/      Windows 适配（凭据管理、会议检测、WASAPI 环回已实现；UIA 字幕与 OCR 仍占位）
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
@@ -166,6 +167,19 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 - 凭据经 `crates/platform-win/src/secure_store.rs` 写入 Windows 凭据管理器（唯一目标名）；非敏感配置为 `settings.json` **恰 4 键**、原子写、损坏回默认；Key 固定掩码 `***`、不落盘明文、不进日志/审计/回放。
 - 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；设置页真机第 1~6、9、10 项已通过，卡片渲染与投屏遮蔽仍未判定，**不宣称整体界面已验收**。
 
+## 检索源接入
+
+- 默认零源：不内置任何检索源；未配置时按需补全直接返回 `NoSource`，不外发、不出卡。
+- 配置仅在运行期注入：`SEARCH_PROVIDERS_FILE` 指向本地 `providers.json`（不入库），`authRef` 指向保存令牌的环境变量名；端点必须是 HTTPS，外发仅允许配置中的主机。
+- 手动验收入口（默认 `#[ignore]`）：
+
+```bash
+cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live -- --ignored
+```
+
+  需同时设置 `SEARCH_PROVIDERS_FILE`、`SEARCH_QUERIES_FILE` 与 `<authRef>`；可选 `SEARCH_REPORT_PATH` 输出只含计数与时延的 JSON。`smoke_three_rounds` 对应 H-34-G 的 3 次验收，`collect_200_real_samples` 对应 200 条真实样本。
+- 报告与日志不记录查询原文、URL 查询串、页面正文或标题结论。
+
 ## 关键词卡片
 
 链路：`B3 片段/要点 → B4 门控（G1~G5）→ 候选派生 → 38 卡片数据 → 39 引用对齐 → 51 视图/点击`。
@@ -186,7 +200,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 - 日志仅允许白名单字段；原文、完整地址、查询全文不得落日志。
 - 桌面日志写入 `%LOCALAPPDATA%\com.meetingcopilot.desktop\logs\desktop.log`（超过 5 MiB 自动重置），设置页"打开日志"在资源管理器中定位；日志不发往网络。
 - 数据库打开前必须提供 OS 密钥库引用，禁止明文口令。
-- 审计只追加，不随会话删除；保留期以实际配置为准。
+- 审计只追加，不随会话删除；在线保留 180 天，归档保留 5 年（项目自用设置），保留期内不自动销毁。
 - 许可证：不内置 AGPL/GPL 组件；检索源仅通过开放 SPI 接入。
 
 ## 文档索引
@@ -211,6 +225,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 | `docs/baseline/asr.md` | ASR 基线与模型说明 |
 | `docs/sdd/tasks-b2-offline-closure.md` | B2 离线闭环任务清单 |
 | `docs/compliance/license-review.md` | 许可证边界 |
+| `docs/compliance/retention-review.md` | 归档保留期复核与法务意见 |
 
 ## 贡献
 
