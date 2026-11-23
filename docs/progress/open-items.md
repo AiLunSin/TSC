@@ -59,15 +59,15 @@
 
 | 项 | 现象 | 原因 | 处理 |
 |---|---|---|---|
-| GitHub Actions 全红 | run #51 的 web / rust×3 / test-name-inventory / compliance / sqlcipher / feature-coverage 全部启动即失败 | 账户预算设为 $0，Actions 使用被阻止（非分钟耗尽，已花费 $0.00） | 删除 Actions 的 $0 预算，或保持免费额度并把支出上限设为 $0 后 re-run |
-| 仓库可见性 | 当前私有，免费额度受限 | 用户决定暂不公开 | 保持私有；如需公开，先处理本机路径脱敏与 LICENSE |
-| LICENSE | 仓库无 LICENSE 文件 | README 声称 MIT OR Apache-2.0 | 公开前补许可证；私有可暂缓 |
+| GitHub Actions 全红 | run #51 的 web / rust×3 / test-name-inventory / compliance / sqlcipher / feature-coverage 全部启动即失败 | 账户预算设为 $0，Actions 使用被阻止（非分钟耗尽，已花费 $0.00） | **已解除前提**：仓库转为公开后公共仓库免费额度生效；push 会触发新 run，需复核 |
+| 仓库可见性 | **已公开**（2026-11-23） | 用户要求公开 | 已完成；About 描述与 topics 同步设置 |
+| LICENSE | 已补 `LICENSE-MIT` 与 `LICENSE-APACHE` | README 声称 MIT OR Apache-2.0 | 已完成 |
 | 本机 sqlcipher 编译 | `perl`/OpenSSL 配置失败（`0xc0000142`） | 本机工具链环境，非代码 | 如需本地验证，改用 Linux/WSL 或安装可用 OpenSSL 构建链 |
-| 本机绝对路径 | `docs/progress/b2-offline-closure.md` 含 `<USER_HOME>\...` | 历史记录原样保留 | 公开前脱敏为 `<USER_HOME>` |
+| 本机绝对路径 | 已脱敏 | 历史记录曾含本机绝对路径 | 已完成：`b2-offline-closure.md` 改为 `<USER_HOME>`/`<REPO>`；历史提交仍含旧值，如需彻底清除需改写历史 |
 
 ## 6. 关闭条件优先级
 
-1. **P0 环境**：解除 Actions $0 预算 → re-run，确认 8 个 job 启动（否则一切远端取证不可得）。
+1. **P0 环境**：Actions $0 预算 → **随仓库公开解除前提**；push 后复核 8 个 job 启动（否则一切远端取证不可得）。
 2. **P1 外部条件**：提供端点凭据与真机 → 关闭 U-05 / U-08 与 AC-B4-109 远端取证。
 3. **P2 裁决**：Q-01~Q-06 → 执行 B-3/B-4/B-5；预计可回收约 0.86 M + 5.6 G。
 4. **P3 规格**：U-07 四项逐项立项（先规格、后实现）。

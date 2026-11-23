@@ -2,6 +2,14 @@
 
 监听会议对话、识别值得解释的关键词、经门控判定后主动提示，并可本地查看关键词详情的桌面 AI 助手。
 
+> 仓库名 `TSC`；产品名 **Meeting Copilot（会议副驾）**。
+
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#许可证)
+![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)
+![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-000000)
+![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
+![React 19](https://img.shields.io/badge/React-19-61DAFB)
+
 当前定位：**离线契约、门控与设置/卡片前端已闭环；真实采集、真机验收与真实端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
 ## 当前进度
@@ -188,4 +196,9 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 ## 许可证
 
-MIT OR Apache-2.0
+本项目采用 Rust 生态常见的双许可，任选其一：
+
+- [MIT License](LICENSE-MIT)
+- [Apache License 2.0](LICENSE-APACHE)
+
+除非另有明确说明，任何有意提交以纳入本项目的贡献，均按上述双许可授权。
