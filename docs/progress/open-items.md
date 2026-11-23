@@ -1,17 +1,17 @@
 # 未完成事项总表（2026-11-23）
 
-> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `d955d56`（上一提交）、跟踪文件 **285**、`docs/progress/test-names-before.txt` **365** 行。
-> CI 取证：run **#56**（`8b6b7b5`，2026-11-23）8 个 job 全部 `success`，经 GitHub Actions API 复核。
+> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `c98aa83`（上一提交）、跟踪文件 **294**、`docs/progress/test-names-before.txt` **365** 行。
+> CI 取证：run **45152256989**（`c98aa83`，2026-11-23）8 个 job 全部 `success`（含两个 darwin 任务与 compliance），经 GitHub Actions API 复核；此前 run #56（`8b6b7b5`）亦为 8/8。
 > 上游事实源：`docs/progress/b4-status.md` §25.3 / §29.5 / §30、`docs/progress/handoff-2026-11-22-pui.md`、`.codeartsdoer/specs/repo_audit_cleanup/`。
 > 审计证据：`.tmp/audit/`（本地产物，未入库）。
 
 ## 0. 状态速览
 
-- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证。
+- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）。
 - **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07 四项、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、`platform-win` 三项占位、9 个 `#[ignore]`、`tests/replay/`。
 - **待裁决**：Q-01（`target/`，最后批次）、Q-06（`temp/accept` 回滚备份，确认后清理）；Q-02~Q-05 已于 2026-11-23 删除；**治理项**：Q-07、AUD-17。
-- **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`。
-- **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 到 `github.com:443` 的 Git 传输历史被重置（HTTPS API 可用）。
+- **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
+- **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；下一步 P2（§8.4 删除）、P3（§8.5 规格）、P4（§8.6 治理）；Q-01（`cargo clean` + 重建）放到最后。
 
 ## 1. 产品能力缺口
@@ -75,6 +75,8 @@
 | X-AUD-09 | 平台层新增第三方依赖 | 引入 `windows` 0.58.0（特征：`Win32_Media_Audio`/`Win32_System_Com`/`Win32_Foundation`/`Win32_System_Com_StructuredStorage`）用于 WASAPI 环回；`platform-win` 增加对 `meeting-copilot-domain` 的直接依赖 | **已登记**：许可证为 MIT/Apache-2.0（与 `deny.toml` 允许清单一致）；UIA/OCR 后续复用同一依赖 |
 | X-AUD-10 | 关键词提取新增依赖 | 引入 `jieba-rs` 0.7.4（features: `tfidf`）做中文关键词提取；词典内嵌，exe 体积约 +8 MB | **已登记**：MIT 许可证；替代此前手写分词规则（长句切不出词、百分比被截断） |
 | X-AUD-11 | 本地 ASR 运行时依赖 | 运行期依赖 Python 3.13 + `vosk` 0.3（wheel 内含 libvosk）与 `.tmp/asr/` 下的 vosk 中文小模型（约 42 MB）；模型与依赖 **不入库**，Rust 侧以 `CREATE_NO_WINDOW` 启动子进程 | **已登记**：Apache-2.0 许可证；发布版需另行提供模型与 Python 环境（README 已注明） |
+| X-AUD-12 | 依赖安全修复 | `cookie` 0.18.2 命中 RUSTSEC 安全公告，升级至 0.18.3（tauri 依赖链，`^0.18` 兼容） | **已修复**：`cargo-deny check advisories` 输出 `advisories ok` |
+| X-AUD-13 | 非 Windows 平台占位 | macOS CI 因桌面壳无条件引用 Windows-only `wasapi` 而失败（E0432/E0433） | **已修复**：新增 `wasapi_stub.rs`（同接口、`open` 返回不支持），run 45152256989 两个 darwin 任务 success |
 
 ## 5. 工程环境阻塞（非代码问题）
 
@@ -85,7 +87,7 @@
 | LICENSE | 已补 `LICENSE-MIT` 与 `LICENSE-APACHE` | README 声称 MIT OR Apache-2.0 | 已完成（GitHub 识别为 Apache-2.0） |
 | 本机 sqlcipher 编译 | `perl`/OpenSSL 配置失败（`0xc0000142`） | 本机工具链环境，非代码 | 如需本地验证，改用 Linux/WSL 或安装可用 OpenSSL 构建链 |
 | 本机绝对路径 | **已完成历史改写** | 历史提交曾含本机绝对路径 | 已完成：全历史检索旧路径 0 命中；备份分支与 bundle 已删、reflog 已清、gc 已做 |
-| 本机 `git push` | 到 `github.com:443` 的连接被重置，`git push` 失败 | 本机网络/代理对 Git 传输的限制 | HTTPS API 可写入；按 §8.7 的推送说明处理，不要反复重试 |
+| 本机 `git push` | **已恢复**（2026-11-23 多次推送成功） | 此前网络/代理对 Git 传输的限制 | 已完成；如再失败按 §8.7 处理，不要反复重试 |
 
 ## 6. 关闭条件优先级
 
