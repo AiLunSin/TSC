@@ -1,20 +1,20 @@
 # 未完成事项总表（2026-11-23）
 
-> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `308e073`（Q-01/Q-06 执行前）、跟踪文件 **294**、`docs/progress/test-names-before.txt` **365** 行。
+> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `48f0725`（U-07 后）、跟踪文件 **363**、`docs/progress/test-names-before.txt` **365** 行。
 > CI 取证：run **45152256989**（`c98aa83`，2026-11-23）8 个 job 全部 `success`（含两个 darwin 任务与 compliance），经 GitHub Actions API 复核；此前 run #56（`8b6b7b5`）亦为 8/8。
 > 上游事实源：`docs/progress/b4-status.md` §25.3 / §29.5 / §30、`docs/progress/handoff-2026-11-22-pui.md`、`.codeartsdoer/specs/repo_audit_cleanup/`。
 > 审计证据：`.tmp/audit/`（本地产物，未入库）。
 
 ## 0. 状态速览
 
-- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）、本地门禁 34/34 复核（2026-11-23）、Q-01/Q-06 清理与重建回归（2026-11-23）。
+- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）、本地门禁 34/34 复核（2026-11-23）、Q-01/Q-06 清理与重建回归（2026-11-23）、Q-07 入库、AUD-17 门禁进 CI、X-AUD-15 OnceLock 改造（2026-11-23）。
 - **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07-43（实现完成，真实样本 0/200）、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、`platform-win` 的 UIA/OCR 两项占位、9 个 `#[ignore]`、`tests/replay/`。
-- **待裁决**：Q-01、Q-06 已于 2026-11-23 执行关闭；Q-02~Q-05 已于 2026-11-23 删除；**治理项**：Q-07、AUD-17、X-AUD-15（OnceLock 技术债）。
+- **待裁决**：Q-01、Q-06 已于 2026-11-23 执行关闭；Q-02~Q-05 已于 2026-11-23 删除；治理项 Q-07、AUD-17、X-AUD-15 已于 2026-11-23 执行。
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
-- **执行顺序**：P1 已完成可做部分；P2 已完成（2026-11-23）；P3 规格与实现已完成（2026-11-23，U-07-43 真实样本仍 open）；下一步 P4（§8.6 治理）。
+- **执行顺序**：P1 已完成可做部分；P2 已完成（2026-11-23）；P3 规格与实现已完成（2026-11-23，U-07-43 真实样本仍 open）；P4 治理已完成（2026-11-23，见 §8.6）。
 - **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；当时保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据（`target/` 后于 Q-01 清理）。
-- **门禁复核（2026-11-23）**：静态 **32/32** + `cargo-deny` + `test-name-inventory` 全通过（**34/34**）；修复 `settings-ux` 口径（X-AUD-14），登记 `b4-source` 的 OnceLock 技术债（X-AUD-15）；日志见 `.tmp/gates/`。
+- **门禁复核（2026-11-23）**：静态 **32/32** + `cargo-deny` + `test-name-inventory` 全通过（**34/34**）；修复 `settings-ux` 口径（X-AUD-14）；X-AUD-15 已改为 Tauri managed State 并移除 `b4-source` 豁免。
 
 ## 1. 产品能力缺口
 
@@ -40,7 +40,7 @@
 | B-3 / Q-05 | `.tmp/url-2.5.9-meta/` | 269 K | **已删除（2026-11-23）** | 内容为 `url` 2.5.9 包体，可重取 | 是 |
 | B-4 / Q-01 | `target/` | 14.7 GiB（2026-11-23 实测） | **已执行（2026-11-23）**：`cargo clean` 删除 37,872 文件 | 指纹存 `.tmp/archive/`；重建、877/0/10、门禁 34/34 均通过 | 否（可重建） |
 | B-5 / Q-06 | 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/` | 121 K | **已执行（2026-11-23）**：25 个 `.original.*` 备份与空 `.screenshots` 已删除 | 已确认无交付文件；未触碰外层其他配置 | 是（已删） |
-| Q-07 | 解除 `.codeartsdoer/` 忽略 | — | 本轮不做 | 独立变更单；先验证敏感扫描面 | 高 |
+| Q-07 | 解除 `.codeartsdoer/` 忽略 | 43 文件 / 4.9 MB | **已执行（2026-11-23）**：`temp/`、`.codebase/` 继续忽略，specs/mcp/rule 入库；`scan-secrets` rc=0 | 已满足 | 已执行 |
 | Q-08 | `app/dist`、`node_modules`、`*.cdx.json`、`*.tsbuildinfo` | — | **部分执行（2026-11-23，保守批次）**：`*.cdx.json` 与 `sbom-ci.cdx.json` 已删除 | `app/dist`、`node_modules`、`*.tsbuildinfo` 按保守策略保留 | 中 |
 
 > `temp/accept` 已清：25 个 `.original.*` 回滚备份已确认无需回滚后删除（2026-11-23）。
@@ -64,8 +64,8 @@
 | 编号 | 事项 | 现状 | 处置 |
 |---|---|---|---|
 | ERR-01 | C-UI-02 口径冲突 | §29.5-2 与 §29.6 表述不一致；§30.6 已登记采用 §29.6"保留"，并在 §29.5 追加指针行 | 无需再改；后续修改不得回退 |
-| AUD-15 / Q-07 | `.codeartsdoer/` 未入库 | `git ls-files .codeartsdoer` = 0 | 独立变更单裁决（步骤见 §8.6） |
-| AUD-17 | 本地专属门禁未纳入 CI | `check-b4-gates` / `check-ui-integration` / `check-mac-scope` / `check-b3-gates` 未进 CI | 明确"仅本地执行"或另立 CI 变更（步骤见 §8.6） |
+| AUD-15 / Q-07 | `.codeartsdoer/` 未入库 | **已执行（2026-11-23）**：入库 43 文件；嵌套 `.gitignore` 改为仅忽略 `temp/`、`.codebase/` | 已关闭（步骤见 §8.6） |
+| AUD-17 | 本地专属门禁未纳入 CI | **已执行（2026-11-23）**：`compliance` job 新增 b4-zero-transcript、ui-integration、mac-scope-claims、b3-zero-transcript 四步 | 已关闭（步骤见 §8.6） |
 | X-AUD-01 | `.tmp/asr.json` 未在设计清单 | B-1 按五准则判为可删并已删 | **已补登**：`design.md §2.14` |
 | X-AUD-02 | 全量基线漂移 | 实测 859 passed / 0 failed / 9 ignored，README 已校准 | **已被 X-AUD-07 取代**：当前对照为 877/10；历史行保留 859 不回溯 |
 | X-AUD-03 | 数量偏差 | `llm-live` 13 run（设计写 6）；`ui-store-tests` 5 文件（设计写 6） | **已补登**：`design.md §2.14` |
@@ -80,7 +80,7 @@
 | X-AUD-12 | 依赖安全修复 | `cookie` 0.18.2 命中 RUSTSEC 安全公告，升级至 0.18.3（tauri 依赖链，`^0.18` 兼容） | **已修复**：`cargo-deny check advisories` 输出 `advisories ok` |
 | X-AUD-13 | 非 Windows 平台占位 | macOS CI 因桌面壳无条件引用 Windows-only `wasapi` 而失败（E0432/E0433） | **已修复**：新增 `wasapi_stub.rs`（同接口、`open` 返回不支持），run 45152256989 两个 darwin 任务 success |
 | X-AUD-14 | 本地门禁口径滞后（UI） | `check-ui-integration --rule=settings-ux` 仍匹配 `disabled={!snapshot.canTest/canSave}`，实际页面已改为可计算的 `canTestNow`/`canSaveNow` | **已修复（2026-11-23）**：门禁改用正则，兼容 `snapshot.*` 与可计算变量两种写法 |
-| X-AUD-15 | 装配层全局态（B4 source） | `asr.rs`、`card_store.rs` 使用 `OnceLock` 进程级单例，命中 `check-b4-gates --rule=source` | **登记技术债（2026-11-23）**：门禁仅对这两个文件豁免 `OnceLock`，其余禁用面仍生效；后续改用 Tauri managed State |
+| X-AUD-15 | 装配层全局态（B4 source） | **已修复（2026-11-23）**：`AsrPipeline`/`CardStore` 改为 Tauri managed State（`Arc`），移除 `OnceLock`；门禁豁免同步删除 | 已关闭；`b4-source` 对其他禁用面仍生效 |
 
 ## 5. 工程环境阻塞（非代码问题）
 
@@ -100,7 +100,7 @@
 2. **P1 外部条件**：提供端点凭据与真机 → 关闭 U-05 / U-08 的对应子项（步骤见 §8.2、§8.3）。
 3. **P2 裁决**：**已完成（2026-11-23）**——Q-01、Q-06 已执行；回收 14.7 GiB；重建后测试 877/0/10、门禁 34/34（步骤见 §8.4）。
 4. **P3 规格**：U-07 四项逐项立项（先规格、后实现，步骤见 §8.5）。
-5. **P4 治理**：Q-07（`.codeartsdoer/` 入库）、AUD-17（本地门禁进 CI）、X-AUD-15（OnceLock 改 Tauri managed State，步骤见 §8.6）。
+5. **P4 治理**：**已完成（2026-11-23）**——Q-07 入库、AUD-17 四道门禁进 CI、X-AUD-15 改 Tauri managed State（步骤见 §8.6）。
 
 ## 7. 恢复入口
 
@@ -375,6 +375,12 @@ git commit -m "chore: 纳入 .codeartsdoer 规格目录"
 
 - 方案 A（进 CI）：在 `.github/workflows/ci.yml` 的 `compliance` job 增加四步——`check-b4-gates.sh --rule=zero-transcript`、`check-ui-integration.sh`、`check-mac-scope.sh --rule=claims`、`check-b3-gates.sh --rule=zero-transcript`，然后观察一次远端 run 是否全绿。
 - 方案 B（仅本地）：在 `ci-readiness.md` 明确"上述门禁为本地专属"，并把本表 AUD-17 标记为"已裁决"。
+
+**执行结果（2026-11-23）**
+
+- Q-07：`.codeartsdoer` 43 文件 / 4.9 MB；`scan-secrets` rc=0；根 `.gitignore` 改为仅忽略 `temp/`、`.codebase/`，嵌套 `.codeartsdoer/.gitignore` 同步收窄；`mcp_settings.json` 为空配置、`rule/metadata.properties` 无敏感项。
+- AUD-17：采用方案 A；`compliance` job 增加四步并把超时从 15 分钟提到 20 分钟；本地四条门禁均 rc=0。
+- X-AUD-15：`AsrPipeline` 与 `CardStore` 改为 Tauri managed State（`Arc`），`main.rs` 统一 `manage`；`check-b4-gates --rule=source` 删除两文件 `OnceLock` 豁免后仍 rc=0；桌面端 36/36 通过。
 
 ### 8.7 每次修改后的统一验证、提交与推送
 

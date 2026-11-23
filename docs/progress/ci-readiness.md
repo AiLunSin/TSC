@@ -320,3 +320,16 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 | L3-10 | CI 分钟成本与缓存命中率 | 计费面板 / 步骤耗时 |
 
 **结论**：本地判定项全部达成；远端 CI 经用户确认 6 个 job 全绿。仍**不宣称 G2 通过**——G2 需真实三平台 30 分钟稳定运行，CI 绿不构成等价。
+
+## 15. AUD-17：本地门禁纳入 CI（2026-11-23）
+
+采用方案 A。`compliance` job 在 `secrets-docs (C1)` 之后新增四步，超时由 15 分钟提至 20 分钟：
+
+| 步骤 | 命令 | 本地结果 |
+|---|---|---|
+| b4-zero-transcript | `bash scripts/check-b4-gates.sh --rule=zero-transcript` | rc=0 |
+| ui-integration | `bash scripts/check-ui-integration.sh`（默认全规则） | rc=0 |
+| mac-scope-claims | `bash scripts/check-mac-scope.sh --rule=claims` | rc=0 |
+| b3-zero-transcript | `bash scripts/check-b3-gates.sh --rule=zero-transcript` | rc=0 |
+
+口径：以上仅为本地 rc=0 与 workflow 静态检查；远端是否全绿需推送后由 Actions 运行日志确认。`check-ui-integration.sh` 在无参数时执行全部规则，CI 不传规则名以避免默认值漂移。

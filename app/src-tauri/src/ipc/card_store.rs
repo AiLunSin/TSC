@@ -4,7 +4,7 @@
 //! 不伪造外部检索来源。
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use jieba_rs::{Jieba, KeywordExtract, KeywordExtractConfig, TfIdf};
@@ -32,21 +32,27 @@ const MAX_KEYWORDS_PER_TEXT: usize = 8;
 const MAX_CARDS: usize = 200;
 
 /// 可变卡片源：内存内追加，供 `keyword_cards_snapshot` 只读投影。
+///
+/// 由 Tauri managed state 持有（`Arc<CardStore>`），不再使用进程级静态单例。
 pub struct CardStore {
     cards: Mutex<Vec<CardSnapshotEntry>>,
     sequence: AtomicU64,
+    jieba: Jieba,
+    tfidf: TfIdf,
 }
 
 impl CardStore {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             cards: Mutex::new(Vec::new()),
             sequence: AtomicU64::new(0),
+            jieba: Jieba::new(),
+            tfidf: TfIdf::new(None::<&mut &[u8]>, KeywordExtractConfig::default()),
         }
     }
 
     pub fn ingest(&self, text: &str) -> Result<usize, IpcErrorDto> {
-        let keywords = extract_keywords(text);
+        let keywords = self.extract_keywords(text);
         if keywords.is_empty() {
             return Err(IpcErrorDto::new(
                 "no_keyword",
@@ -75,6 +81,31 @@ impl CardStore {
         }
         Ok(added)
     }
+
+    /// 从会议文本中提取关键词：jieba TF-IDF 排序，过滤停用词与单字。
+    fn extract_keywords(&self, text: &str) -> Vec<String> {
+        let mut result: Vec<String> = Vec::new();
+        for keyword in
+            self.tfidf
+                .extract_keywords(&self.jieba, text, MAX_KEYWORDS_PER_TEXT, Vec::new())
+        {
+            let term = keyword.keyword.trim().to_owned();
+            if term.chars().count() < 2 || STOPWORDS.contains(&term.as_str()) {
+                continue;
+            }
+            if result
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&term))
+            {
+                continue;
+            }
+            result.push(term);
+            if result.len() >= MAX_KEYWORDS_PER_TEXT {
+                break;
+            }
+        }
+        result
+    }
 }
 
 impl CardSnapshotSource for CardStore {
@@ -84,13 +115,6 @@ impl CardSnapshotSource for CardStore {
             .map(|cards| cards.clone())
             .unwrap_or_default()
     }
-}
-
-static CARD_STORE: OnceLock<Arc<CardStore>> = OnceLock::new();
-
-/// 进程级卡片源；`keyword_cards_snapshot` 与 `ingest_text` 共用同一实例。
-pub fn card_store() -> Arc<CardStore> {
-    Arc::clone(CARD_STORE.get_or_init(|| Arc::new(CardStore::new())))
 }
 
 fn build_draft(sequence: u64, keyword: &str, excerpt: &str) -> Option<KeywordCardDraft> {
@@ -143,44 +167,15 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn keyword_engine() -> &'static (Jieba, TfIdf) {
-    static ENGINE: OnceLock<(Jieba, TfIdf)> = OnceLock::new();
-    ENGINE.get_or_init(|| {
-        let jieba = Jieba::new();
-        let tfidf = TfIdf::new(None::<&mut &[u8]>, KeywordExtractConfig::default());
-        (jieba, tfidf)
-    })
-}
-
-/// 从会议文本中提取关键词：jieba TF-IDF 排序，过滤停用词与单字。
-pub fn extract_keywords(text: &str) -> Vec<String> {
-    let (jieba, tfidf) = keyword_engine();
-    let mut result: Vec<String> = Vec::new();
-    for keyword in tfidf.extract_keywords(jieba, text, MAX_KEYWORDS_PER_TEXT, Vec::new()) {
-        let term = keyword.keyword.trim().to_owned();
-        if term.chars().count() < 2 || STOPWORDS.contains(&term.as_str()) {
-            continue;
-        }
-        if result
-            .iter()
-            .any(|existing| existing.eq_ignore_ascii_case(&term))
-        {
-            continue;
-        }
-        result.push(term);
-        if result.len() >= MAX_KEYWORDS_PER_TEXT {
-            break;
-        }
-    }
-    result
-}
-
 #[tauri::command]
-pub fn ingest_text(text: String) -> Result<usize, IpcErrorDto> {
+pub fn ingest_text(
+    state: tauri::State<'_, Arc<CardStore>>,
+    text: String,
+) -> Result<usize, IpcErrorDto> {
     if text.trim().is_empty() {
         return Err(IpcErrorDto::new("empty_text", "文本为空。", false));
     }
-    card_store().ingest(&text)
+    state.ingest(&text)
 }
 
 #[cfg(test)]
@@ -189,7 +184,9 @@ mod tests {
 
     #[test]
     fn extracts_chinese_and_acronym_keywords() {
-        let keywords = extract_keywords("我们确认 SLA 99.9% 和灰度范围，阿里云华东两站点优先。");
+        let store = CardStore::new();
+        let keywords =
+            store.extract_keywords("我们确认 SLA 99.9% 和灰度范围，阿里云华东两站点优先。");
         assert!(!keywords.is_empty());
         assert!(keywords
             .iter()
@@ -199,10 +196,12 @@ mod tests {
 
     #[test]
     fn stops_on_stopwords_and_short_tokens() {
-        assert!(!extract_keywords("我们 可以 这个 那个")
+        let store = CardStore::new();
+        assert!(!store
+            .extract_keywords("我们 可以 这个 那个")
             .iter()
             .any(|item| item == "我们"));
-        assert!(extract_keywords("").is_empty());
+        assert!(store.extract_keywords("").is_empty());
     }
 
     #[test]

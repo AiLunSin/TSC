@@ -169,10 +169,6 @@ rule_source() {
     while IFS= read -r ipc_file; do
       [[ -f "${ipc_file}" ]] || continue
       local forbidden='reqwest::|hyper::|TcpStream|std::net|std::env|env::var|LLM_|todo!\(|unimplemented!\(|panic!\(|static mut|OnceLock|lazy_static|thread_local'
-      case "${ipc_file}" in
-        # 技术债 X-AUD-15：实时转写与卡片存储使用进程级 OnceLock；其余禁用面仍生效。
-        */asr.rs|*/card_store.rs) forbidden="${forbidden/|OnceLock/}" ;;
-      esac
       hits="$(strip_tests "${ipc_file}" | grep -cE "${forbidden}" || true)"
       if [[ "${hits}" -ne 0 ]]; then
         fail "source: ${ipc_file} 命中装配层禁用面（${hits} 处）"

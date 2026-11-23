@@ -5,14 +5,14 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use meeting_copilot_domain::model::enums::Platform;
 use meeting_copilot_domain::port::capture::AudioSource;
 use meeting_copilot_platform_win::wasapi::WasapiLoopbackSource;
 
-use crate::ipc::card_store::card_store;
+use crate::ipc::card_store::CardStore;
 use crate::ipc::dto::IpcErrorDto;
 
 const SCRIPT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/asr/stream_asr.py");
@@ -23,117 +23,120 @@ const MODEL_PATH: &str = concat!(
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-struct Pipeline {
+/// 实时转写管线状态，由 Tauri managed state 持有（`Arc<AsrPipeline>`）。
+pub struct AsrPipeline {
     running: AtomicBool,
     last_text: Mutex<String>,
     child: Mutex<Option<Child>>,
+    cards: Arc<CardStore>,
 }
 
-fn pipeline() -> &'static Pipeline {
-    static PIPELINE: OnceLock<Pipeline> = OnceLock::new();
-    PIPELINE.get_or_init(|| Pipeline {
-        running: AtomicBool::new(false),
-        last_text: Mutex::new(String::new()),
-        child: Mutex::new(None),
-    })
-}
-
-fn set_last_text(text: &str) {
-    if let Ok(mut last) = pipeline().last_text.lock() {
-        *last = text.to_owned();
-    }
-}
-
-/// 启动实时转写；重复调用无副作用。
-pub fn start() -> Result<(), IpcErrorDto> {
-    let state = pipeline();
-    if state.running.swap(true, Ordering::SeqCst) {
-        return Ok(());
-    }
-    let spawned = spawn_recognizer();
-    let (child, stdin, stdout) = match spawned {
-        Ok(parts) => parts,
-        Err(error) => {
-            state.running.store(false, Ordering::SeqCst);
-            return Err(error);
+impl AsrPipeline {
+    pub(crate) fn new(cards: Arc<CardStore>) -> Self {
+        Self {
+            running: AtomicBool::new(false),
+            last_text: Mutex::new(String::new()),
+            child: Mutex::new(None),
+            cards,
         }
-    };
-    if let Ok(mut slot) = state.child.lock() {
-        *slot = Some(child);
     }
 
-    std::thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines().map_while(Result::ok) {
-            let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
-                continue;
-            };
-            let Some(text) = value.get("text").and_then(|item| item.as_str()) else {
-                continue;
-            };
-            let text = text.trim();
-            if text.is_empty() {
-                continue;
+    fn set_last_text(&self, text: &str) {
+        if let Ok(mut last) = self.last_text.lock() {
+            *last = text.to_owned();
+        }
+    }
+
+    /// 启动实时转写；重复调用无副作用。
+    pub fn start(self: &Arc<Self>) -> Result<(), IpcErrorDto> {
+        if self.running.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        let spawned = spawn_recognizer();
+        let (child, stdin, stdout) = match spawned {
+            Ok(parts) => parts,
+            Err(error) => {
+                self.running.store(false, Ordering::SeqCst);
+                return Err(error);
             }
-            set_last_text(text);
-            let _ = card_store().ingest(text);
+        };
+        if let Ok(mut slot) = self.child.lock() {
+            *slot = Some(child);
         }
-    });
 
-    std::thread::spawn(move || {
-        let source = WasapiLoopbackSource::new(Platform::TencentMeeting);
-        if source.open(None).is_err() {
-            stop();
-            return;
-        }
-        let mut writer = stdin;
-        while pipeline().running.load(Ordering::SeqCst) {
-            match source.next_chunk() {
-                Ok(Some(chunk)) => {
-                    let pcm = resample_to_16k(&chunk.samples, chunk.sample_rate);
-                    if pcm.is_empty() {
-                        continue;
-                    }
-                    let mut bytes = Vec::with_capacity(pcm.len() * 2);
-                    for sample in pcm {
-                        bytes.extend_from_slice(&sample.to_le_bytes());
-                    }
-                    if writer.write_all(&bytes).is_err() {
-                        break;
-                    }
-                    let _ = writer.flush();
+        let recognizer = Arc::clone(self);
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                    continue;
+                };
+                let Some(text) = value.get("text").and_then(|item| item.as_str()) else {
+                    continue;
+                };
+                let text = text.trim();
+                if text.is_empty() {
+                    continue;
                 }
-                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-                Err(_) => std::thread::sleep(Duration::from_millis(50)),
+                recognizer.set_last_text(text);
+                let _ = recognizer.cards.ingest(text);
+            }
+        });
+
+        let capture = Arc::clone(self);
+        std::thread::spawn(move || {
+            let source = WasapiLoopbackSource::new(Platform::TencentMeeting);
+            if source.open(None).is_err() {
+                capture.stop();
+                return;
+            }
+            let mut writer = stdin;
+            while capture.running.load(Ordering::SeqCst) {
+                match source.next_chunk() {
+                    Ok(Some(chunk)) => {
+                        let pcm = resample_to_16k(&chunk.samples, chunk.sample_rate);
+                        if pcm.is_empty() {
+                            continue;
+                        }
+                        let mut bytes = Vec::with_capacity(pcm.len() * 2);
+                        for sample in pcm {
+                            bytes.extend_from_slice(&sample.to_le_bytes());
+                        }
+                        if writer.write_all(&bytes).is_err() {
+                            break;
+                        }
+                        let _ = writer.flush();
+                    }
+                    Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+                    Err(_) => std::thread::sleep(Duration::from_millis(50)),
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// 停止实时转写并回收子进程。
+    pub fn stop(&self) {
+        self.running.store(false, Ordering::SeqCst);
+        if let Ok(mut slot) = self.child.lock() {
+            if let Some(mut child) = slot.take() {
+                let _ = child.kill();
+                let _ = child.wait();
             }
         }
-    });
-
-    Ok(())
-}
-
-/// 停止实时转写并回收子进程。
-pub fn stop() {
-    let state = pipeline();
-    state.running.store(false, Ordering::SeqCst);
-    if let Ok(mut slot) = state.child.lock() {
-        if let Some(mut child) = slot.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
     }
-}
 
-pub fn is_running() -> bool {
-    pipeline().running.load(Ordering::SeqCst)
-}
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
 
-pub fn last_text() -> String {
-    pipeline()
-        .last_text
-        .lock()
-        .map(|text| text.clone())
-        .unwrap_or_default()
+    pub fn last_text(&self) -> String {
+        self.last_text
+            .lock()
+            .map(|text| text.clone())
+            .unwrap_or_default()
+    }
 }
 
 fn spawn_recognizer(
@@ -197,19 +200,21 @@ pub fn resample_to_16k(samples: &[f32], source_rate: u32) -> Vec<i16> {
 }
 
 #[tauri::command]
-pub fn start_asr() -> Result<(), IpcErrorDto> {
-    start()
+pub fn start_asr(state: tauri::State<'_, Arc<AsrPipeline>>) -> Result<(), IpcErrorDto> {
+    state.inner().start()
 }
 
 #[tauri::command]
-pub fn stop_asr() -> Result<(), IpcErrorDto> {
-    stop();
+pub fn stop_asr(state: tauri::State<'_, Arc<AsrPipeline>>) -> Result<(), IpcErrorDto> {
+    state.stop();
     Ok(())
 }
 
 #[tauri::command]
-pub fn asr_status() -> Result<(bool, String), IpcErrorDto> {
-    Ok((is_running(), last_text()))
+pub fn asr_status(
+    state: tauri::State<'_, Arc<AsrPipeline>>,
+) -> Result<(bool, String), IpcErrorDto> {
+    Ok((state.is_running(), state.last_text()))
 }
 
 #[cfg(test)]

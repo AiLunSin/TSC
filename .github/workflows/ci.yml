@@ -209,7 +209,7 @@ jobs:
   compliance:
     name: compliance (licenses + sbom + secrets + layering)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -236,6 +236,18 @@ jobs:
       - name: secrets-docs (C1)
         timeout-minutes: 5
         run: bash scripts/scan-secrets-docs.sh --all-md
+      - name: b4-zero-transcript (AUD-17)
+        timeout-minutes: 5
+        run: bash scripts/check-b4-gates.sh --rule=zero-transcript
+      - name: ui-integration (AUD-17)
+        timeout-minutes: 5
+        run: bash scripts/check-ui-integration.sh
+      - name: mac-scope-claims (AUD-17)
+        timeout-minutes: 5
+        run: bash scripts/check-mac-scope.sh --rule=claims
+      - name: b3-zero-transcript (AUD-17)
+        timeout-minutes: 5
+        run: bash scripts/check-b3-gates.sh --rule=zero-transcript
       - name: cargo-deny-version
         run: cargo deny --version
       - name: licenses

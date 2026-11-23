@@ -51,7 +51,11 @@ fn pending_view() -> ViewFactsSnapshot {
     }
 }
 
-fn build_state(config_dir: PathBuf, presets: Vec<String>) -> AppState {
+fn build_state(
+    config_dir: PathBuf,
+    presets: Vec<String>,
+    cards: Arc<dyn CardSnapshotSource>,
+) -> AppState {
     let secure: Arc<dyn SecureStore> = Arc::new(WindowsCredentialStore::new());
     let memory_key = Arc::new(Mutex::new(None));
     let cooldown_until_ms = Arc::new(Mutex::new(None));
@@ -70,7 +74,7 @@ fn build_state(config_dir: PathBuf, presets: Vec<String>) -> AppState {
         config: Arc::new(FileSettingsConfigStore::new(config_dir)),
         probe: Arc::new(GatewayProbeExecutor),
         facts,
-        cards: ipc::card_store::card_store(),
+        cards,
         view_facts: Arc::new(UsingPendingSources {
             view: pending_view(),
         }),
@@ -127,7 +131,10 @@ fn main() {
                 .filter(|model| !model.trim().is_empty())
                 .map(|model| vec![model])
                 .unwrap_or_else(|| vec![DEFAULT_MODEL_PRESET.to_owned()]);
-            app.manage(build_state(config_dir, presets));
+            let cards = Arc::new(ipc::card_store::CardStore::new());
+            app.manage(Arc::clone(&cards));
+            app.manage(Arc::new(ipc::asr::AsrPipeline::new(Arc::clone(&cards))));
+            app.manage(build_state(config_dir, presets, cards.clone()));
             tracing::info!(
                 protocol = IPC_PROTOCOL_VERSION,
                 "meeting-copilot desktop bootstrapped"
