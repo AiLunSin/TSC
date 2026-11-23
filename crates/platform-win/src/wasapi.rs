@@ -141,11 +141,12 @@ impl Drop for ComGuard {
 }
 
 struct Runtime {
-    _com: ComGuard,
-    client: IAudioClient,
+    // 字段按声明顺序析构：先释放采集/客户端接口，最后由 ComGuard 配对 CoUninitialize。
     capture: IAudioCaptureClient,
+    client: IAudioClient,
     format: FormatInfo,
     frames: u64,
+    _com: ComGuard,
 }
 
 // SAFETY: 所有 COM 对象只在 `WasapiLoopbackSource::runtime` 的 Mutex 保护下串行使用，
@@ -188,11 +189,11 @@ impl Runtime {
             .Start()
             .map_err(|error| format!("启动环回流失败：{error}"))?;
         Ok(Self {
-            _com: com,
-            client,
             capture,
+            client,
             format,
             frames: 0,
+            _com: com,
         })
     }
 
