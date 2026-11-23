@@ -6,6 +6,7 @@ pub mod card;
 pub mod channel;
 pub mod citation;
 pub mod enums;
+pub mod feedback;
 pub mod gate;
 pub mod gate_keyword;
 pub mod gate_replay;
@@ -17,6 +18,7 @@ pub mod insight_policy;
 pub mod insight_similarity;
 pub mod llm;
 pub mod outbox;
+pub mod proactive;
 pub mod provider;
 pub mod rolling_summary;
 pub mod session;
@@ -33,6 +35,11 @@ pub use channel::{
 };
 pub use citation::*;
 pub use enums::*;
+pub use feedback::{
+    FeedbackError, FeedbackEvent, FeedbackValue, TopicWeight, ADOPT_BONUS_MILLI,
+    DISMISS_PENALTY_MILLI, NEGATIVE_QUIET_MS, RECOVERY_BONUS_MILLI, SUPPRESSION_MS,
+    WEIGHT_INITIAL_MILLI, WEIGHT_MAX_MILLI, WEIGHT_MIN_MILLI,
+};
 pub use gate::*;
 pub use gate::{GateRejectReason, Visibility};
 pub use gate_keyword::*;
@@ -52,6 +59,11 @@ pub use llm::{
     Termination, Timeline, TimelineEntry,
 };
 pub use outbox::{OutboxTask, RetryPolicy};
+pub use proactive::{
+    CachedQuery, OnDemandOutcome, OnDemandSample, OutboxEntry, OutboxState, ProactiveError,
+    BACKFILL_CONCURRENCY, CACHE_MAX_BYTES, CACHE_MAX_ENTRIES, CACHE_TTL_MS, DEGRADE_RETRY_AFTER_MS,
+    ON_DEMAND_P95_BUDGET_MS, ON_DEMAND_REQUIRED_SAMPLES, OUTBOX_MAX_ACTIVE, OUTBOX_MAX_AGE_MS,
+};
 pub use provider::{DomainPattern, ProviderProfile, ProviderTimeout, RateLimit, Weight};
 pub use session::{
     ConsentRecord, ParticipantList, PlatformBinding, RetentionWindow, Session, TextRange,

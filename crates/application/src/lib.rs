@@ -6,6 +6,7 @@ pub mod citation;
 pub mod gate;
 pub mod governance;
 pub mod mirror_clock;
+pub mod proactive;
 pub mod settings;
 pub mod understand;
 

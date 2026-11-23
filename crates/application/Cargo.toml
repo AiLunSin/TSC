@@ -9,4 +9,5 @@ description = "应用层：会话编排、要点服务、主动提示管线。"
 [dependencies]
 meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
 serde.workspace = true
+sha2 = "0.10"
 thiserror.workspace = true

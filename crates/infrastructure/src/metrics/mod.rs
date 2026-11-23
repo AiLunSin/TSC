@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+pub mod feedback;
+
 /// 10 项必填指标。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Metric {

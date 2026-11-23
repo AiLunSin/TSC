@@ -18,6 +18,16 @@ use meeting_copilot_domain::vo::{CardRef, InsightRef, SessionId, UtteranceRef};
 
 use super::{StoreConfig, StoreError, StoreKey, SCHEMA_VERSION};
 
+mod cache;
+mod codec;
+mod feedback;
+mod on_demand;
+mod outbox;
+
+const SCHEMA_V2_CACHE_OUTBOX: &str = include_str!("../migrations/v2_cache_outbox.sql");
+const SCHEMA_V2_FEEDBACK: &str = include_str!("../migrations/v2_feedback.sql");
+const SCHEMA_V2_AUDIT: &str = include_str!("../migrations/v2_audit.sql");
+
 const SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
   id           TEXT PRIMARY KEY,
@@ -186,6 +196,11 @@ impl SqliteStore {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// 供同 crate 的审计/统计模块复用同一连接（不对外暴露 SQL 能力）。
+    pub(crate) fn connection(&self) -> MutexGuard<'_, Connection> {
+        self.lock()
+    }
+
     pub fn fts_search(&self, session: &SessionId, term: &str) -> Result<Vec<String>, StoreError> {
         let conn = self.lock();
         let mut statement = conn
@@ -247,9 +262,17 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
     }
     if version < 1 {
         conn.execute_batch(SCHEMA_V1).map_err(sql_error)?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)
+        conn.pragma_update(None, "user_version", 1)
             .map_err(sql_error)?;
     }
+    if version < 2 {
+        for script in [SCHEMA_V2_CACHE_OUTBOX, SCHEMA_V2_FEEDBACK, SCHEMA_V2_AUDIT] {
+            conn.execute_batch(script).map_err(sql_error)?;
+        }
+        conn.pragma_update(None, "user_version", 2)
+            .map_err(sql_error)?;
+    }
+    debug_assert_eq!(SCHEMA_VERSION, 2);
     Ok(())
 }
 
@@ -313,6 +336,8 @@ impl SessionRepository for SqliteStore {
             "DELETE FROM insights WHERE session_id = ?1",
             "DELETE FROM cards WHERE session_id = ?1",
             "DELETE FROM summaries WHERE session_id = ?1",
+            "DELETE FROM query_cache WHERE session_id = ?1",
+            "DELETE FROM proactive_outbox WHERE session_id = ?1",
         ] {
             tx.execute(statement, params![id.as_str()])
                 .map_err(|e| CopilotError::from(sql_error(e)))?;
@@ -603,9 +628,29 @@ mod tests {
     }
 
     #[test]
-    fn schema_is_migrated_to_v1() {
+    fn schema_is_migrated_to_v2() {
         let store = SqliteStore::open_in_memory().expect("open");
         assert_eq!(store.schema_version().expect("version"), SCHEMA_VERSION);
+        let conn = store.connection();
+        for table in [
+            "query_cache",
+            "proactive_outbox",
+            "on_demand_sample",
+            "feedback_event",
+            "topic_weight",
+            "audit_record",
+            "audit_anchor",
+            "audit_archive",
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("count");
+            assert_eq!(exists, 1, "缺少表 {table}");
+        }
     }
 
     #[test]

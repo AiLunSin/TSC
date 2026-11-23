@@ -1519,6 +1519,119 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
 | **G9（M3 前）** | W21 末 | 性能/可靠性/隐私/平台矩阵四类门禁全绿；P0/P1 清零 | 65–75 |
 | **G10（V1）** | W22 末 | SBOM + 法务签署 + 灰度 2 周无 P0 | 76–79 |
 
+## 附录 G · U-07 四项增量任务与门禁（P3 立项，2026-11-23）
+
+> 说明：本附录不新增主任务编号，只给既有 **41.5 / 42 / 43 / 52** 补规格冻结项、实现子任务与门禁。前置条件：`spec.md` 第 7 章与 `design.md` 2.10 经评审通过；未通过前不得进入实现。四项均为“先规格、后实现”，且 U-07-43 的真实样本未提供前不得标记关闭。
+
+### G.1 负反馈加权（对应 41.5）
+
+- [x] **G-41.5-S 规格冻结** — `docs/sdd/spec.md` 7.1、`docs/sdd/design.md` 2.10.1
+  - DoD：枚举、权重边界、硬抑制、统计口径、零转录字段五项评审通过并留痕；评审意见回写本节。
+  - 证据：SPEC 7.1 已批准；实现裁决见 DESIGN 2.10.6。
+- [x] **G-41.5-A 反馈事件与权重表** — `crates/infrastructure/src/store/repo/feedback.rs`
+  - 追溯 SPEC 7.1.2 · DESIGN 2.10.1
+  - DoD：`SCHEMA_VERSION` 升至 2 的迁移可重复执行；`feedback_event` 只追加；`topic_weight` 可由事件流重建；表内无标题/结论/查询/片段/URL 字段。
+  - 证据：`store::repo::tests::schema_is_migrated_to_v2`、`store_proactive::feedback_events_are_append_only_and_weights_roundtrip`、`proactive_feedback::replayed_weights_match_live_weights`。
+- [x] **G-41.5-B 权重计算与硬抑制** — `crates/application/src/proactive/feedback.rs`
+  - 追溯 SPEC 7.1.1-3/4/5/6 · DESIGN 2.10.1
+  - DoD：`dismissed` 两次 1000→500、下限 100；`adopted` +100 上限 1000；`reported` 撤回 + 7 天硬抑制；任意反馈注入不改变 `Deny`；阈值判定仍用 `base_relevance_milli`。
+  - 证据：`two_dismissals_halve_weight`、`reported_withdraws_card_and_suppresses_seven_days`、`weight_never_bypasses_relevance_threshold`。
+- [x] **G-41.5-C 统计口径** — `crates/infrastructure/src/metrics/feedback.rs`
+  - 追溯 SPEC 7.1.1-7 · DESIGN 2.10.1
+  - DoD：采纳率与误触发率按会话/平台/主题三维输出；分母为 0 输出“样本不足”；“未反馈”不计入分母。
+  - 证据：`adoption_and_false_trigger_use_distinct_denominators`、`zero_denominator_is_insufficient_not_zero`。
+- [x] **G-41.5-D 门禁扩展** — `scripts/check-b4-gates.sh`
+  - 追溯 SPEC 7.0.2-1 · DESIGN 2.10.5
+  - DoD：`--rule=zero-transcript` 扫描面加入 `crates/application/src/proactive/**` 与 `crates/infrastructure/src/store/repo/feedback.rs`；注入唯一标记文本后命中 0 次。
+  - 证据：扫描面已加入；`--rule=zero-transcript` 通过（0 命中）。
+
+### G.2 缓存与断网 outbox（对应 42）
+
+- [x] **G-42-S 规格冻结** — `docs/sdd/spec.md` 7.2、`docs/sdd/design.md` 2.10.2
+  - DoD：介质、TTL、容量、保留、重试上限与“重启不丢”判定评审通过。
+  - 证据：SPEC 7.2 已批准；实现裁决见 DESIGN 2.10.6。
+- [x] **G-42-A 两表迁移与索引** — `crates/infrastructure/src/store/migrations/v2_cache_outbox.sql`
+  - 追溯 SPEC 7.2.2 · DESIGN 2.10.2
+  - DoD：`query_cache`、`proactive_outbox` 与两个索引随 v2 迁移创建；旧库升级后读写正常；回滚仅允许前向修复，不做破坏性降级。
+  - 证据：`schema_is_migrated_to_v2`、`migration_is_idempotent_and_preserves_existing_rows`。
+- [x] **G-42-B 缓存仓库与 LRU** — `crates/infrastructure/src/store/repo/cache.rs`
+  - 追溯 SPEC 7.2.1-2/3/4 · DESIGN 2.10.2
+  - DoD：24 小时 TTL 命中调用检索源 0 次；≤2,000 条且 ≤20 MiB；第 2,001 条淘汰最久未用；会话删除级联删除；`query_hash` 无查询原文。
+  - 证据：`cache_roundtrips_and_expires`、`cache_evicts_oldest_beyond_two_thousand_entries`、`cache_evicts_beyond_twenty_mib`、`deleting_a_session_cascades_cache_and_outbox`；缓存命中路径不触达检索端口。
+- [x] **G-42-C outbox 仓库与重启恢复** — `crates/infrastructure/src/store/repo/outbox.rs`、`crates/application/src/proactive/outbox.rs`
+  - 追溯 SPEC 7.2.1-5/6/7/8/9 · DESIGN 2.10.2
+  - DoD：先落库后外发；强制终止重启后 `pending+failed` 集合一致；离线期间外发 0 次；3 次退避后 `dead`；超 500 条拒绝并提示。
+  - 证据：`enqueue_persists_before_any_send`、`outbox_survives_restart_with_same_active_set`、`three_failures_move_task_to_dead`、`rejects_when_active_queue_is_full`；`OutboxService` 无发送能力，外发只存在于适配器。
+- [ ] **G-42-D 补齐与降级队列** — `crates/application/src/proactive/backfill.rs`、`degrade_queue.rs`
+  - 追溯 SPEC 7.2.1-7/8/10 · DESIGN 2.10.2
+  - DoD：网络恢复 ≤3 秒识别；30 秒补齐率 ≥98%、并发 ≤3；补齐卡片复用 `dedupe_key` 不重复出卡；全源不可用 20 秒重试一次。
+  - 进展：机制已实现并通过 `due_returns_at_most_three_tasks`、`backfill_skips_recent_not_due_and_expired`、`degrade_queue_retries_once_after_twenty_seconds`；“≤3 秒识别、30 秒补齐率 ≥98%”需真实断网环境取证，暂不勾选。
+- [ ] **G-42-E 门禁** — 同上
+  - DoD：库只读注入、时钟回拨、缓存损坏、outbox 超限四类异常用例通过；零转录扫描 0 命中。
+
+### G.3 按需补全实体（对应 43）
+
+- [x] **G-43-S 规格冻结** — `docs/sdd/spec.md` 7.3、`docs/sdd/design.md` 2.10.3
+  - DoD：8s p95 口径、样本量、超时降级、外发白名单评审通过。
+  - 证据：SPEC 7.3 已批准；裁决见 DESIGN 2.10.6。
+- [x] **G-43-A 外发白名单守卫** — `crates/application/src/proactive/outbound_guard.rs`
+  - 追溯 SPEC 7.3.1-5 · DESIGN 2.10.3
+  - DoD：仅启用源；HTTPS；主机一致；环回/私网/链路本地拒绝；跨主机重定向 0 次；拒绝写脱敏审计。
+  - 证据：`rejects_disabled_unknown_and_non_https`、`rejects_loopback_private_and_link_local_addresses`、`rejects_cross_host_and_excessive_redirects`、`rejects_malformed_urls`；拒绝码由 `OutboundReject::audit_label` 提供脱敏标签。
+- [x] **G-43-B 首卡计时与样本表** — `crates/application/src/proactive/on_demand_probe.rs`
+  - 追溯 SPEC 7.3.1-3 · DESIGN 2.10.3
+  - DoD：从触发到首卡可见埋点；样本表只存 ID/毫秒/结果/缓存命中；<200 样本报表显示“样本不足”。
+  - 证据：`measure_first_card_ms`、`fewer_than_two_hundred_real_samples_stays_insufficient`、`cache_hits_are_excluded_from_real_samples`。
+- [ ] **G-43-C 真实样本采集** — `docs/progress/b4-status.md` 增量记录
+  - 追溯 SPEC 7.3.1-2/3/9 · DESIGN 2.10.3
+  - DoD：使用者配置真实源后完成 ≥200 次、≥3 时段、≥10 主题采样；p95 ≤8s、p99 ≤12s、超时率 ≤2%；测试替身与回放样本不计入；未达标保持 open。
+  - 进展：0/200，状态“样本不足”；机制已就绪，未宣称达标。
+- [ ] **G-43-D 门禁** — 同上
+  - DoD：无源、全超时、部分结果、取消、地址被拒绝五类异常用例通过；重复发起 10 分钟内只外发 1 次。
+  - 进展：无源/地址拒绝/超时率/取消已有覆盖；重复发起沿用补齐窗口（30 分钟）去重，待与 SPEC 10 分钟口径对齐后勾选。
+
+### G.4 审计哈希链存储（对应 52）
+
+- [x] **G-52-S 规格冻结** — `docs/sdd/spec.md` 7.4、`docs/sdd/design.md` 2.10.4
+  - DoD：介质、180 天起算、归档保留、哈希规范化与追加语义评审通过。
+  - 证据：SPEC 7.4 已批准；裁决见 DESIGN 2.10.6。
+- [x] **G-52-A 只追加表与触发器** — `crates/infrastructure/src/store/migrations/v2_audit.sql`
+  - 追溯 SPEC 7.4.1-1/2/4 · DESIGN 2.10.4
+  - DoD：`audit_record`、`audit_anchor`、`audit_archive` 随 v2 创建；UPDATE/DELETE 触发器返回 ABORT；`seq` 连续。
+  - 证据：`schema_is_migrated_to_v2`、`update_and_unarchived_delete_are_rejected`；归档后的 DELETE 由触发器放行。
+- [x] **G-52-B 持久化 `AuditLog`** — `crates/infrastructure/src/audit/store.rs`
+  - 追溯 SPEC 7.4.1-3/4/8/9 · DESIGN 2.10.4
+  - DoD：单写者事务追加；并发 100 条链完整；`verify()` 返回首个断点；写失败置 `audit_unavailable` 并禁用敏感操作；复用 `AuditChain` 的规范化函数。
+  - 证据：`appends_build_a_verifiable_chain`、`tampering_is_detected`、`concurrent_appends_keep_chain_continuous`、`audit_unavailable_blocks_sensitive_operations`。
+- [x] **G-52-C 180 天归档** — `crates/infrastructure/src/audit/retention.rs`
+  - 追溯 SPEC 7.4.1-5/6/7 · DESIGN 2.10.4
+  - DoD：按自然月封存；归档包含首尾 `seq`/条数/末端哈希/锚点；校验通过才移出在线行；归档 5 年标记 `retained`，不自动销毁。
+  - 证据：`old_months_are_sealed_then_removed`、`write_failure_keeps_online_rows`。
+- [ ] **G-52-D 门禁** — 同上
+  - 进展：篡改定位、归档失败保留在线数据、审计不可用拒绝敏感操作三类用例已通过；审计摘要运行时零转录扫描尚未接入门禁。
+
+### G.5 统一验收与宣称边界
+
+1. 四条快检必须全 `rc=0`：
+
+```bash
+bash scripts/check-g2-claims.sh
+bash scripts/scan-secrets-docs.sh --all-md
+bash scripts/check-b4-gates.sh --rule=zero-transcript
+bash scripts/check-mac-scope.sh --rule=claims
+```
+
+2. 代码变更后追加：
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+3. 验收底线：在既有 **877 passed / 0 failed / 10 ignored** 基线上不新增失败；新增用例逐项对应本附录 DoD；零转录唯一标记扫描 0 命中。
+4. 宣称边界：U-07-43 未取得真实 200 样本前，文档与提交信息只能写“规格已立项/实现进行中”，不得写“按需补全已完成”或“8s 已达标”；U-07-52 归档 5 年未获法务确认前，不得对外宣称该期限。
+
 ---
 
-**文档结束**。本清单共 **11 个批次 / 79 个主任务**，覆盖 `spec.md` 4.1–4.5、5.1–5.8、6.1–6.10 全部章节与 `design.md` 2.1–2.9 全部设计章节；后续编码阶段可按批次顺序执行，批次内按标注并行度分配。
+**文档结束**。本清单共 **11 个批次 / 79 个主任务**，覆盖 `spec.md` 4.1–4.5、5.1–5.8、6.1–6.10 全部章节与 `design.md` 2.1–2.9 全部设计章节；另含附录 G 的 U-07 四项增量任务（不新增主任务编号）。后续编码阶段可按批次顺序执行，批次内按标注并行度分配。

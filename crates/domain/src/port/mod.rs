@@ -7,6 +7,7 @@ pub mod capture;
 pub mod capture_clock;
 pub mod governance;
 pub mod llm;
+pub mod proactive;
 pub mod repository;
 pub mod search;
 pub mod understand;
@@ -21,6 +22,7 @@ pub use llm::{
     CancelToken, LlmCapability, LlmObserver, StreamCollector, StreamOutcomeSummary,
     StructuredLlmGateway,
 };
+pub use proactive::{FeedbackStore, OnDemandSampleStore, OutboxStore, QueryCacheStore};
 pub use repository::{CardRepository, InsightRepository, SessionRepository, UtteranceRepository};
 pub use search::{
     FetchOutcome, PageFetcher, ProviderRequest, ProviderResponse, SearchBroker, SearchHit,

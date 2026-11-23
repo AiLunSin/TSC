@@ -13,7 +13,7 @@ pub mod repo;
 
 pub use repo::SqliteStore;
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// L1 派生的 32 字节数据库密钥。仅内存持有，日志与 Debug 输出一律脱敏。
 #[derive(Clone, PartialEq, Eq)]
@@ -56,6 +56,12 @@ pub enum StoreError {
     #[allow(dead_code)]
     #[error("注入的写失败（仅测试）")]
     InjectedFailure,
+}
+
+impl From<rusqlite::Error> for StoreError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Sqlite(error.to_string())
+    }
 }
 
 impl From<StoreError> for CopilotError {

@@ -1696,6 +1696,241 @@ stop
 4. **隐私**：抓包 + 日志扫描 + 密钥扫描 + 删除残留扫描四件套，作为发布硬门禁。
 5. **平台兼容**：三平台 × 版本矩阵 ×（字幕开启/关闭/共享屏幕）×（Win/mac）最小回归集，每平台不少于 12 个组合。
 
+## 2.10 U-07 增量设计（P3 立项，2026-11-23）
+
+> 本节只覆盖 SPEC 第 7 章四项增量。实现现状：`AuditChain` 为内存实现、`OutboxTask` 只有领域模型、反馈只有 `FeedbackStatus` 枚举、按需补全只有门控侧长度上限；本节给出落库与流程目标，不代表已完成。所有新增表随 `SCHEMA_VERSION` 从 1 升到 2，采用只进不退的迁移。
+
+### 2.10.1 负反馈加权（SPEC 7.1）
+
+**归属**：`crates/application/src/proactive/feedback.rs`（用例）、`crates/domain/src/model/feedback.rs`（事件与权重值对象）、`crates/infrastructure/src/store/repo/feedback.rs`（持久化）。
+
+**表结构**
+
+```sql
+feedback_event(
+  feedback_id        TEXT PRIMARY KEY,
+  card_id            TEXT NOT NULL,
+  dedupe_key         TEXT NOT NULL,
+  topic_cluster_id   TEXT NOT NULL,
+  source_ref_id      TEXT,
+  trigger_kind       TEXT NOT NULL,   -- auto | on_demand
+  platform           TEXT NOT NULL,
+  value              TEXT NOT NULL,   -- adopted | dismissed | reported
+  occurred_at_ms     INTEGER NOT NULL,
+  weight_after_milli INTEGER NOT NULL
+);
+
+topic_weight(
+  topic_cluster_id TEXT NOT NULL,
+  source_ref_id    TEXT NOT NULL DEFAULT '',
+  weight_milli     INTEGER NOT NULL,   -- 100..1000
+  blocked_until_ms INTEGER,
+  updated_at_ms    INTEGER NOT NULL,
+  PRIMARY KEY (topic_cluster_id, source_ref_id)
+);
+```
+
+**流程**
+
+```plantuml
+@startuml
+actor "使用者" as U
+participant "反馈用例" as F
+participant "反馈事件表" as E
+participant "主题权重表" as W
+participant "提示管线" as P
+
+U -> F : 有用 / 无用 / 错误
+F -> F : 校验卡片状态与枚举
+F -> E : 追加事件（单事务）
+F -> W : 重算 weight_milli
+alt 错误
+  F -> P : 撤回卡片
+  F -> W : blocked_until = now + 7d
+end
+P -> W : 读取权重（仅排序与配额）
+P --> U : 展示顺序变化
+@enduml
+```
+
+- 重算规则按 SPEC 7.1.1-3：`dismissed` 减 250（下限 100）、`adopted` 加 100（上限 1000）、72 小时无负反馈后每日回补 100；`reported` 不参与加减。
+- `topic_weight` 是派生缓存：启动时若校验失败，从 `feedback_event` 顺序重放重建；重建失败回退 1000。
+- 排序只读 `base_relevance_milli × weight_milli / 1000`；阈值判定仍读 `base_relevance_milli`，避免降权把本来合格的候选“洗白”或把不合格候选送上卡片。
+- 调用顺序固定为 `Guardrail::evaluate → 冷却/配额 → 权重排序 → 展示`；`Deny` 分支不读取权重表。
+- 零转录：两张表无标题、结论、查询、片段、URL 字段；`source_ref_id` 指向引用表，不复制来源文本。
+
+### 2.10.2 缓存与断网 outbox（SPEC 7.2）
+
+**归属**：`crates/application/src/proactive/cache.rs`、`outbox.rs`、`backfill.rs`；`crates/infrastructure/src/store/repo/cache.rs`、`outbox.rs`。
+
+**表结构**
+
+```sql
+query_cache(
+  query_hash           TEXT PRIMARY KEY,   -- SHA-256(provider_profile_id || 规范化脱敏查询)
+  provider_profile_id  TEXT NOT NULL,
+  fetched_at_ms        INTEGER NOT NULL,
+  expires_at_ms        INTEGER NOT NULL,   -- fetched_at + 24h
+  payload_refs_json    TEXT NOT NULL,      -- 引用 ID/标题/地址/可信度/发布时间/抓取时间/摘要
+  byte_size            INTEGER NOT NULL,
+  last_access_ms       INTEGER NOT NULL
+);
+
+proactive_outbox(
+  task_id          TEXT PRIMARY KEY,
+  trigger_kind     TEXT NOT NULL,
+  dedupe_key       TEXT NOT NULL,
+  topic_cluster_id TEXT NOT NULL,
+  candidate_json   TEXT NOT NULL,   -- 仅类型/片段范围/置信度/去重键，无文本
+  state            TEXT NOT NULL,   -- pending | failed | dead | done
+  attempts         INTEGER NOT NULL,
+  next_attempt_ms  INTEGER,
+  created_at_ms    INTEGER NOT NULL,
+  updated_at_ms    INTEGER NOT NULL
+);
+
+CREATE INDEX idx_outbox_due ON proactive_outbox(state, next_attempt_ms);
+CREATE INDEX idx_outbox_dedupe ON proactive_outbox(dedupe_key, created_at_ms);
+```
+
+**状态机与重试**
+
+- 复用现有 `RetryPolicy::DEFAULT`：`max_attempts=3`、`base_backoff_ms=500`、`max_backoff_ms=8_000`；`attempts=3` 即 `dead`。
+- 写入顺序：`candidate → 事务写 outbox(pending) → 提交 → 调度网络`；事务失败直接返回本地降级，不发起请求。
+- 网络恢复：`NetProbe` 以真实请求成功为准，≤3 秒识别；恢复后按 `next_attempt_ms` 取最多 3 条并发回放，30 秒补齐率 ≥98%；回放卡片复用原 `dedupe_key`。
+- 全源不可用：进入 `degrade_queue`，20 秒后单次重试；仍失败则保持 `pending/failed` 等下一轮恢复，不升级为 `dead`。
+- 启动恢复：打开库后加载 `pending/failed` 到调度器；网络状态未确认前只恢复队列，不发起请求。
+- 清理：每小时清扫过期缓存；会话删除级联删除该会话缓存与 outbox；`dead` 保留 7 天；待处理超 500 条时合并同 `dedupe_key` 后拒绝新任务并提示。
+- 零转录：`query_hash` 取代查询文本；`payload_refs_json` 仅外部引用元数据；`candidate_json` 无任何文本字段。
+
+### 2.10.3 按需补全实体（SPEC 7.3）
+
+**归属**：`crates/application/src/proactive/on_demand.rs`、`on_demand_probe.rs`；复用 `crates/domain/src/port/search.rs` 的 `SearchProvider`/`SearchBroker` 与 `SanitizedQuery` 受控构造。
+
+**流程**
+
+```plantuml
+@startuml
+actor "使用者" as U
+participant "按需补全用例" as O
+participant "脱敏出口" as S
+participant "外发白名单" as A
+participant "检索源 SPI" as P
+participant "提示卡" as C
+
+U -> O : 从片段/要点/术语发起
+O -> S : issue_query(raw) → SanitizedQuery
+S --> O : 脱敏查询（≤200 字）
+O -> A : HTTPS / 主机一致 / 非私网 / 重定向限制
+A --> O : 允许或拒绝
+O -> P : search(ProviderRequest)
+P --> O : ProviderResponse
+O -> C : 首卡（标注“按需补全”）
+@enduml
+```
+
+- 计时埋点：`triggered_at` 取点击/快捷键事件时间，`first_card_at` 取 UI 确认渲染时间；只统计未命中缓存的真实请求。
+- 样本表（只存聚合字段）：
+
+```sql
+on_demand_sample(
+  sample_id          TEXT PRIMARY KEY,
+  provider_profile_id TEXT NOT NULL,
+  started_at_ms      INTEGER NOT NULL,
+  latency_ms         INTEGER NOT NULL,
+  outcome            TEXT NOT NULL,   -- success | timeout | failed | canceled
+  cache_hit          INTEGER NOT NULL
+);
+```
+
+- 样本 <200 时报表状态只能是“样本不足”；p95 由样本表计算，禁止用测试替身或回放夹具补样本。
+- 超时：单源 `ProviderTimeout` 不超过 8 秒；到点取消在途请求并出“检索较慢”卡，不生成无来源结论；用户重试才产生新样本。
+- 去重：进行中的请求按 `dedupe_key` 合并，10 分钟内重复发起复用同一 future 或 24 小时缓存。
+- 外发白名单：仅启用源；HTTPS；解析结果拒绝环回/私网/链路本地；跨主机重定向 0 次、同主机 ≤2 次；查询只含脱敏文本。
+- 统计与审计：`on_demand_sample` 提供 p50/p95/p99、超时率、缓存命中率；审计写长度、主题标签、检索源 ID。
+
+### 2.10.4 审计哈希链存储（SPEC 7.4）
+
+**归属**：`crates/infrastructure/src/audit/store.rs`（实现 `AuditLog`）、`retention.rs`（归档）、`crates/application/src/governance/audit_hooks.rs`（八类接入）。现有 `AuditChain` 保留为纯算法实现，由存储层复用其规范化与校验函数。
+
+**表结构**
+
+```sql
+audit_record(
+  seq                INTEGER PRIMARY KEY AUTOINCREMENT,
+  audit_id           TEXT NOT NULL UNIQUE,
+  action             TEXT NOT NULL,
+  actor              TEXT NOT NULL,
+  occurred_at_ms     INTEGER NOT NULL,
+  target             TEXT NOT NULL,
+  sanitized_summary  TEXT NOT NULL,
+  prev_hash          TEXT NOT NULL,
+  self_hash          TEXT NOT NULL
+);
+
+audit_anchor(
+  anchor_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  up_to_seq      INTEGER NOT NULL,
+  last_self_hash TEXT NOT NULL,
+  anchor_hash    TEXT NOT NULL,
+  created_at_ms  INTEGER NOT NULL
+);
+
+audit_archive(
+  month             TEXT PRIMARY KEY,   -- YYYY-MM
+  first_seq         INTEGER NOT NULL,
+  last_seq          INTEGER NOT NULL,
+  record_count      INTEGER NOT NULL,
+  terminal_self_hash TEXT NOT NULL,
+  bundle_path       TEXT NOT NULL,
+  bundle_sha256     TEXT NOT NULL,
+  sealed_at_ms      INTEGER NOT NULL,
+  disposal_state    TEXT NOT NULL      -- retained | pending_disposal
+);
+```
+
+**只追加约束**
+
+```sql
+CREATE TRIGGER audit_record_no_update
+BEFORE UPDATE ON audit_record
+BEGIN SELECT RAISE(ABORT, 'audit append-only'); END;
+
+CREATE TRIGGER audit_record_no_delete
+BEFORE DELETE ON audit_record
+BEGIN SELECT RAISE(ABORT, 'audit append-only'); END;
+```
+
+- 追加：`BEGIN IMMEDIATE` 事务内读取上一条 `self_hash`（空表用 64 个 `0`），按 SPEC 7.4.1-3 的固定顺序规范化并计算 `self_hash`，插入后每满 1,000 条写锚点，提交。
+- 校验：按 `seq` 流式重算，返回首个不一致 `audit_id`；启动、归档前、手动校验三处调用。
+- 归档：每日 02:00 选取 `occurred_at_ms + 180 天 < now` 的自然月分段 → 全链校验 → 生成 AES-256-GCM 归档包（AAD 绑定 `month:first_seq:last_seq`）→ 写入 `audit_archive` → 事务删除在线行；任一步失败保留在线数据并告警。
+- 写失败：设置进程级 `audit_unavailable`，敏感操作入口统一检查并拒绝；缓冲补写只补事件，不改变 `occurred_at`。
+- 保留：在线 180 天固定；归档 5 年暂定，未获法务确认时 `disposal_state=retained`，不自动销毁。
+- 零转录：`sanitized_summary` 只由固定模板与 ID/长度/分类拼接；检索类审计禁止记录查询文本、URL、页面标题与正文。
+
+### 2.10.5 追溯矩阵
+
+| SPEC 增量 | 设计落点 | 关键机制 | 验证方式 |
+|---|---|---|---|
+| 7.1 负反馈加权 | 2.10.1 | 事件表 + 派生权重 + `reported` 硬抑制 + Allow 后排序 | 权重边界单测、Deny 不受影响用例、零转录扫描 |
+| 7.2 缓存/outbox | 2.10.2 | 单库两表；先落库后外发；3 次退避；重启恢复与 30 秒补齐 | 强制终止重启测试、断网演练、LRU/容量测试 |
+| 7.3 按需补全 | 2.10.3 | `SanitizedQuery` + 外发白名单 + 8 秒超时 + 样本表 | ≥200 真实样本 p95、私网地址拒绝、重复发起合并 |
+| 7.4 审计存储 | 2.10.4 | 只追加表 + 触发器 + 哈希链 + 锚点 + 月度归档 | 篡改定位、并发 100 条链完整、归档校验与保留期 |
+
+### 2.10.6 实现阶段裁决（2026-11-23）
+
+规格未覆盖或存在两种可行写法时，实现按以下口径落地，不改动 SPEC 7.1~7.4 的约束：
+
+| # | 裁决点 | 落地口径 | 理由 |
+|---|---|---|---|
+| 1 | 缓存/outbox 与会话的关联 | `query_cache` 与 `proactive_outbox` 增加可空 `session_id` | 支持 `delete_irrecoverable` 级联删除，同时允许无会话的全局任务 |
+| 2 | 反馈统计的会话维度 | 仅在内存聚合会话/平台/主题三维，持久化仍只写 SPEC 7.1.1-8 白名单字段 | 避免为统计扩展事件表，遵守零转录 |
+| 3 | 审计 DELETE 触发器 | 仅当该行所属自然月已存在 `audit_archive` 行时放行删除 | 同时满足 7.4.1-1 只追加与 7.4.1-6 归档后移出；UPDATE 仍无条件 ABORT |
+| 4 | 外发白名单的地址校验 | 不做 DNS 解析；字面 IP 与调用方传入的 `resolved_ips` 一并校验 | 保持应用层无网络 IO；解析责任留在适配器 |
+| 5 | v2 迁移文件拆分 | 拆为 `v2_cache_outbox.sql`、`v2_feedback.sql`、`v2_audit.sql`，在 v1→v2 一次执行 | 按领域分组便于审阅，仍以单个 `user_version=2` 提交 |
+| 6 | 按需补全样本门槛 | 只有"未命中缓存的成功样本"计入 200 条门槛与分位数；不足时状态固定"样本不足" | 缓存命中不代表真实检索时延，避免虚高样本 |
+| 7 | outbox 失败计数 | 首次失败后 `next_attempt_ms` 为 500ms，第二次 1000ms，第三次转 `dead` | 与 `RetryPolicy::DEFAULT`（3 次、500ms 起、8s 上限）一致 |
+
 ---
 
 **交付边界**：本文件为技术设计文档（`design.md`），仅覆盖架构、接口、数据模型、选型、接入路径、门控与合规设计；具体任务拆解与排期细化由 `spec-task-agent` 生成 `tasks.md`，本文件不包含实现代码与任务清单。

@@ -6,9 +6,15 @@ use meeting_copilot_domain::model::enums::AuditAction;
 use meeting_copilot_domain::model::governance::AuditRecord;
 use meeting_copilot_domain::vo::{ActorRef, AuditId, ResourceRef, WallClock};
 
+pub mod retention;
+pub mod store;
+
+pub use retention::{archive_due, ArchiveOutcome, ARCHIVE_RETENTION_YEARS, ONLINE_RETENTION_DAYS};
+pub use store::{AuditStore, SqliteAuditLog};
+
 pub const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
-fn digest(prev_hash: &str, canonical: &str) -> String {
+pub(crate) fn digest(prev_hash: &str, canonical: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(prev_hash.as_bytes());
     hasher.update(b"|");
@@ -21,14 +27,30 @@ fn digest(prev_hash: &str, canonical: &str) -> String {
     hex
 }
 
-fn canonical(record: &AuditRecord) -> String {
+pub(crate) fn canonical_fields(
+    action: AuditAction,
+    actor: &str,
+    occurred_at_ms: i64,
+    target: &str,
+    summary: &str,
+) -> String {
     format!(
-        "{:?}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}",
+        action.as_str(),
+        actor,
+        occurred_at_ms,
+        target,
+        summary
+    )
+}
+
+fn canonical(record: &AuditRecord) -> String {
+    canonical_fields(
         record.action,
-        record.actor,
+        record.actor.as_str(),
         record.occurred_at.as_unix_millis(),
-        record.target,
-        record.summary
+        record.target.as_str(),
+        &record.summary,
     )
 }
 

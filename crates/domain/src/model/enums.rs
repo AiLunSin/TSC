@@ -288,6 +288,52 @@ pub enum AuditAction {
     PolicyApplied,
 }
 
+impl AuditAction {
+    pub const ALL: [Self; 10] = [
+        Self::SessionStart,
+        Self::SessionEnd,
+        Self::ConsentGranted,
+        Self::ConsentRevoked,
+        Self::OutboundQuery,
+        Self::CardShown,
+        Self::Export,
+        Self::Delete,
+        Self::ConfigChange,
+        Self::PolicyApplied,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SessionStart => "session_start",
+            Self::SessionEnd => "session_end",
+            Self::ConsentGranted => "consent_granted",
+            Self::ConsentRevoked => "consent_revoked",
+            Self::OutboundQuery => "outbound_query",
+            Self::CardShown => "card_shown",
+            Self::Export => "export",
+            Self::Delete => "delete",
+            Self::ConfigChange => "config_change",
+            Self::PolicyApplied => "policy_applied",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw {
+            "session_start" => Some(Self::SessionStart),
+            "session_end" => Some(Self::SessionEnd),
+            "consent_granted" => Some(Self::ConsentGranted),
+            "consent_revoked" => Some(Self::ConsentRevoked),
+            "outbound_query" => Some(Self::OutboundQuery),
+            "card_shown" => Some(Self::CardShown),
+            "export" => Some(Self::Export),
+            "delete" => Some(Self::Delete),
+            "config_change" => Some(Self::ConfigChange),
+            "policy_applied" => Some(Self::PolicyApplied),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

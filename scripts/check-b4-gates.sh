@@ -27,6 +27,8 @@ SETTINGS_APP_DIR="crates/ui-bridge/src/settings"
 SETTINGS_TEST="crates/ui-bridge/tests/llm_settings_view.rs"
 STATUS_FILE="docs/progress/b4-status.md"
 APP_SETTINGS_DIR="crates/application/src/settings"
+PROACTIVE_APP_DIR="crates/application/src/proactive"
+FEEDBACK_REPO="crates/infrastructure/src/store/repo/feedback.rs"
 PLATFORM_STORE="crates/platform-win/src/secure_store.rs"
 SPEC_FILE=".codeartsdoer/specs/b4_gate/spec.md"
 RECORD_WHITELIST="schema_version trace_id session_id candidate_ref insight_ref trigger per_stage decision stopped_at budget_remaining cooldown_until_ms authorization_status skipped_stages decided_at_ms"
@@ -319,6 +321,12 @@ rule_zero_transcript() {
   done < <(if [[ -d "${SETTINGS_APP_DIR}" ]]; then for f in "${SETTINGS_APP_DIR}"/*.rs; do [[ -f "${f}" ]] && printf '%s
 ' "${f}"; done; fi)
   if [[ -f "${SETTINGS_TEST}" ]]; then files+=("${SETTINGS_TEST}"); fi
+  if [[ -d "${PROACTIVE_APP_DIR}" ]]; then
+    while IFS= read -r file; do
+      files+=("${file}")
+    done < <(find "${PROACTIVE_APP_DIR}" -type f -name '*.rs' 2>/dev/null)
+  fi
+  if [[ -f "${FEEDBACK_REPO}" ]]; then files+=("${FEEDBACK_REPO}"); fi
   if compgen -G "crates/application/tests/gate_*.rs" > /dev/null; then
     while IFS= read -r file; do
       files+=("${file}")
