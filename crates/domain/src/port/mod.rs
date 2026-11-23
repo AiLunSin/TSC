@@ -25,8 +25,8 @@ pub use llm::{
 pub use proactive::{FeedbackStore, OnDemandSampleStore, OutboxStore, QueryCacheStore};
 pub use repository::{CardRepository, InsightRepository, SessionRepository, UtteranceRepository};
 pub use search::{
-    FetchOutcome, PageFetcher, ProviderRequest, ProviderResponse, SearchBroker, SearchHit,
-    SearchProvider,
+    FetchOutcome, OutboundPolicy, PageFetcher, ProviderFailure, ProviderRequest, ProviderResponse,
+    SearchBroker, SearchHit, SearchProvider,
 };
 pub use understand::{
     CardComposer, CardDraft, Deduplicator, ExtractionInput, GapDetector, InsightDraft,

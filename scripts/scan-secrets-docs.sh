@@ -42,7 +42,14 @@ scan_file() {
   local file="$1"
   local pattern
   for pattern in "${PATTERNS[@]}"; do
-    grep -nE -- "${pattern}" "${file}" 2>/dev/null \
+    local matched
+    matched="$(grep -nE -- "${pattern}" "${file}" 2>/dev/null || true)"
+    # 规格文档会把禁用项原文写进“禁止/否决”条款；这类说明不是泄漏。
+    if [[ "${pattern}" == 'danger_accept_invalid|--insecure|CERT_NONE' ]]; then
+      matched="$(printf '%s\n' "${matched}" \
+        | grep -vE '禁止|不得|不调用|否决|严禁|不允许|防止|规则 [0-9]|\*\*不\*\*|不.*调用' || true)"
+    fi
+    printf '%s\n' "${matched}" | grep -v '^$' \
       | cut -d: -f1 \
       | sed "s|^|${file}:|"
   done

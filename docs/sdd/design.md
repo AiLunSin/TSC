@@ -1931,6 +1931,47 @@ BEGIN SELECT RAISE(ABORT, 'audit append-only'); END;
 | 6 | 按需补全样本门槛 | 只有"未命中缓存的成功样本"计入 200 条门槛与分位数；不足时状态固定"样本不足" | 缓存命中不代表真实检索时延，避免虚高样本 |
 | 7 | outbox 失败计数 | 首次失败后 `next_attempt_ms` 为 500ms，第二次 1000ms，第三次转 `dead` | 与 `RetryPolicy::DEFAULT`（3 次、500ms 起、8s 上限）一致 |
 
+### 2.11 检索源接入（U-09 / 任务 34）
+
+**目标**：只补"能产生真实样本"的最小闭环，不做多源融合与配置 UI。
+
+**模块**
+
+```text
+domain/port/search.rs        SearchProvider、ProviderRequest/Response、ProviderFailure
+domain/model/provider.rs     既有 ProviderProfile 复用（不新增服务商常量）
+infrastructure/search/profile_store.rs   providers.json 读取、校验、热加载
+infrastructure/search/http_json.rs       HTTPS GET + JSON 解析 + 错误分类
+infrastructure/search/registry.rs        启用源列表；空列表即零源
+application/proactive/on_demand_runner.rs 白名单→缓存→检索→裁决→样本→返回
+```
+
+**配置**：`providers.json`（应用数据目录）字段沿用 SPEC 6.9，另加 `adapter` 与 `endpoint`；`authRef` 只存环境变量名。读取失败或非法项按字段级错误返回，整体不进入调度。
+
+**检索流程**
+
+1. `OutboundGuard::check`：启用状态、HTTPS、主机一致、字面 IP 与 `resolved_ips` 的私网/环回/链路本地拒绝。
+2. `CacheService::lookup`：命中则写 `cache_hit=true` 样本并直接返回；不发起连接。
+3. `registry` 取启用源；为空返回 `NoSource`，不写样本。
+4. `http_json::search`：8 秒超时、响应 ≤2 MiB、仅 GET、最多 1 次重试；错误映射见 SPEC 8.3-4。
+5. `on_demand::decide`：部分结果标注"结果可能不完整"；取消优先；全部失败不生成无来源结论。
+6. 写 `OnDemandSample`（未命中成功计入 200），审计写长度/主题/源 ID。
+
+**并发与限流**：runner 外层信号量 ≤3；超限排队，不并发穿透。限流计数按 `provider_profile_id` 维度。
+
+**失败处置**：单源失败只记样本与健康状态，不影响会话与要点；连续失败达到阈值置"不可用"并跳过调度，恢复由连接测试或下次成功写入。
+
+**零转录**：`ProviderRequest` 只接受 `SanitizedQuery`；`ProviderResponse` 不带正文；样本表与审计不写查询文本、URL 查询串与标题。缓存键仍为 `SHA-256(provider_id ‖ 0x1f ‖ normalized_query)`。
+
+**追溯**
+
+| SPEC | 落点 | 验证 |
+|---|---|---|
+| 8.2 配置/密钥 | `profile_store.rs` | 非法字段报错、无默认源、密钥不入库 |
+| 8.3 适配器契约 | `http_json.rs` | 401/429/malformed/TLS 分类 |
+| 8.4 外发与网络 | `on_demand_runner.rs` + `OutboundGuard` | 私网/环回/跨主机重定向拒绝 |
+| 8.5 采样 | `on_demand_runner.rs` | 每次外发 1 条样本；缓存命中不计 200 |
+
 ---
 
 **交付边界**：本文件为技术设计文档（`design.md`），仅覆盖架构、接口、数据模型、选型、接入路径、门控与合规设计；具体任务拆解与排期细化由 `spec-task-agent` 生成 `tasks.md`，本文件不包含实现代码与任务清单。

@@ -1586,6 +1586,8 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 7.3.1-2/3/9 · DESIGN 2.10.3
   - DoD：使用者配置真实源后完成 ≥200 次、≥3 时段、≥10 主题采样；p95 ≤8s、p99 ≤12s、超时率 ≤2%；测试替身与回放样本不计入；未达标保持 open。
   - 进展：0/200，状态“样本不足”；机制已就绪，未宣称达标。
+  - 阻塞（2026-11-24）：检索源 SPI（任务 34）与真实适配器尚未实现，当前代码无任何 HTTP 检索客户端，无法产生真实样本。
+  - 采集协议（前置满足后执行）：仅统计未命中缓存的成功请求；≥200 次、≥3 个时段、≥10 个主题；测试替身与回放样本不计入；用 `OnDemandSampler::report` 输出 p50/p95/p99 与超时率，p95 ≤8s、p99 ≤12s、超时率 ≤2% 才可勾选。
 - [x] **G-43-D 门禁** — 同上
   - DoD：无源、全超时、部分结果、取消、地址被拒绝五类异常用例通过；重复发起 10 分钟内只外发 1 次。
   - 证据：`rejects_disabled_unknown_and_non_https`（无源/地址拒绝）、`timeout_rate_budget_is_two_percent`（全超时）、`on_demand_partial_results_are_shown_with_notice_and_no_retry`（部分结果 + “结果可能不完整” + 不自动补发）、`on_demand_cancel_terminates_and_is_excluded_from_success_samples`（取消不计入成功样本）；重复发起：提示卡 10 分钟窗口复用缓存（SPEC 5.3.1-10），补齐沿用 30 分钟窗口（SPEC 7.2.1-10），两个窗口不冲突。
@@ -1632,6 +1634,55 @@ cargo test --workspace
 3. 验收底线：在既有 **877 passed / 0 failed / 10 ignored** 基线上不新增失败；新增用例逐项对应本附录 DoD；零转录唯一标记扫描 0 命中。
 4. 宣称边界：U-07-43 未取得真实 200 样本前，文档与提交信息只能写“规格已立项/实现进行中”，不得写“按需补全已完成”或“8s 已达标”；U-07-52 归档 5 年未获法务确认前，不得对外宣称该期限。
 
+## 附录 H：U-09 检索源接入（任务 34 立项，2026-11-24）
+
+> 与主清单任务 34 对应，不新增主任务编号；只覆盖 G-43-C 采样所需的最小闭环。规格见 SPEC 第 8 章，设计见 DESIGN 2.11。状态：**A~F 已实现，待 H-34-G 手工验收**。
+
+### H.1 配置模型与持久化
+
+- [x] **H-34-A `providers.json` 读取与校验** — `crates/infrastructure/src/search/profile_store.rs`
+  - 追溯 SPEC 8.2、6.9-1~10 · DESIGN 2.11
+  - DoD：字段级错误；启用列表为空即零源；无任何默认源/示例源；`authRef` 只存环境变量名；文件变更后下一次检索生效。
+  - 证据：`profile_store::tests` 覆盖重复 `priority`、`timeout > 8000`、非 HTTPS、重复 `id`、非法 `authRef`、空列表与 mtime 热加载。
+
+### H.2 注册表与健康
+
+- [x] **H-34-B 启用源注册表** — `crates/infrastructure/src/search/registry.rs`
+  - 追溯 SPEC 8.2-4、6.9-5/10 · DESIGN 2.11
+  - DoD：只返回 `enabled && health != Unavailable`；停用/不可用源不参与调度；注册表初始为空。
+  - 证据：`registry::tests` 覆盖空注册表与停用/不可用过滤。
+- [x] **H-34-C 连接测试与失败分类** — `crates/infrastructure/src/search/health.rs`
+  - 追溯 SPEC 8.3-4、6.9-10
+  - DoD：返回 `Timeout/RateLimited/AuthFailed/MalformedResponse/TlsFailure/Unreachable` 六类之一；失败源标记不可用；连接测试同样经过外发白名单。
+  - 证据：`health::tests` 覆盖六类映射、连续 3 次失败置 `Unavailable`、成功恢复；`test_connection` 先调用 `OutboundPolicy`。
+
+### H.3 单源 HTTP 适配器
+
+- [x] **H-34-D `http_json` 适配器** — `crates/infrastructure/src/search/http_json.rs`
+  - 追溯 SPEC 8.3-5/6、8.4 · DESIGN 2.11
+  - DoD：GET + 可选 Bearer；8 秒硬超时；响应 ≤2 MiB；401/403、429、解析失败、TLS/连接失败分别映射；不记录 URL 查询串与响应正文。
+  - 证据：`http_json::tests` 用 mock 传输覆盖 401/403/429/500、超时/TLS/不可达、>2 MiB、查询编码与阻塞域名；`llm-https` 构建通过。
+
+### H.4 零源模式
+
+- [x] **H-34-E 零源仅要点** — `crates/application/src/proactive/no_provider_mode.rs`
+  - 追溯 SPEC 4.2-4、5.3.3-2、8.6-2
+  - DoD：启用源为 0 时按需与自动检索均返回 `NoSource`；不写样本、不发连接；要点与纪要路径不受影响。
+  - 证据：`no_provider_mode::tests` 与 `on_demand_runner::tests::zero_source_returns_no_source_without_side_effects`。
+
+### H.5 按需 runner 与采样
+
+- [x] **H-34-F runner** — `crates/application/src/proactive/on_demand_runner.rs`
+  - 追溯 SPEC 8.4、8.5 · DESIGN 2.11
+  - DoD：顺序为白名单→缓存→检索→`decide`→样本→返回；缓存命中写 `cache_hit=true` 且不计 200；部分结果带“结果可能不完整”；取消不写成功样本；并发 ≤3。
+  - 证据：`on_demand_runner::tests` 覆盖缓存命中不触发适配器、199/200 门槛、并发峰值、取消与部分结果、零源无副作用。
+
+### H.6 验收与 G-43-C 启动
+
+- [ ] **H-34-G 手工验收** — `docs/progress/b4-status.md` 增量记录
+  - DoD：配置 1 个真实 HTTPS 源，完成 3 次按需检索；样本表新增 3 条、报表“样本不足”；审计 3 条且不含查询文本；随后按 SPEC 8.5-4 启动 200 样本采集。
+  - 前置：使用者提供真实端点与凭据引用；自动化用例全部通过。
+
 ---
 
-**文档结束**。本清单共 **11 个批次 / 79 个主任务**，覆盖 `spec.md` 4.1–4.5、5.1–5.8、6.1–6.10 全部章节与 `design.md` 2.1–2.9 全部设计章节；另含附录 G 的 U-07 四项增量任务（不新增主任务编号）。后续编码阶段可按批次顺序执行，批次内按标注并行度分配。
+**文档结束**。本清单共 **11 个批次 / 79 个主任务**，覆盖 `spec.md` 4.1–4.5、5.1–5.8、6.1–6.10 全部章节与 `design.md` 2.1–2.9 全部设计章节；另含附录 G 的 U-07 四项增量与附录 H 的 U-09 检索源接入（均不新增主任务编号）。后续编码阶段可按批次顺序执行，批次内按标注并行度分配。

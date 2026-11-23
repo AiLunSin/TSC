@@ -1118,3 +1118,54 @@ MC --> U : 状态确认
 3. **归档失败**：系统行为：不删除在线记录，保留归档临时包并告警；下一轮重试。
 4. **时钟回拨**：系统行为：`occurred_at` 如实记录，链顺序以 `seq` 为准；偏差超过 5 分钟写一条"时间异常"审计。
 5. **库损坏或迁移失败**：系统行为：拒绝启动并提示恢复步骤；禁止以空库继续，避免"审计静默丢失"。
+
+# **8. U-09 增量规格：检索源接入（任务 34 立项，2026-11-24）**
+
+> 适用范围：为启动 G-43-C 真实样本采集，补齐任务 34 的最小可运行切片。本节不改变第 1–7 章；冲突时取更严格者。本节是规格，不代表任何能力已实现。
+
+## **8.1 范围**
+
+1. **必须交付**：`ProviderProfile` 校验与持久化、适配器注册表与热加载、连接测试、零源"仅要点"模式、单源 HTTP JSON 适配器、按需检索 runner 与样本写入。
+2. **不在本增量**：多源融合与优先级降级（任务 35）、网页抓取（任务 36）、配置 UI（任务 60）、自动提示调度（任务 40）。
+3. **目标**：使用者配置 1 个真实 HTTPS 检索源后，可完成按需检索并把真实时延写入 `on_demand_sample`，为 G-43-C 的 200 样本提供唯一合法来源。
+
+## **8.2 配置与密钥**
+
+1. **配置源**：应用数据目录下 `providers.json`，`schemaVersion` 缺省 `1.0`；文件缺失或启用列表为空时进入零源模式。
+2. **字段**：沿用 SPEC 6.9-1~10；增加 `adapter`（本增量仅 `http_json`）与 `endpoint`（必须 HTTPS）。
+3. **凭据**：只保存 `authRef` 引用；本增量支持环境变量名引用。禁止把密钥写入配置文件、数据库、缓存、日志与审计。
+4. **来源边界**：不得内置任何默认源、示例源或服务商常量；`providers.json` 由使用者创建。
+
+## **8.3 适配器契约**
+
+1. `SearchProvider`：`profile_id()`、`health()`、`search(ProviderRequest) -> Result<ProviderResponse, ProviderFailure>`。
+2. `ProviderRequest`：已脱敏查询（`SanitizedQuery`）、`limit` 1..=10、`timeout` ≤8s、`blocked_domains`、调用方传入的 `resolved_ips`。
+3. `ProviderResponse`：`references`（`url`、`title`、`published_at` 可选、`trust`）与 `latency_ms`；禁止携带页面正文。
+4. `ProviderFailure` 分类固定为：`Timeout`、`RateLimited`、`AuthFailed`、`MalformedResponse`、`TlsFailure`、`Unreachable`；任何失败不得 panic。
+5. **`http_json` 行为**：GET `{endpoint}?q={query}&format=json`；可选 Bearer；2xx 解析 `results[{url,title,publishedDate?}]`；401/403→`AuthFailed`，429→`RateLimited`，解析失败→`MalformedResponse`，连接/证书失败→`Unreachable`/`TlsFailure`。
+6. **响应上限**：响应体 ≤2 MiB；超限按 `MalformedResponse` 处理并丢弃。
+
+## **8.4 外发与网络**
+
+1. 复用 SPEC 7.3.4：仅启用源、HTTPS、主机与配置一致、拒绝环回/私网/链路本地、跨主机重定向 0 次、同主机 ≤2 次。
+2. 超时 8 秒硬截断；单会话并发 ≤3；仅幂等 GET 允许 1 次重试。
+3. 拒绝与成功均写脱敏审计：`action=outbound_query`，摘要只含查询长度、主题标签、检索源 ID，不含查询文本与 URL。
+
+## **8.5 采样**
+
+1. **runner 顺序**：外发白名单 → 缓存查询 → 适配器检索 → 结果裁决 → 写样本 → 返回。
+2. 每次真实外发写一条 `OnDemandSample`：`provider_profile_id`、`started_at_ms`、`latency_ms`、`outcome`、`cache_hit=false`；缓存命中写 `cache_hit=true`。
+3. 测试替身、回放夹具与人工构造样本禁止写入生产库；`<200` 条时报表状态固定"样本不足"。
+4. G-43-C 达标条件不变：≥200 次未命中缓存的成功请求、≥3 时段、≥10 主题；p95 ≤8s、p99 ≤12s、超时率 ≤2%。
+
+## **8.6 非功能与红线**
+
+1. **零转录**：配置、样本、缓存与审计不得含查询原文、URL 查询串、页面正文、标题与结论原文；日志只记分类、耗时与计数。
+2. **失败隔离**：单源失败不影响会话；零源仍可"仅要点"运行，且不得因缺少检索源导致会话不可用。
+3. **许可**：不内置、不分发任何检索服务；仅通过 `endpoint` 调用使用者自建或第三方 HTTPS 服务。
+4. **性能**：单源首卡 p95 ≤8s 只能在真实样本达标后宣称；实现完成不等于指标达标。
+
+## **8.7 验收**
+
+1. **自动化**：非法配置字段级报错；热加载无需重启；健康分类六种；零源拒绝且仅要点可用；HTTPS/私网/环回/重定向拒绝；超时与 429 映射；并发峰值 ≤3；样本写入与 199/200 门槛。
+2. **手工**：配置 1 个真实 HTTPS 源，完成 3 次按需检索；样本表新增 3 条、报表仍显示"样本不足"；审计新增 3 条脱敏记录且不含查询文本。

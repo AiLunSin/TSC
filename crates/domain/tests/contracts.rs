@@ -12,7 +12,7 @@ use meeting_copilot_domain::port::capture::{
 };
 use meeting_copilot_domain::port::governance::{Sanitizer, SensitiveHit};
 use meeting_copilot_domain::port::search::{
-    ProviderRequest, ProviderResponse, SearchHit, SearchProvider,
+    ProviderFailure, ProviderRequest, ProviderResponse, SearchHit, SearchProvider,
 };
 use meeting_copilot_domain::vo::{AudioClock, Confidence, ProviderId, TitleText, UtteranceText};
 
@@ -212,23 +212,20 @@ impl SearchProvider for MockSearchProvider {
         ProviderKind::Custom
     }
 
-    fn test_connection(&self) -> Result<(), CopilotError> {
-        if self.spi_version != SUPPORTED_SPI {
-            return Err(CopilotError::AdapterVersionIncompatible {
-                required: SUPPORTED_SPI.to_string(),
-                actual: self.spi_version.to_string(),
-            });
-        }
-        Ok(())
+    fn health(&self) -> meeting_copilot_domain::model::enums::ProviderHealth {
+        meeting_copilot_domain::model::enums::ProviderHealth::Healthy
     }
 
-    fn search(&self, request: &ProviderRequest) -> Result<ProviderResponse, CopilotError> {
-        self.test_connection()?;
+    fn search(&self, request: &ProviderRequest) -> Result<ProviderResponse, ProviderFailure> {
+        if self.spi_version != SUPPORTED_SPI {
+            return Err(ProviderFailure::MalformedResponse);
+        }
         let hit = SearchHit {
             title: TitleText::new("模型上下文窗口说明").expect("title"),
             url: AbsoluteUrl::new("https://docs.example.com/context-window").expect("url"),
             domain: "docs.example.com".to_owned(),
             snippet: Some("上下文窗口用于衡量单次可处理的 token 数量".to_owned()),
+            published_at: None,
             trust: TrustTier::Official,
         };
         let mut hits = vec![hit];
@@ -334,9 +331,17 @@ fn mock_ports_satisfy_contracts() {
 #[test]
 fn incompatible_spi_version_is_rejected() {
     let provider = MockSearchProvider::new(2);
+    let query = MockSanitizer.issue_query("模型上下文窗口").expect("查询");
+    let request = ProviderRequest::new(
+        query,
+        3,
+        meeting_copilot_domain::model::provider::ProviderTimeout::from_millis(3_000).expect("超时"),
+        Vec::new(),
+    )
+    .expect("请求");
     assert!(matches!(
-        provider.test_connection(),
-        Err(CopilotError::AdapterVersionIncompatible { .. })
+        provider.search(&request),
+        Err(ProviderFailure::MalformedResponse)
     ));
 }
 

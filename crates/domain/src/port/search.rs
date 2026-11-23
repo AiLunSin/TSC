@@ -1,6 +1,7 @@
-use crate::error::CopilotError;
+use std::net::IpAddr;
+
 use crate::model::card::{AbsoluteUrl, Reference};
-use crate::model::enums::{ProviderKind, TrustTier};
+use crate::model::enums::{ProviderHealth, ProviderKind, TrustTier};
 use crate::model::provider::{DomainPattern, ProviderTimeout};
 use crate::vo::{ProviderId, SanitizedQuery, TitleText, WallClock};
 
@@ -11,6 +12,7 @@ pub struct SearchHit {
     pub url: AbsoluteUrl,
     pub domain: String,
     pub snippet: Option<String>,
+    pub published_at: Option<WallClock>,
     pub trust: TrustTier,
 }
 
@@ -21,6 +23,8 @@ pub struct ProviderRequest {
     pub limit: u8,
     pub timeout: ProviderTimeout,
     pub blocked_domains: Vec<DomainPattern>,
+    /// 调用方解析出的地址，供外发白名单拒绝私网/环回/链路本地。
+    pub resolved_ips: Vec<IpAddr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -46,7 +50,13 @@ impl ProviderRequest {
             limit,
             timeout,
             blocked_domains,
+            resolved_ips: Vec::new(),
         })
+    }
+
+    pub fn with_resolved_ips(mut self, resolved_ips: Vec<IpAddr>) -> Self {
+        self.resolved_ips = resolved_ips;
+        self
     }
 
     pub fn is_domain_blocked(&self, domain: &str) -> bool {
@@ -61,6 +71,47 @@ pub struct ProviderResponse {
     pub provider: ProviderId,
     pub hits: Vec<SearchHit>,
     pub elapsed_ms: u64,
+}
+
+/// 适配器失败分类固定为六类（SPEC 8.3-4），任何失败都不得 panic。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ProviderFailure {
+    #[error("检索超时")]
+    Timeout,
+    #[error("检索被限流")]
+    RateLimited,
+    #[error("检索鉴权失败")]
+    AuthFailed,
+    #[error("检索响应非法")]
+    MalformedResponse,
+    #[error("检索 TLS 失败")]
+    TlsFailure,
+    #[error("检索不可达")]
+    Unreachable,
+}
+
+impl ProviderFailure {
+    /// 供审计与日志写入的稳定标签，不包含查询、URL 或响应正文。
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Timeout => "timeout",
+            Self::RateLimited => "rate_limited",
+            Self::AuthFailed => "auth_failed",
+            Self::MalformedResponse => "malformed_response",
+            Self::TlsFailure => "tls_failure",
+            Self::Unreachable => "unreachable",
+        }
+    }
+}
+
+/// 外发白名单端口。基础设施在执行连接测试或检索前调用，避免反向依赖应用层。
+pub trait OutboundPolicy: Send + Sync {
+    fn check(
+        &self,
+        provider_profile_id: &str,
+        url: &str,
+        resolved_ips: &[IpAddr],
+    ) -> Result<(), ProviderFailure>;
 }
 
 /// 抓取结果。非 `Ok` 时不得产出"有结论但无来源"的卡片。
@@ -91,9 +142,9 @@ pub trait SearchProvider: Send + Sync {
 
     fn kind(&self) -> ProviderKind;
 
-    fn test_connection(&self) -> Result<(), CopilotError>;
+    fn health(&self) -> ProviderHealth;
 
-    fn search(&self, request: &ProviderRequest) -> Result<ProviderResponse, CopilotError>;
+    fn search(&self, request: &ProviderRequest) -> Result<ProviderResponse, ProviderFailure>;
 }
 
 /// 检索调度：按优先级与权重选择可用源，失败时按备用顺序降级。
