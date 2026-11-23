@@ -133,7 +133,11 @@ fn main() {
                 .unwrap_or_else(|| vec![DEFAULT_MODEL_PRESET.to_owned()]);
             let cards = Arc::new(ipc::card_store::CardStore::new());
             app.manage(Arc::clone(&cards));
-            app.manage(Arc::new(ipc::asr::AsrPipeline::new(Arc::clone(&cards))));
+            let asr_paths = ipc::asr::AsrPaths::resolve(app.path().resource_dir().ok().as_deref());
+            app.manage(Arc::new(ipc::asr::AsrPipeline::new(
+                Arc::clone(&cards),
+                asr_paths,
+            )));
             app.manage(build_state(config_dir, presets, cards.clone()));
             tracing::info!(
                 protocol = IPC_PROTOCOL_VERSION,

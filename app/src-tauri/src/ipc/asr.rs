@@ -3,8 +3,9 @@
 //! Python 子进程只做识别；采集、重采样与出卡都在进程内完成。
 
 use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -15,29 +16,65 @@ use meeting_copilot_platform_win::wasapi::WasapiLoopbackSource;
 use crate::ipc::card_store::CardStore;
 use crate::ipc::dto::IpcErrorDto;
 
-const SCRIPT_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/asr/stream_asr.py");
-const MODEL_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../.tmp/asr/vosk-model-small-cn-0.22"
-);
+const DEV_ROOT: &str = env!("CARGO_MANIFEST_DIR");
+const MODEL_DIR_NAME: &str = "vosk-model-small-cn-0.22";
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// ASR 资源定位：发布包优先使用 `resource_dir/asr`，开发环境回退到仓库目录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsrPaths {
+    script: PathBuf,
+    model: PathBuf,
+}
+
+impl AsrPaths {
+    pub fn resolve(resource_dir: Option<&Path>) -> Self {
+        let dev_root = Path::new(DEV_ROOT);
+        if let Some(resource_dir) = resource_dir {
+            let script = resource_dir.join("asr/stream_asr.py");
+            let model = resource_dir.join("asr").join(MODEL_DIR_NAME);
+            if script.is_file() && model.is_dir() {
+                return Self { script, model };
+            }
+        }
+        Self {
+            script: dev_root.join("asr/stream_asr.py"),
+            model: dev_root.join("../../.tmp/asr").join(MODEL_DIR_NAME),
+        }
+    }
+
+    fn validate(&self) -> Result<(), IpcErrorDto> {
+        if !self.script.is_file() || !self.model.is_dir() {
+            return Err(IpcErrorDto::new(
+                "asr_resource_missing",
+                "实时转写资源缺失，请重新安装应用。",
+                false,
+            ));
+        }
+        Ok(())
+    }
+}
 
 /// 实时转写管线状态，由 Tauri managed state 持有（`Arc<AsrPipeline>`）。
 pub struct AsrPipeline {
     running: AtomicBool,
+    generation: AtomicU64,
     last_text: Mutex<String>,
     child: Mutex<Option<Child>>,
     cards: Arc<CardStore>,
+    paths: AsrPaths,
 }
 
 impl AsrPipeline {
-    pub(crate) fn new(cards: Arc<CardStore>) -> Self {
+    pub(crate) fn new(cards: Arc<CardStore>, paths: AsrPaths) -> Self {
         Self {
             running: AtomicBool::new(false),
+            generation: AtomicU64::new(0),
             last_text: Mutex::new(String::new()),
             child: Mutex::new(None),
             cards,
+            paths,
         }
     }
 
@@ -47,12 +84,24 @@ impl AsrPipeline {
         }
     }
 
+    fn is_current(&self, generation: u64) -> bool {
+        self.running.load(Ordering::SeqCst) && self.generation.load(Ordering::SeqCst) == generation
+    }
+
+    fn stop_generation(&self, generation: u64) {
+        if self.generation.load(Ordering::SeqCst) == generation {
+            self.stop();
+        }
+    }
+
     /// 启动实时转写；重复调用无副作用。
     pub fn start(self: &Arc<Self>) -> Result<(), IpcErrorDto> {
+        self.paths.validate()?;
         if self.running.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        let spawned = spawn_recognizer();
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let spawned = spawn_recognizer(&self.paths);
         let (child, stdin, stdout) = match spawned {
             Ok(parts) => parts,
             Err(error) => {
@@ -60,14 +109,32 @@ impl AsrPipeline {
                 return Err(error);
             }
         };
-        if let Ok(mut slot) = self.child.lock() {
-            *slot = Some(child);
+        match self.child.lock() {
+            Ok(mut slot) => *slot = Some(child),
+            Err(_) => {
+                let mut child = child;
+                let _ = child.kill();
+                let _ = child.wait();
+                self.running.store(false, Ordering::SeqCst);
+                return Err(IpcErrorDto::new(
+                    "asr_state_unavailable",
+                    "识别进程状态不可用。",
+                    true,
+                ));
+            }
         }
 
-        let recognizer = Arc::clone(self);
+        // 工作线程只持有 Weak，避免应用退出时线程反过来阻止管线 Drop。
+        let recognizer = Arc::downgrade(self);
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
+                let Some(recognizer) = recognizer.upgrade() else {
+                    return;
+                };
+                if !recognizer.is_current(generation) {
+                    return;
+                }
                 let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
                     continue;
                 };
@@ -81,17 +148,25 @@ impl AsrPipeline {
                 recognizer.set_last_text(text);
                 let _ = recognizer.cards.ingest(text);
             }
+            if let Some(recognizer) = recognizer.upgrade() {
+                recognizer.stop_generation(generation);
+            }
         });
 
-        let capture = Arc::clone(self);
+        let capture = Arc::downgrade(self);
         std::thread::spawn(move || {
             let source = WasapiLoopbackSource::new(Platform::TencentMeeting);
             if source.open(None).is_err() {
-                capture.stop();
+                if let Some(capture) = capture.upgrade() {
+                    capture.stop_generation(generation);
+                }
                 return;
             }
             let mut writer = stdin;
-            while capture.running.load(Ordering::SeqCst) {
+            while capture
+                .upgrade()
+                .is_some_and(|capture| capture.is_current(generation))
+            {
                 match source.next_chunk() {
                     Ok(Some(chunk)) => {
                         let pcm = resample_to_16k(&chunk.samples, chunk.sample_rate);
@@ -111,6 +186,9 @@ impl AsrPipeline {
                     Err(_) => std::thread::sleep(Duration::from_millis(50)),
                 }
             }
+            if let Some(capture) = capture.upgrade() {
+                capture.stop_generation(generation);
+            }
         });
 
         Ok(())
@@ -119,6 +197,7 @@ impl AsrPipeline {
     /// 停止实时转写并回收子进程。
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
+        self.generation.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut slot) = self.child.lock() {
             if let Some(mut child) = slot.take() {
                 let _ = child.kill();
@@ -131,6 +210,11 @@ impl AsrPipeline {
         self.running.load(Ordering::SeqCst)
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_running_for_test(&self, running: bool) {
+        self.running.store(running, Ordering::SeqCst);
+    }
+
     pub fn last_text(&self) -> String {
         self.last_text
             .lock()
@@ -139,36 +223,74 @@ impl AsrPipeline {
     }
 }
 
-fn spawn_recognizer(
-) -> Result<(Child, std::process::ChildStdin, std::process::ChildStdout), IpcErrorDto> {
-    let mut command = Command::new("python");
-    command
-        .arg(SCRIPT_PATH)
-        .arg(MODEL_PATH)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(CREATE_NO_WINDOW);
+impl Drop for AsrPipeline {
+    fn drop(&mut self) {
+        self.stop();
     }
-    let mut child = command.spawn().map_err(|error| {
-        IpcErrorDto::new(
-            "asr_spawn_failed",
-            &format!("无法启动识别进程：{error}"),
-            true,
-        )
-    })?;
-    let stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| IpcErrorDto::new("asr_spawn_failed", "识别进程输入不可用。", true))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| IpcErrorDto::new("asr_spawn_failed", "识别进程输出不可用。", true))?;
-    Ok((child, stdin, stdout))
+}
+
+fn spawn_recognizer(
+    paths: &AsrPaths,
+) -> Result<(Child, std::process::ChildStdin, std::process::ChildStdout), IpcErrorDto> {
+    paths.validate()?;
+    let candidates: [(&str, &[&str]); 3] = [("python", &[]), ("py", &["-3"]), ("python3", &[])];
+    let mut last_missing = None;
+    for (program, prefix_args) in candidates {
+        let mut command = Command::new(program);
+        command.args(prefix_args);
+        command
+            .arg(&paths.script)
+            .arg(&paths.model)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                last_missing = Some(error);
+                continue;
+            }
+            Err(error) => {
+                return Err(IpcErrorDto::new(
+                    "asr_spawn_failed",
+                    &format!("无法启动识别进程：{error}"),
+                    true,
+                ));
+            }
+        };
+        let Some(stdin) = child.stdin.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(IpcErrorDto::new(
+                "asr_spawn_failed",
+                "识别进程输入不可用。",
+                true,
+            ));
+        };
+        let Some(stdout) = child.stdout.take() else {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(IpcErrorDto::new(
+                "asr_spawn_failed",
+                "识别进程输出不可用。",
+                true,
+            ));
+        };
+        return Ok((child, stdin, stdout));
+    }
+    let detail = last_missing
+        .map(|error| error.to_string())
+        .unwrap_or_else(|| "未找到 Python 3".to_owned());
+    Err(IpcErrorDto::new(
+        "asr_python_missing",
+        &format!("未找到可用的 Python 3：{detail}"),
+        false,
+    ))
 }
 
 /// 把任意采样率的单声道 f32 下采样为 16 kHz s16le。
@@ -220,6 +342,29 @@ pub fn asr_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pipeline() -> AsrPipeline {
+        AsrPipeline::new(Arc::new(CardStore::new()), AsrPaths::resolve(None))
+    }
+
+    #[test]
+    fn stop_resets_running_state_without_a_child() {
+        let pipeline = pipeline();
+        pipeline.running.store(true, Ordering::SeqCst);
+        pipeline.stop();
+        assert!(!pipeline.is_running());
+    }
+
+    #[test]
+    fn stale_worker_cannot_stop_a_newer_generation() {
+        let pipeline = pipeline();
+        pipeline.running.store(true, Ordering::SeqCst);
+        pipeline.generation.store(2, Ordering::SeqCst);
+        pipeline.stop_generation(1);
+        assert!(pipeline.is_running());
+        pipeline.stop_generation(2);
+        assert!(!pipeline.is_running());
+    }
 
     #[test]
     fn downsamples_48k_to_16k() {
