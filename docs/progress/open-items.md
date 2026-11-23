@@ -1,19 +1,20 @@
 # 未完成事项总表（2026-11-23）
 
-> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `e3e846f`、跟踪文件 **294**、`docs/progress/test-names-before.txt` **365** 行。
+> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `3f1ac26`、跟踪文件 **294**、`docs/progress/test-names-before.txt` **365** 行。
 > CI 取证：run **45152256989**（`c98aa83`，2026-11-23）8 个 job 全部 `success`（含两个 darwin 任务与 compliance），经 GitHub Actions API 复核；此前 run #56（`8b6b7b5`）亦为 8/8。
 > 上游事实源：`docs/progress/b4-status.md` §25.3 / §29.5 / §30、`docs/progress/handoff-2026-11-22-pui.md`、`.codeartsdoer/specs/repo_audit_cleanup/`。
 > 审计证据：`.tmp/audit/`（本地产物，未入库）。
 
 ## 0. 状态速览
 
-- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）。
+- **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）、本地门禁 34/34 复核（2026-11-23）。
 - **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07 四项、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、`platform-win` 的 UIA/OCR 两项占位、9 个 `#[ignore]`、`tests/replay/`。
-- **待裁决**：Q-01（`target/`，最后批次）、Q-06（`temp/accept` 回滚备份，确认后清理）；Q-02~Q-05 已于 2026-11-23 删除；**治理项**：Q-07、AUD-17。
+- **待裁决**：Q-01（`target/`，最后批次）、Q-06（外层 `temp/accept`，确认后清理；`.screenshots` 已删除）；Q-02~Q-05 已于 2026-11-23 删除；**治理项**：Q-07、AUD-17、X-AUD-15（OnceLock 技术债）。
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；下一步 P2（§8.4 删除）、P3（§8.5 规格）、P4（§8.6 治理）；Q-01（`cargo clean` + 重建）放到最后。
 - **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据。
+- **门禁复核（2026-11-23）**：静态 **32/32** + `cargo-deny` + `test-name-inventory` 全通过（**34/34**）；修复 `settings-ux` 口径（X-AUD-14），登记 `b4-source` 的 OnceLock 技术债（X-AUD-15）；日志见 `.tmp/gates/`。
 
 ## 1. 产品能力缺口
 
@@ -66,7 +67,7 @@
 | AUD-15 / Q-07 | `.codeartsdoer/` 未入库 | `git ls-files .codeartsdoer` = 0 | 独立变更单裁决（步骤见 §8.6） |
 | AUD-17 | 本地专属门禁未纳入 CI | `check-b4-gates` / `check-ui-integration` / `check-mac-scope` / `check-b3-gates` 未进 CI | 明确"仅本地执行"或另立 CI 变更（步骤见 §8.6） |
 | X-AUD-01 | `.tmp/asr.json` 未在设计清单 | B-1 按五准则判为可删并已删 | **已补登**：`design.md §2.14` |
-| X-AUD-02 | 全量基线漂移 | 实测 859 passed / 0 failed / 9 ignored，README 已校准 | 后续以 859 为对照，不改基线文件 |
+| X-AUD-02 | 全量基线漂移 | 实测 859 passed / 0 failed / 9 ignored，README 已校准 | **已被 X-AUD-07 取代**：当前对照为 877/10；历史行保留 859 不回溯 |
 | X-AUD-03 | 数量偏差 | `llm-live` 13 run（设计写 6）；`ui-store-tests` 5 文件（设计写 6） | **已补登**：`design.md §2.14` |
 | X-AUD-04 | 体积偏差 | B-1 实测 1,003,207 B（设计估 0.87 M） | **已补登**：`design.md §2.14` |
 | X-AUD-05 | 否证句命中 | 三条宣称组合词在既有"不宣称"句命中（§21:921、§20:1254、§25.4:1052） | 属否定语境，按纪律不改写 |
@@ -96,13 +97,14 @@
 
 1. **P0 环境**：**已完成**——仓库公开后 Actions 恢复，run #56 的 8 个 job 全部 `success`；AC-B4-109 远端已取证。
 2. **P1 外部条件**：提供端点凭据与真机 → 关闭 U-05 / U-08 的对应子项（步骤见 §8.2、§8.3）。
-3. **P2 裁决**：Q-01 ~ Q-06 → 执行 B-3/B-4/B-5；预计可回收约 0.86 M + 5.6 G（步骤见 §8.4）。
+3. **P2 裁决**：Q-01、Q-06 → 执行 B-4/B-5；Q-02~Q-05 已删除；预计可回收约 **14.5 G**（`target/`）+ 121 K（`temp/accept`，步骤见 §8.4）。
 4. **P3 规格**：U-07 四项逐项立项（先规格、后实现，步骤见 §8.5）。
-5. **P4 治理**：Q-07（`.codeartsdoer/` 入库）、AUD-17（本地门禁进 CI，步骤见 §8.6）。
+5. **P4 治理**：Q-07（`.codeartsdoer/` 入库）、AUD-17（本地门禁进 CI）、X-AUD-15（OnceLock 改 Tauri managed State，步骤见 §8.6）。
 
 ## 7. 恢复入口
 
 - 审计与清理：`docs/progress/b4-status.md` §30（§30.1 台账、§30.4 裁决、§30.5 验收）。
+- 门禁复核日志：`.tmp/gates/`（本地，未入库）。
 - 未关闭项原文：`docs/progress/b4-status.md` §25.3、§29.5。
 - 交接说明：`docs/progress/handoff-2026-11-22-pui.md`。
 - 本次规格与任务：`.codeartsdoer/specs/repo_audit_cleanup/{spec.md,design.md,tasks.md}`。
@@ -289,21 +291,19 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-验收：测试回到 `859 passed / 0 failed / 9 ignored`，四条门禁仍 rc=0。回收约 5.6 G，重建耗时较长，放在当天最后执行。
+验收：测试回到 `877 passed / 0 failed / 10 ignored`，四条门禁仍 rc=0。回收约 **14.5 G**（2026-11-23 实测），重建耗时较长，放在当天最后执行。
 
-**Q-06 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/`**
+**Q-06 外层 `.codeartsdoer/temp/accept/`（`.screenshots/` 已于 2026-11-23 删除）**
 
 1. 只读确认无交付文件：
 
 ```powershell
-Get-ChildItem ..\.screenshots -Recurse -ErrorAction SilentlyContinue
 Get-ChildItem ..\.codeartsdoer\temp\accept -Recurse -ErrorAction SilentlyContinue
 ```
 
-2. 确认后只删这两个目录；**不要**删除外层 `.codeartsdoer` 的其他内容：
+2. 确认后只删该目录；**不要**删除外层 `.codeartsdoer` 的其他内容：
 
 ```powershell
-Remove-Item ..\.screenshots -Recurse -Force
 Remove-Item ..\.codeartsdoer\temp\accept -Recurse -Force
 ```
 
