@@ -8,7 +8,8 @@ target/
 .DS_Store
 .vscode/
 .idea/
-.codeartsdoer/
+.codeartsdoer/temp/
+.codeartsdoer/.codebase/
 app/src-tauri/gen/
 *.cdx.json
 docs/compliance/sbom/*.json
