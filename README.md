@@ -11,7 +11,7 @@
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB)
 
-当前定位：**离线契约、门控与设置/卡片前端已闭环；真实采集、真机验收与真实端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；设置页真机第 1~6、9、10 项已通过，真实采集、卡片渲染/投屏遮蔽真机结论与真实端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
 仓库状态（2026-11-23）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（web、rust×3、test-name-inventory、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。
 
@@ -24,16 +24,16 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地**：AC-B4-111~130 离线通过；6 命令、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；真机与真实联网未验证（U-05 `open`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机**：AC-B4-111~130 离线通过；7 命令（含打开日志）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线：**859 passed / 0 failed / 9 ignored**（含 P-UI 桌面层 **24 例**，`cargo test -p meeting-copilot-desktop` 单列通过）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量基线：**863 passed / 0 failed / 9 ignored**（含 P-UI 桌面层 **28 例**，`cargo test -p meeting-copilot-desktop` 单列通过）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 仍未完成：
 
 - **U-06 13.3 回放本体**：**已交付**（`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`）。
-- **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；真实联网 E2E、真机 WebView2 验收仍未完成，**U-05 保持 `open`**。
+- **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。
 - **U-07**：负反馈、缓存/outbox、按需补全、审计存储。
 - **U-08**：真实检索源、真实 LLM 冷却、真机性能与误触发率；9 个 `#[ignore]` 用例保持不跑。
 - **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`），WASAPI/UIA/OCR 仍为接口占位；`platform-mac` 不适用（保留占位）。
@@ -50,7 +50,7 @@ crates/
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
 app/                 React 19 + TypeScript + Vite 前端
-app/src-tauri/       Tauri 2 桌面壳（6 个 IPC 命令与装配）
+app/src-tauri/       Tauri 2 桌面壳（7 个 IPC 命令与装配）
 docs/sdd/            需求规格、技术方案、任务清单
 docs/progress/       各批次状态与验收记录
 docs/baseline/       LLM 与 ASR 基线
@@ -100,8 +100,16 @@ npm run build
 ```bash
 cd app
 npm run dev          # 仅启动前端
-cargo build -p meeting-copilot-desktop
+cargo build -p meeting-copilot-desktop --features llm-https
 ```
+
+交互式启动（必须是桌面会话）：
+
+```
+target\debug\meeting-copilot-desktop.exe
+```
+
+前端改动后需 `cargo clean -p meeting-copilot-desktop` 再构建，否则 Tauri 会复用旧 `dist` 资源；debug 构建已固定为单窗口（无控制台）。
 
 ## 门禁与 CI
 
@@ -151,9 +159,9 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（6 命令），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试与保存/清除。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（7 命令，含 `open_log`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
 - 凭据经 `crates/platform-win/src/secure_store.rs` 写入 Windows 凭据管理器（唯一目标名）；非敏感配置为 `settings.json` **恰 4 键**、原子写、损坏回默认；Key 固定掩码 `***`、不落盘明文、不进日志/审计/回放。
-- 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；真机 WebView2 与真实联网未验证，**不宣称界面已验收**。
+- 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；设置页真机第 1~6、9、10 项已通过，卡片渲染与投屏遮蔽仍未判定，**不宣称整体界面已验收**。
 
 ## 关键词卡片
 
@@ -169,6 +177,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 凭据不入库、不进日志、不进审计、不进回放；错误信息不含 Key 片段。
 - 日志仅允许白名单字段；原文、完整地址、查询全文不得落日志。
+- 桌面日志写入 `%LOCALAPPDATA%\com.meetingcopilot.desktop\logs\desktop.log`（超过 5 MiB 自动重置），设置页"打开日志"在资源管理器中定位；日志不发往网络。
 - 数据库打开前必须提供 OS 密钥库引用，禁止明文口令。
 - 审计只追加，不随会话删除；保留期以实际配置为准。
 - 许可证：不内置 AGPL/GPL 组件；检索源仅通过开放 SPI 接入。

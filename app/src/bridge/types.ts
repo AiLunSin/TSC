@@ -133,6 +133,7 @@ export const IPC_COMMANDS = [
   "settings_clear",
   "keyword_cards_snapshot",
   "keyword_card_open",
+  "open_log",
 ] as const;
 
 export type IpcCommand = (typeof IPC_COMMANDS)[number];

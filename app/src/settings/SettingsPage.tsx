@@ -161,6 +161,15 @@ export function SettingsPage() {
     }
   }
 
+  async function openLog(): Promise<void> {
+    try {
+      const path = await invokeCommand<string>("open_log");
+      setNotice(`日志已定位：${path}`);
+    } catch (error) {
+      setErrorText(ipcErrorText(error) ?? "无法打开日志。");
+    }
+  }
+
   const advancedVisible = advancedOpen || !snapshot.advancedCollapsed;
   const canSaveNow = snapshot.canSave || keyDraft.trim() !== "";
   const canTestNow = snapshot.canTest || keyDraft.trim() !== "";
@@ -236,6 +245,15 @@ export function SettingsPage() {
             }}
           >
             清除设置
+          </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => {
+              void openLog();
+            }}
+          >
+            打开日志
           </button>
         </div>
       </div>

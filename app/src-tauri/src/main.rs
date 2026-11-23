@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![windows_subsystem = "windows"]
 
 mod ipc;
 
@@ -91,9 +91,35 @@ const fn ipc_version() -> u16 {
     IPC_PROTOCOL_VERSION
 }
 
+/// 把 tracing 事件写入 `app_log_dir/desktop.log`；超过 5 MiB 时重写。
+fn init_file_logging(dir: &std::path::Path) {
+    let _ = std::fs::create_dir_all(dir);
+    let path = dir.join("desktop.log");
+    let oversized = std::fs::metadata(&path).is_ok_and(|meta| meta.len() > 5 * 1024 * 1024);
+    if oversized {
+        let _ = std::fs::remove_file(&path);
+    }
+    let Ok(file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    else {
+        return;
+    };
+    tracing_subscriber::fmt()
+        .with_writer(std::sync::Mutex::new(file))
+        .with_ansi(false)
+        .init();
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .unwrap_or_else(|_| PathBuf::from("."));
+            init_file_logging(&log_dir);
             let config_dir = app
                 .path()
                 .app_config_dir()
@@ -112,6 +138,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             ipc_version,
+            ipc::log::open_log,
             ipc::settings_snapshot,
             ipc::settings_probe,
             ipc::settings_save,
