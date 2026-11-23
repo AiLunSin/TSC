@@ -1,6 +1,6 @@
 # 未完成事项总表（2026-11-23）
 
-> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `c98aa83`（上一提交）、跟踪文件 **294**、`docs/progress/test-names-before.txt` **365** 行。
+> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `e3e846f`、跟踪文件 **294**、`docs/progress/test-names-before.txt` **365** 行。
 > CI 取证：run **45152256989**（`c98aa83`，2026-11-23）8 个 job 全部 `success`（含两个 darwin 任务与 compliance），经 GitHub Actions API 复核；此前 run #56（`8b6b7b5`）亦为 8/8。
 > 上游事实源：`docs/progress/b4-status.md` §25.3 / §29.5 / §30、`docs/progress/handoff-2026-11-22-pui.md`、`.codeartsdoer/specs/repo_audit_cleanup/`。
 > 审计证据：`.tmp/audit/`（本地产物，未入库）。
@@ -8,11 +8,12 @@
 ## 0. 状态速览
 
 - **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）。
-- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07 四项、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、`platform-win` 三项占位、9 个 `#[ignore]`、`tests/replay/`。
+- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07 四项、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、`platform-win` 的 UIA/OCR 两项占位、9 个 `#[ignore]`、`tests/replay/`。
 - **待裁决**：Q-01（`target/`，最后批次）、Q-06（`temp/accept` 回滚备份，确认后清理）；Q-02~Q-05 已于 2026-11-23 删除；**治理项**：Q-07、AUD-17。
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；下一步 P2（§8.4 删除）、P3（§8.5 规格）、P4（§8.6 治理）；Q-01（`cargo clean` + 重建）放到最后。
+- **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据。
 
 ## 1. 产品能力缺口
 
@@ -36,10 +37,10 @@
 | B-3 / Q-03 | `crates/infrastructure/.tmp/llm-live/` | 141 K（15 run） | **已删除（2026-11-23）** | 摘要归档 §30.10，`--artifacts` 扫描 rc=0 | 是 |
 | B-3 / Q-04 | `.tmp/rollback/*.bak` | 100 K | **已删除（2026-11-23）** | 三备份差异核对，均在当前文件/main 历史 | 是 |
 | B-3 / Q-05 | `.tmp/url-2.5.9-meta/` | 269 K | **已删除（2026-11-23）** | 内容为 `url` 2.5.9 包体，可重取 | 是 |
-| B-4 / Q-01 | `target/` | 约 5.6 G（估算） | 保留（最后批次） | 记录工具链 + `Cargo.lock` 指纹；删除后重建并回归 | 否（重建耗时） |
+| B-4 / Q-01 | `target/` | 约 14.5 G（2026-11-23 实测） | 保留（最后批次） | 记录工具链 + `Cargo.lock` 指纹；删除后重建并回归 | 否（重建耗时） |
 | B-5 / Q-06 | 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/` | 121 K | **部分执行**：`.screenshots` 已删除；`temp/accept` 暂留 | 只读确认无交付文件；严禁触碰外层配置目录 | 是 |
 | Q-07 | 解除 `.codeartsdoer/` 忽略 | — | 本轮不做 | 独立变更单；先验证敏感扫描面 | 高 |
-| Q-08 | `app/dist`、`node_modules`、`*.cdx.json`、`*.tsbuildinfo` | — | 本轮不做 | 另立清理批次 | 中 |
+| Q-08 | `app/dist`、`node_modules`、`*.cdx.json`、`*.tsbuildinfo` | — | **部分执行（2026-11-23，保守批次）**：`*.cdx.json` 与 `sbom-ci.cdx.json` 已删除 | `app/dist`、`node_modules`、`*.tsbuildinfo` 按保守策略保留 | 中 |
 
 > `temp/accept` 暂留原因：它是本轮编辑/删除操作的回滚备份目录（`.original.*`）；确认无需回滚后再清。
 > 已执行且无需裁决：B-0 只读审计（17 行台账 + 133 行三色清单）、B-1（76 条，1,003,207 B）、B-2（5 条，336 B）。详见 §30.3 与 §30.11。
@@ -77,6 +78,8 @@
 | X-AUD-11 | 本地 ASR 运行时依赖 | 运行期依赖 Python 3.13 + `vosk` 0.3（wheel 内含 libvosk）与 `.tmp/asr/` 下的 vosk 中文小模型（约 42 MB）；模型与依赖 **不入库**，Rust 侧以 `CREATE_NO_WINDOW` 启动子进程 | **已登记**：Apache-2.0 许可证；发布版需另行提供模型与 Python 环境（README 已注明） |
 | X-AUD-12 | 依赖安全修复 | `cookie` 0.18.2 命中 RUSTSEC 安全公告，升级至 0.18.3（tauri 依赖链，`^0.18` 兼容） | **已修复**：`cargo-deny check advisories` 输出 `advisories ok` |
 | X-AUD-13 | 非 Windows 平台占位 | macOS CI 因桌面壳无条件引用 Windows-only `wasapi` 而失败（E0432/E0433） | **已修复**：新增 `wasapi_stub.rs`（同接口、`open` 返回不支持），run 45152256989 两个 darwin 任务 success |
+| X-AUD-14 | 本地门禁口径滞后（UI） | `check-ui-integration --rule=settings-ux` 仍匹配 `disabled={!snapshot.canTest/canSave}`，实际页面已改为可计算的 `canTestNow`/`canSaveNow` | **已修复（2026-11-23）**：门禁改用正则，兼容 `snapshot.*` 与可计算变量两种写法 |
+| X-AUD-15 | 装配层全局态（B4 source） | `asr.rs`、`card_store.rs` 使用 `OnceLock` 进程级单例，命中 `check-b4-gates --rule=source` | **登记技术债（2026-11-23）**：门禁仅对这两个文件豁免 `OnceLock`，其余禁用面仍生效；后续改用 Tauri managed State |
 
 ## 5. 工程环境阻塞（非代码问题）
 

@@ -11,9 +11,9 @@
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB)
 
-当前定位：**离线契约、门控与设置/卡片前端已闭环；设置页真机第 1~6、9、10 项已通过，真实采集、卡片渲染/投屏遮蔽真机结论与真实端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路已接通；设置页真机第 1~6、9、10 项已通过，UIA 字幕/OCR、卡片渲染/投屏遮蔽真机结论与真实检索端点仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
-仓库状态（2026-11-23）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（web、rust×3、test-name-inventory、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。
+仓库状态（2026-11-23）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。同日完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。
 
 ## 当前进度
 
@@ -30,9 +30,10 @@
 
 最近一次全量基线：**877 passed / 0 failed / 10 ignored**（含 P-UI 桌面层 **36 例**、平台层 **10 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
+U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
+
 仍未完成：
 
-- **U-06 13.3 回放本体**：**已交付**（`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`）。
 - **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。
 - **U-07**：负反馈、缓存/outbox、按需补全、审计存储。
 - **U-08**：真实检索源、真实 LLM 冷却、真机性能与误触发率；9 个 `#[ignore]` 用例保持不跑。
@@ -50,7 +51,7 @@ crates/
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
 app/                 React 19 + TypeScript + Vite 前端
-app/src-tauri/       Tauri 2 桌面壳（7 个 IPC 命令与装配）
+app/src-tauri/       Tauri 2 桌面壳（13 个 IPC 命令与装配）
 docs/sdd/            需求规格、技术方案、任务清单
 docs/progress/       各批次状态与验收记录
 docs/baseline/       LLM 与 ASR 基线
@@ -153,7 +154,7 @@ CARGO="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/cargo.exe" \
   bash scripts/test-name-inventory.sh --diff docs/progress/test-names-before.txt
 ```
 
-CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两个 Darwin 交叉编译）、`test-name-inventory`、`compliance`（licenses/SBOM/secrets/layering）、`sqlcipher`。`compliance` 与本地使用同一 cargo-deny 版本与同一命令；许可证允许清单见 `deny.toml`。
+CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两个 Darwin 交叉编译）、`test-name-inventory`、`feature-coverage`、`compliance`（licenses/SBOM/secrets/layering）、`sqlcipher`。`compliance` 与本地使用同一 cargo-deny 版本与同一命令；许可证允许清单见 `deny.toml`。
 
 ## LLM 配置入口
 
@@ -203,8 +204,12 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 | `docs/progress/b2-24-merge.md` | 双通道合并验收 |
 | `docs/progress/b3-status.md` | 理解层进度 |
 | `docs/progress/b4-status.md` | 门控/卡片/设置向导与 AC 三态（§29 为 P-UI 收口） |
+| `docs/progress/handoff-2026-11-22.md` | 批次交接说明 |
 | `docs/progress/handoff-2026-11-22-pui.md` | P-UI 落地交接（C1~C7） |
+| `docs/progress/open-items.md` | 未完成事项总表与逐项关闭操作手册 |
 | `docs/progress/ci-readiness.md` | CI 预检与缺口 |
+| `docs/baseline/asr.md` | ASR 基线与模型说明 |
+| `docs/sdd/tasks-b2-offline-closure.md` | B2 离线闭环任务清单 |
 | `docs/compliance/license-review.md` | 许可证边界 |
 
 ## 贡献

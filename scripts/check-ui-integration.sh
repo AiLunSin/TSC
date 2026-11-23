@@ -103,14 +103,15 @@ rule_credential_redline() {
 rule_settings_ux() {
   need_file "$SETTINGS_PAGE" || return
 
+  # 允许 snapshot.canTest/canSave 与可计算 canTestNow/canSaveNow 两种写法。
   local pattern
   for pattern in \
     'sectionsOrder' \
-    'disabled={!snapshot.canTest' \
-    'disabled={!snapshot.canSave' \
+    'disabled=\{!([A-Za-z0-9_]+\.)?canTest' \
+    'disabled=\{!([A-Za-z0-9_]+\.)?canSave' \
     'type="password"' \
     'advancedCollapsed'; do
-    if ! grep -qF "${pattern}" "${SETTINGS_PAGE}"; then
+    if ! grep -qE "${pattern}" "${SETTINGS_PAGE}"; then
       fail "settings-ux: 缺口径 ${pattern}"
     fi
   done
