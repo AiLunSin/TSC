@@ -270,7 +270,7 @@ meeting-copilot-infrastructure::lib::metrics::tests::p95_computation
 meeting-copilot-infrastructure::lib::store::repo::tests::delete_irrecoverable_clears_everything
 meeting-copilot-infrastructure::lib::store::repo::tests::failed_write_rolls_back_all_three_tables
 meeting-copilot-infrastructure::lib::store::repo::tests::opening_without_key_is_refused
-meeting-copilot-infrastructure::lib::store::repo::tests::schema_is_migrated_to_v1
+meeting-copilot-infrastructure::lib::store::repo::tests::schema_is_migrated_to_v2
 meeting-copilot-infrastructure::lib::store::repo::tests::session_create_get_and_transition
 meeting-copilot-infrastructure::lib::store::repo::tests::three_writes_are_consistent_in_one_transaction
 meeting-copilot-infrastructure::lib::store::repo::tests::utterance_delete_is_blocked_when_referenced_by_insight

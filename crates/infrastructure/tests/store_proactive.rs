@@ -8,7 +8,15 @@ use meeting_copilot_domain::model::proactive::{
 };
 use meeting_copilot_domain::port::proactive::{FeedbackStore, OutboxStore, QueryCacheStore};
 use meeting_copilot_domain::vo::{CardRef, ProviderId, SessionId, TaskId};
-use meeting_copilot_infrastructure::store::{SqliteStore, StoreConfig};
+use meeting_copilot_infrastructure::store::{SqliteStore, StoreConfig, StoreKey};
+
+/// `sqlcipher` feature 下文件库必须带密钥打开；固定密钥便于重启后仍能解密。
+const TEST_DB_KEY: [u8; 32] = [42; 32];
+
+fn open_store(config: &StoreConfig) -> SqliteStore {
+    let key = StoreKey::new(TEST_DB_KEY);
+    SqliteStore::open_with_key(config, Some(&key)).expect("open")
+}
 
 fn temp_config() -> StoreConfig {
     let path = std::env::temp_dir().join(format!(
@@ -111,14 +119,14 @@ fn cache_evicts_beyond_twenty_mib() {
 fn outbox_survives_restart_with_same_active_set() {
     let config = temp_config();
     {
-        let store = SqliteStore::open(&config).expect("open");
+        let store = open_store(&config);
         OutboxStore::insert(&store, &entry(1, OutboxState::Pending, 10)).expect("pending");
         OutboxStore::insert(&store, &entry(2, OutboxState::Failed, 20)).expect("failed");
         OutboxStore::insert(&store, &entry(3, OutboxState::Done, 30)).expect("done");
         assert_eq!(store.active_count().expect("count"), 2);
     }
     {
-        let store = SqliteStore::open(&config).expect("reopen");
+        let store = open_store(&config);
         let recovered = OutboxStore::recoverable(&store).expect("recoverable");
         let ids: Vec<&str> = recovered
             .iter()
@@ -134,12 +142,12 @@ fn outbox_survives_restart_with_same_active_set() {
 fn migration_is_idempotent_and_preserves_existing_rows() {
     let config = temp_config();
     {
-        let store = SqliteStore::open(&config).expect("open");
+        let store = open_store(&config);
         let cached = cache_entry(&"b".repeat(64), 5, 128);
         QueryCacheStore::put(&store, &cached).expect("put");
     }
     {
-        let store = SqliteStore::open(&config).expect("reopen");
+        let store = open_store(&config);
         assert_eq!(store.schema_version().expect("version"), 2);
         assert!(QueryCacheStore::get(&store, &"b".repeat(64))
             .expect("get")
