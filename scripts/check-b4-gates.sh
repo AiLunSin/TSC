@@ -323,6 +323,11 @@ rule_zero_transcript() {
     done < <(find "${PROACTIVE_APP_DIR}" -type f -name '*.rs' 2>/dev/null)
   fi
   if [[ -f "${FEEDBACK_REPO}" ]]; then files+=("${FEEDBACK_REPO}"); fi
+  if [[ -d "crates/infrastructure/src/audit" ]]; then
+    while IFS= read -r file; do
+      files+=("${file}")
+    done < <(find "crates/infrastructure/src/audit" -type f -name '*.rs' 2>/dev/null)
+  fi
   if compgen -G "crates/application/tests/gate_*.rs" > /dev/null; then
     while IFS= read -r file; do
       files+=("${file}")

@@ -1607,8 +1607,8 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 7.4.1-5/6/7 · DESIGN 2.10.4
   - DoD：按自然月封存；归档包含首尾 `seq`/条数/末端哈希/锚点；校验通过才移出在线行；归档 5 年标记 `retained`，不自动销毁。
   - 证据：`old_months_are_sealed_then_removed`、`write_failure_keeps_online_rows`。
-- [ ] **G-52-D 门禁** — 同上
-  - 进展：篡改定位、归档失败保留在线数据、审计不可用拒绝敏感操作三类用例已通过；审计摘要运行时零转录扫描尚未接入门禁。
+- [x] **G-52-D 门禁** — 同上
+  - 证据：`tampering_is_detected`、`write_failure_keeps_online_rows`、`audit_unavailable_blocks_sensitive_operations`；运行时摘要扫描已落在 `summary_violation`（拒绝控制字符与 URL，错误只带分类），用例 `summary_with_url_or_multiline_is_rejected`；`crates/infrastructure/src/audit/**` 已纳入 `check-b4-gates.sh --rule=zero-transcript` 扫描面。
 
 ### G.5 统一验收与宣称边界
 

@@ -19,6 +19,22 @@ use crate::store::{SqliteStore, StoreError};
 const ANCHOR_INTERVAL: i64 = 1_000;
 const MAX_SUMMARY_CHARS: usize = 200;
 
+/// 运行时零转录扫描：摘要只允许固定模板与 ID/长度/分类（SPEC 7.4.1-10）。
+/// 拒绝控制字符与 URL；错误信息只带分类，不回显摘要内容。
+fn summary_violation(summary: &str) -> Option<&'static str> {
+    if summary.chars().any(char::is_control) {
+        return Some("control_char");
+    }
+    let lower = summary.to_ascii_lowercase();
+    let has_url = lower.contains(concat!("http", "://"))
+        || lower.contains(concat!("http", "s://"))
+        || lower.contains("www.");
+    if has_url {
+        return Some("url");
+    }
+    None
+}
+
 fn sql_error(error: rusqlite::Error) -> StoreError {
     StoreError::Sqlite(error.to_string())
 }
@@ -53,6 +69,11 @@ impl<'a> SqliteAuditLog<'a> {
         }
         if summary.chars().count() > MAX_SUMMARY_CHARS {
             return Err(StoreError::Serialization("审计摘要超长".to_owned()));
+        }
+        if let Some(reason) = summary_violation(summary) {
+            return Err(StoreError::Serialization(format!(
+                "审计摘要命中零转录扫描：{reason}"
+            )));
         }
 
         let mut conn = self.store.connection();
@@ -311,6 +332,30 @@ mod tests {
             .expect("append");
         }
         assert_eq!(log.verify().expect("verify"), None);
+    }
+
+    #[test]
+    fn summary_with_url_or_multiline_is_rejected() {
+        let store = store();
+        let log = SqliteAuditLog::new(&store);
+        for summary in [
+            concat!("来源 ", "http", "://example.com/a"),
+            "第一行\n第二行",
+            "参考 www.example.com",
+        ] {
+            assert!(
+                log.append_record(
+                    AuditAction::OutboundQuery,
+                    "actor-1",
+                    1,
+                    "search-1",
+                    summary
+                )
+                .is_err(),
+                "{summary}"
+            );
+        }
+        assert_eq!(store.schema_version().expect("version"), 2);
     }
 
     #[test]
