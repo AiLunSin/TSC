@@ -117,9 +117,9 @@ fi
 
 if [[ "${SCAN_ONLY}" -eq 0 ]]; then
   echo "说明：LLM_ALLOWLIST 仅作存在性检查，不参与 host 判定"
-  echo "开始真实采样（串行、失败即停）"
+  echo "开始真实采样（串行执行、失败以退出码上报）"
   cargo test -p meeting-copilot-infrastructure --features llm-https --test llm_live \
-    -- --ignored --test-threads=1 --fail-fast
+    -- --ignored --test-threads=1
   SAMPLE_RC=$?
 fi
 

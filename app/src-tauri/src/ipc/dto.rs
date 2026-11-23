@@ -90,7 +90,11 @@ pub struct CardDetailDto {
 
 /// 模型选择：预设显示名或自定义名。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum ModelChoiceDto {
     Preset { display_name: String },
     Custom { name: String },
@@ -98,7 +102,11 @@ pub enum ModelChoiceDto {
 
 /// 端点选择：目录内显示名或不可用。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum EndpointChoiceDto {
     Option { display_name: String },
     Unavailable,

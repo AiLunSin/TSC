@@ -134,10 +134,10 @@ pub fn settings_clear_impl(
     }
     let delete_ok = state.secure.delete().is_ok();
     let reset_ok = state.config.reset().is_ok();
-    if !delete_ok && !reset_ok {
+    if !delete_ok || !reset_ok {
         return Err(IpcErrorDto::new(
             "clear_failed",
-            "清除失败，请稍后重试。",
+            "清除未完成，请稍后重试。",
             true,
         ));
     }
@@ -290,7 +290,8 @@ mod tests {
     use super::*;
     use crate::ipc::catalog::SettingsCatalog;
     use crate::ipc::dto::{
-        CardBodyDto, CardDetailDto, ConclusionDto, KeywordCardViewDto, ProbeReportDto,
+        CardBodyDto, CardDetailDto, ConclusionDto, EndpointChoiceDto, KeywordCardViewDto,
+        ModelChoiceDto, ProbeReportDto,
     };
     use crate::ipc::state::CommandCounters;
 
@@ -505,10 +506,63 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_projects_injected_model_and_endpoint_labels() {
+        let state = app_state(memory_secure(false), memory_config(), false);
+        let dto = settings_snapshot_impl(&state).expect("snapshot");
+        assert!(matches!(
+            dto.model_choice,
+            ModelChoiceDto::Preset { ref display_name } if display_name == "preset-a"
+        ));
+        assert!(matches!(
+            dto.endpoint_choice,
+            EndpointChoiceDto::Option { ref display_name } if !display_name.is_empty()
+        ));
+    }
+
+    #[test]
+    fn snapshot_json_uses_camel_case_variant_fields() {
+        let state = app_state(memory_secure(false), memory_config(), false);
+        let dto = settings_snapshot_impl(&state).expect("snapshot");
+        let json = serde_json::to_value(&dto).expect("json");
+        assert_eq!(json["modelChoice"]["preset"]["displayName"], "preset-a");
+        assert!(json["endpointChoice"]["option"]["displayName"].is_string());
+    }
+
+    #[test]
     fn clear_is_idempotent() {
         let state = app_state(memory_secure(false), memory_config(), false);
         settings_clear_impl(&state, ClearInputDto { confirm: true }).expect("first");
         settings_clear_impl(&state, ClearInputDto { confirm: true }).expect("second");
+    }
+
+    struct FailingResetConfig;
+
+    impl SettingsConfigStore for FailingResetConfig {
+        fn load(&self) -> Result<SettingsConfig, PortError> {
+            Ok(SettingsConfig::default())
+        }
+
+        fn save(&self, _config: &SettingsConfig) -> Result<(), PortError> {
+            Err(PortError::Unavailable)
+        }
+
+        fn reset(&self) -> Result<(), PortError> {
+            Err(PortError::Unavailable)
+        }
+    }
+
+    #[test]
+    fn clear_reports_failure_when_reset_fails() {
+        let secure = memory_secure(false);
+        let state = app_state(
+            Arc::clone(&secure) as Arc<dyn SecureStore>,
+            Arc::new(FailingResetConfig),
+            true,
+        );
+        let error = settings_clear_impl(&state, ClearInputDto { confirm: true })
+            .expect_err("reset failure must be reported");
+        assert_eq!(error.code, "clear_failed");
+        assert!(secure.value.lock().expect("lock").is_none());
     }
 
     #[test]

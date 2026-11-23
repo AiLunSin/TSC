@@ -1427,3 +1427,99 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 - 跟踪文件数：**281**；基线文件 `test-names-before.txt` 仍 **365** 行。
 - 保留目录约定：`.tmp/test-temp/`（TEMP/TMP 根）、`.tmp/ui-integration/ac-board.md`（取证看板）、`crates/infrastructure/.tmp/llm-live/`（联调记录）、`target/`（构建缓存）均保留。
 - 未完成项入口：`docs/progress/b4-status.md §25.3`、`§29.5`、本节 `§30.1`；清理待裁决项见 `§30.4`。
+### §30.9 AC 看板归档（Q-02，2026-11-23）
+
+> 来源：`.tmp/ui-integration/ac-board.md`（20/20 AC）。最终口径以 §29.3 / §29.6 为准；看板"状态"节为 C2~C7 阶段中快照（当时登记 2 完成 / 18 待办），不代表收口结论，登记为偏差 **X-AUD-06**。
+
+| AC | 主任务 | 结论（离线口径） |
+|---|---|---|
+| AC-B4-111 | W-UI-06 | passed（设置快照闭合且无 Key） |
+| AC-B4-112 | W-UI-03 | passed（凭据三例：固定目标、幂等写/删） |
+| AC-B4-113 | W-UI-05 | passed（配置文件恰 4 键、损坏回退默认） |
+| AC-B4-114 | W-UI-07 | passed（探针端口化、复用网关、不开 socket） |
+| AC-B4-115 | W-UI-06 | passed（保存回执降级、清除需确认且幂等） |
+| AC-B4-116 | W-UI-11 | passed（设置页四区、按钮随服务端标志） |
+| AC-B4-117 | W-UI-07 | passed（探针失败 8 类、保留输入、冷却剩余） |
+| AC-B4-118 | W-UI-06 | passed（Key 不入响应/日志、掩码无载荷） |
+| AC-B4-119 | W-UI-02 | passed（3+3 端口 trait、拒绝多余键、Windows-only） |
+| AC-B4-120 | W-UI-09/16 | passed（6 命令计数、零 diff） |
+| AC-B4-121 | W-UI-08 | passed（卡片快照闭合只读、详情闭合） |
+| AC-B4-122 | W-UI-12 | passed（card-render：仅启用态绑定点击、禁用语义） |
+| AC-B4-123 | W-UI-12/08 | passed（body-hidden：非可见/投屏隐藏正文） |
+| AC-B4-124 | W-UI-08 | passed（打开卡片零副作用） |
+| AC-B4-125 | W-UI-12 | passed（详情不抢焦点） |
+| AC-B4-126 | W-UI-10/09 | passed（前端离线、最小权限） |
+| AC-B4-127 | W-UI-13/08 | passed（不持久化 Key/卡片文本、撤回不复活） |
+| AC-B4-128 | W-UI-17 | passed（closed faces 零 diff） |
+| AC-B4-129 | W-UI-17 | passed（平台范围 Windows-only） |
+| AC-B4-130 | W-UI-14/15/16/18 | passed（六规则×0、AC 汇总 130、`NEW_TARGETS` 25） |
+
+### §30.10 灰名单归档前状态（Q-03 ~ Q-06，2026-11-23）
+
+| 编号 | 对象 | 归档结论 | 体积 | 可删 |
+|---|---|---|---|---|
+| Q-03 | `crates/infrastructure/.tmp/llm-live/` | 15 run（14 个时间戳目录 + `live-34520`），时间戳范围 2026-11-21 07:14Z ~ 2026-11-23 06:16Z；15/15 `path_confirmed`/`model_confirmed`/`host_locked`=true，`budget_hit`=false | 141 K | 是（`scan-secrets-docs.sh --artifacts` rc=0 后） |
+| Q-04 | `.tmp/rollback/{ci,design,tni}.bak` | `ci.bak` 与当前 `ci.yml` 差 12 行（mac 观察项改 warning + `cargo-deny-version`，已在 `cbeb6be`/`296e380`）；`tni.bak` 差 4 行（`NEW_TARGETS` 25，已在 `db3636e`/`f653b72`）；`design.bak` 剥离 CRLF 后仅差 5 行（macOS 人力行已按 `mac_scope_and_b2_24` 移除） | 100 K | 是 |
+| Q-05 | `.tmp/url-2.5.9-meta/` | 内容为 `url` crate 2.5.9 包体（Cargo.toml/Cargo.lock/src/tests/LICENSE/README），可从 crates.io 重取 | 269 K | 是 |
+| Q-06 | 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/` | `.screenshots` 仅含空 `.tmp` 子目录（0 B）；`temp/accept` 为 17 个会话原始日志/`.ps1`（93 K），无交付文件 | 93 K | 是（仅删这两个目录） |
+
+> 上表只完成归档与可删性判定，**删除均未执行**，等待逐项授权。Q-02 的 `ac-board.md` 原文件仍在原处。
+
+## §31 U-08 真实 LLM 采样取证（2026-11-23）
+
+| 项 | 值 |
+|---|---|
+| 日期 | 2026-11-23 |
+| 入口 | `bash scripts/run-llm-live.sh`（串行执行） |
+| 采样 run 数 | 1 |
+| 执行命令 | `cargo test -p meeting-copilot-infrastructure --features llm-https --test llm_live -- --ignored --test-threads=1` |
+| 用例结果 | 9 passed / 0 failed / 0 ignored（16.98s） |
+| leak_hits | 0 |
+| 退出码 | 0 |
+| 记录根 | `crates/infrastructure/.tmp/llm-live`（`scan_face=crate`） |
+
+执行期修正：
+
+1. `scripts/run-llm-live.sh` 原传 `--fail-fast`，stable 工具链报 `The "fail-fast" flag is only accepted on the nightly compiler`，rc=101 且零用例执行；已移除该参数，保留 `--ignored --test-threads=1` 串行执行，开场提示同步改为"串行执行、失败以退出码上报"。
+2. `LLM_BASE_URL` 必须带路径段且与代码内已确认常量完全一致；无路径或额外前缀会被 `endpoint_path_unconfirmed` 拒绝（`crates/infrastructure/src/llm/live/config.rs`、`policy.rs`）。
+
+关闭口径：
+
+- 本步只关闭 U-08 的"真实 LLM 采样"子项；U-08 仍含真实检索源、真实冷却、真机性能与误触发率，整体保持 `open`（见 `docs/progress/open-items.md §8.2-5`）。
+
+不宣称：
+
+- 不宣称端点地址、模型名、请求标识或原文样例已入库；本节只记结论与日期。
+- 不宣称 U-05 卡片渲染与投屏遮蔽已验收；设置页与联网 E2E 结论见 §32。
+
+记录目录仍属 Q-03，归档完成后按 `open-items.md §8.4` 扫描无命中再删除。
+## §32 U-05 真机 WebView2 验收（2026-11-23）
+
+| # | 检查项 | 结论 | 证据 / 备注 |
+|---|---|---|---|
+| 1 | 窗口 | passed | 实机启动成功；标题与 1240×820/最小 960×640/居中由 `tauri.conf.json` 与实机确认 |
+| 2 | 设置入口 | passed | 顶栏"设置/返回卡片"可切换 |
+| 3 | Key 掩码 | passed | 输入后界面只显示掩码 |
+| 4 | 保存/清除 | passed | 保存提示"设置已保存"；清除弹确认框；清除前 `cmdkey` 有目标、`Test-Path settings.json`=True，清除后 `cmdkey`=`* 无 *`、`Test-Path`=False |
+| 5 | 凭据落点 | passed | `cmdkey /list:meeting-copilot/llm-api-key` 存在（类型 普通，本地机器持久） |
+| 6 | 配置文件 | passed | 恰 4 键 `schemaVersion/modelIndex/endpointIndex/timeoutMs`；无 Key、无地址、无模型名 |
+| 7 | 卡片渲染 | **未判定** | 无真实会议流样本；界面"暂无卡片"，无法触发禁用卡/详情内联/焦点检查 |
+| 8 | 投屏/紧急遮蔽 | **未判定** | 无投屏或紧急态模拟入口 |
+| 9 | 联网 E2E | passed | 设置页点"测试连接"返回"连接成功。"（`--features llm-https` 构建） |
+| 10 | 稳定性 | passed | 验收全程无崩溃、无白屏 |
+
+执行期修正（本轮代码改动）：
+
+1. 桌面启动无 `LLM_MODEL` 时模型目录为空 → 内置默认预设 `DEFAULT_MODEL_PRESET`（`app/src-tauri/src/main.rs`）。
+2. `ModelChoiceDto` / `EndpointChoiceDto` 的变体字段原为 `display_name`，前端按 `displayName` 读取导致空白 → 补 `rename_all_fields = "camelCase"`（`ipc/dto.rs`），并加 JSON 断言防回归。
+3. 保存/测试按钮在"有 Key 草稿未保存"时被禁用 → 草稿非空即可点；探针结果改为可见提示（"正在测试连接…"→"连接成功。"/"连接失败：<原因>"）。
+4. 清除前增加二次确认；`FileSettingsConfigStore::reset` 改为真正删除 `settings.json`；`settings_clear_impl` 对 `delete`/`reset` 任一失败如实报错。
+5. `scripts/run-llm-live.sh` 移除 stable 不支持的 `--fail-fast`。
+6. 排查记录：Tauri 增量构建不会重新嵌入 `dist`，前端改动后需 `cargo clean -p meeting-copilot-desktop` 再构建，否则运行的仍是旧前端资源。
+
+U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，按 `open-items.md §8.3-5` 不满足 `closed` 条件。
+
+不宣称：
+
+- 不宣称卡片渲染或投屏遮蔽已通过真机验收。
+- 不宣称 U-05 整体关闭。

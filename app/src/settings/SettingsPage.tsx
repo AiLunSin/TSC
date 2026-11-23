@@ -4,6 +4,7 @@ import { invokeCommand } from "../bridge/tauri";
 import type {
   EndpointChoiceDto,
   ModelChoiceDto,
+  ProbeReportDto,
   SettingsSnapshotDto,
 } from "../bridge/types";
 
@@ -24,6 +25,16 @@ const FORM_STATE_TEXT: Record<string, string> = {
   failed: "验证失败",
   cooling: "冷却中",
 };
+
+function ipcErrorText(error: unknown): string | null {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = error.message;
+    if (typeof message === "string" && message !== "") {
+      return message;
+    }
+  }
+  return null;
+}
 
 export function modelLabel(choice: ModelChoiceDto): string {
   if ("preset" in choice) {
@@ -96,13 +107,17 @@ export function SettingsPage() {
       return;
     }
     setBusy(true);
+    setNotice("正在测试连接…");
+    setErrorText(null);
     try {
-      await invokeCommand("settings_probe", {
+      const report = await invokeCommand<ProbeReportDto>("settings_probe", {
         input: { key: keyDraft, modelIndex, endpointIndex, timeoutMs: null },
       });
+      setNotice(report.succeeded ? report.message : `连接失败：${report.message}`);
       await load();
-    } catch {
-      setErrorText("测试失败，请稍后重试。");
+    } catch (error) {
+      setNotice(null);
+      setErrorText(ipcErrorText(error) ?? "测试失败，请稍后重试。");
     } finally {
       setBusy(false);
     }
@@ -120,8 +135,8 @@ export function SettingsPage() {
       setKeyDraft("");
       setNotice("设置已保存。");
       await load();
-    } catch {
-      setErrorText("设置未保存，请稍后重试。");
+    } catch (error) {
+      setErrorText(ipcErrorText(error) ?? "设置未保存，请稍后重试。");
     } finally {
       setBusy(false);
     }
@@ -131,19 +146,24 @@ export function SettingsPage() {
     if (busy) {
       return;
     }
+    if (!window.confirm("确认清除已保存的访问密钥与设置？")) {
+      return;
+    }
     setBusy(true);
     try {
       await invokeCommand("settings_clear", { input: { confirm: true } });
       setNotice("设置已清除。");
       await load();
-    } catch {
-      setErrorText("清除失败，请稍后重试。");
+    } catch (error) {
+      setErrorText(ipcErrorText(error) ?? "清除失败，请稍后重试。");
     } finally {
       setBusy(false);
     }
   }
 
   const advancedVisible = advancedOpen || !snapshot.advancedCollapsed;
+  const canSaveNow = snapshot.canSave || keyDraft.trim() !== "";
+  const canTestNow = snapshot.canTest || keyDraft.trim() !== "";
 
   return (
     <section className="panel settings" aria-label="设置">
@@ -190,7 +210,7 @@ export function SettingsPage() {
           <button
             className="btn btn-start"
             type="button"
-            disabled={!snapshot.canTest || busy}
+            disabled={!canTestNow || busy}
             onClick={() => {
               void probe();
             }}
@@ -200,7 +220,7 @@ export function SettingsPage() {
           <button
             className="btn btn-start"
             type="button"
-            disabled={!snapshot.canSave || busy}
+            disabled={!canSaveNow || busy}
             onClick={() => {
               void save();
             }}

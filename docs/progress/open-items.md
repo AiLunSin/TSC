@@ -1,6 +1,6 @@
 # 未完成事项总表（2026-11-23）
 
-> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `8b6b7b5`、跟踪文件 **285**、`docs/progress/test-names-before.txt` **365** 行。
+> 口径：本表只列事实与关闭条件，不构成任何能力完成宣称。基线 HEAD `d955d56`（上一提交）、跟踪文件 **285**、`docs/progress/test-names-before.txt` **365** 行。
 > CI 取证：run **#56**（`8b6b7b5`，2026-11-23）8 个 job 全部 `success`，经 GitHub Actions API 复核。
 > 上游事实源：`docs/progress/b4-status.md` §25.3 / §29.5 / §30、`docs/progress/handoff-2026-11-22-pui.md`、`.codeartsdoer/specs/repo_audit_cleanup/`。
 > 审计证据：`.tmp/audit/`（本地产物，未入库）。
@@ -8,35 +8,36 @@
 ## 0. 状态速览
 
 - **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证。
-- **仍 open**：U-05（真机/联网）、U-07 四项、U-08、`platform-win` 三项占位、9 个 `#[ignore]`、`tests/replay/`。
-- **待裁决**：Q-01 ~ Q-06；**治理项**：Q-07、AUD-17。
-- **本机残留**：sqlcipher 编译失败（`0xc0000142`）；`git push` 到 `github.com:443` 的 Git 传输被重置（HTTPS API 可用）。
-- **执行顺序**：先做 P1（§8.2 / §8.3），再做 P2（§8.4）；Q-01（`cargo clean`）放到最后，避免拖慢前面的验证。
+- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07 四项、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、`platform-win` 三项占位、9 个 `#[ignore]`、`tests/replay/`。
+- **待裁决**：Q-01 ~ Q-06（Q-02~Q-06 归档已完成，删除待授权）；**治理项**：Q-07、AUD-17。
+- **本轮闭环（2026-11-23）**：§8.1 基线实测 859/0/9；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据（`app/src/App.tsx`）。
+- **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 到 `github.com:443` 的 Git 传输历史被重置（HTTPS API 可用）。
+- **执行顺序**：P1 已完成可做部分；下一步 P2（§8.4 删除）、P3（§8.5 规格）、P4（§8.6 治理）；Q-01（`cargo clean` + 重建）放到最后。
 
 ## 1. 产品能力缺口
 
 | 编号 | 事项 | 当前状态 | 缺口 | 关闭条件 | 所需输入 |
 |---|---|---|---|---|---|
-| U-05 | 设置向导 + 卡片前端产品化接入 | 离线契约已实现，整体 `open` | 真实联网 E2E、真机 WebView2 交互、窗口/焦点/投屏验收 | 有可复现的联网与真机记录 | 端点凭据、Windows 真机、投屏/会议样本 |
+| U-05 | 设置向导 + 卡片前端产品化接入 | 部分取证：第 1~6、9、10 项真机通过；第 7 卡片渲染与第 8 投屏遮蔽未判定（2026-11-23，见 `b4-status.md §32`） | 卡片渲染与投屏/紧急遮蔽的真机结论 | 有可复现的联网与真机记录 | 投屏 / 会议样本 |
 | U-07-41.5 | 负反馈加权 | 未完成（规格层明确不做） | 缺 b4 级增量规格 | 补齐字段/枚举/AC/零转录要求 | 规格立项授权 |
 | U-07-42 | 缓存 / outbox | 未完成 | 介质与"重启不丢"口径未定 | 介质确定 + 用例通过 | 介质与保留策略裁决 |
 | U-07-43 | 按需补全实体 | 未完成 | 未接真实检索源，无 8s p95 样本 | 真实检索源接入 + 性能样本达标 | 检索源、性能样本 |
 | U-07-52 | 审计哈希链存储 | 未完成 | 落库介质与 180 天保留策略未定 | 介质 + 策略确定 + 哈希链用例通过 | 介质与保留策略裁决 |
-| U-08 | 真实端点 / 真机判定 | 未判定 | 真实检索源、真实冷却、性能与误触发率均无结论 | 凭据可用 + 真机记录 + 指标达标 | 端点凭据、真机、样本 |
+| U-08 | 真实端点 / 真机判定 | 部分取证：真实 LLM 采样 9/9 通过（2026-11-23，见 `b4-status.md §31`）；其余未判定 | 真实检索源、真实冷却、性能与误触发率均无结论 | 凭据可用 + 真机记录 + 指标达标 | 端点凭据、真机、样本 |
 | 平台层 | `platform-win` 的 WASAPI/UIA/OCR | 接口占位 | 三项能力无真实实现 | 实现 + 用例 | 音频/UI 自动化/OCR 样本 |
 | 平台层 | `platform-mac` | 占位，不适用 | 无 macOS 设备与目标实现 | 保留占位即可；实现需另行立项 | macOS 环境（本轮不提供） |
 | 口径 | 38/39/51 | 仅契约与视图模型 | 不宣称产品级可点击卡片或真机可用 | 真机验收后重述口径 | 同 U-05 |
 
-## 2. 清理与审计待裁决（本轮未执行）
+## 2. 清理与审计待裁决（归档已就绪，删除待授权）
 
 | 编号 | 对象 | 体积 | 默认 | 删除前必须完成 | 不可回滚 |
 |---|---|---|---|---|---|
-| B-3 / Q-02 | `.tmp/ui-integration/ac-board.md` | 3,721 B | 保留 | 先把 20 条 AC 结论归档到 §30 | 是 |
-| B-3 / Q-03 | `crates/infrastructure/.tmp/llm-live/` | 131,072 B（13 run） | 保留 | 归档 run 摘要 + 记录敏感扫描命中数 | 是 |
-| B-3 / Q-04 | `.tmp/rollback/*.bak` | 257,327 B | 保留 | 确认对应变更已在 `main` 历史 | 是 |
-| B-3 / Q-05 | `.tmp/url-2.5.9-meta/` | 275,456 B | 保留 | 确认网络可重取或复核已结束 | 是 |
-| B-4 / Q-01 | `target/` | 约 5.6 G（估算，30,585 文件） | 保留 | 记录工具链 + `Cargo.lock` 指纹；删除后重建并回归 | 否（重建耗时） |
-| B-5 / Q-06 | 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/` | 127 K | 保留 | 确认无交付文件；严禁触碰外层配置目录 | 是 |
+| B-3 / Q-02 | `.tmp/ui-integration/ac-board.md` | 3.7 K | 保留 | **已完成**：20 条 AC 归档至 §30.9 | 是 |
+| B-3 / Q-03 | `crates/infrastructure/.tmp/llm-live/` | 141 K（15 run） | 保留 | **已完成**：摘要归档 §30.10，`--artifacts` 扫描 rc=0 | 是 |
+| B-3 / Q-04 | `.tmp/rollback/*.bak` | 100 K | 保留 | **已完成**：三备份差异核对，均在当前文件/main 历史 | 是 |
+| B-3 / Q-05 | `.tmp/url-2.5.9-meta/` | 269 K | 保留 | **已完成**：内容为 `url` 2.5.9 包体，可重取 | 是 |
+| B-4 / Q-01 | `target/` | 约 5.6 G（估算） | 保留 | 记录工具链 + `Cargo.lock` 指纹；删除后重建并回归 | 否（重建耗时） |
+| B-5 / Q-06 | 外层 `.screenshots/`、外层 `.codeartsdoer/temp/accept/` | 93 K | 保留 | **已完成**：只读确认无交付文件；严禁触碰外层配置目录 | 是 |
 | Q-07 | 解除 `.codeartsdoer/` 忽略 | — | 本轮不做 | 独立变更单；先验证敏感扫描面 | 高 |
 | Q-08 | `app/dist`、`node_modules`、`*.cdx.json`、`*.tsbuildinfo` | — | 本轮不做 | 另立清理批次 | 中 |
 
@@ -50,6 +51,8 @@
 | AC 汇总 130 | 本地一致 | — | 无 |
 | `#[ignore]` 9 个 | 保持不解锁 | 真实端点/真机缺位 | 明确解锁授权 + 真实环境 |
 | `tests/replay/` | 保持不存在 | 纪律项 | 明确创建授权 |
+| U-05 真机设置页 | 第 1~6、9、10 项通过（2026-11-23） | 卡片渲染、投屏遮蔽 | 真实会议 / 投屏样本（见 `b4-status.md §32`） |
+| U-08 真实 LLM 采样 | 9 passed / 0 failed，`leak_hits=0`，rc=0（2026-11-23） | 真实检索源、冷却、性能、误触发率 | 见 §1 U-08（`b4-status.md §31`） |
 
 > 说明：默认构建下 `#[ignore]` 为 9 个；启用 `--features llm-https` 后 `llm_live_baseline.rs` 参与编译，会额外出现 1 个 ignored（共 10）。这是预期差异，不是新增纪律项。
 
@@ -65,6 +68,8 @@
 | X-AUD-03 | 数量偏差 | `llm-live` 13 run（设计写 6）；`ui-store-tests` 5 文件（设计写 6） | **已补登**：`design.md §2.14` |
 | X-AUD-04 | 体积偏差 | B-1 实测 1,003,207 B（设计估 0.87 M） | **已补登**：`design.md §2.14` |
 | X-AUD-05 | 否证句命中 | 三条宣称组合词在既有"不宣称"句命中（§21:921、§20:1254、§25.4:1052） | 属否定语境，按纪律不改写 |
+| X-AUD-06 | AC 看板状态快照过期 | `.tmp/ui-integration/ac-board.md` 状态节登记"2 完成 / 18 待办"，与 §29.3 最终"20/20 passed"不同 | **已补登**：按 `b4-status.md §30.9` 以 §29.3/§29.6 为准归档 |
+| X-AUD-07 | 全量基线漂移 | 本轮新增 4 例（设置页显示名、枚举 JSON 字段、清除失败反馈、reset 删除文件），全量由 859 变为 **863 passed / 0 failed / 9 ignored** | 以 863 为当前对照；`b4-status.md §30.5` E-15 保留历史 859 |
 
 ## 5. 工程环境阻塞（非代码问题）
 
@@ -114,17 +119,17 @@ bash scripts/check-b4-gates.sh --rule=zero-transcript
 bash scripts/check-mac-scope.sh --rule=claims
 ```
 
-验收：测试为 `859 passed / 0 failed / 9 ignored`，四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
+验收：测试为 `863 passed / 0 failed / 9 ignored`（2026-11-23 新增 4 例后的当前基线；此前为 859），四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
 
 ### 8.2 关闭 U-08 的"真实 LLM 采样"子项
 
-前置：准备一个可用的 OpenAI 兼容端点，拿到 `base_url`、`api_key`、`model` 三项；只在当前终端使用，不落文件、不进仓库。
+前置：准备一个可用的 OpenAI 兼容端点，拿到 `base_url`、`api_key`、`model` 三项；只在当前终端使用，不落文件、不进仓库。`base_url` 必须带路径段且与代码内已确认常量完全一致（`crates/infrastructure/src/llm/live/policy.rs`）；无路径或额外前缀会被 `endpoint_path_unconfirmed` 拒绝。
 
 1. 设置环境变量（占位符替换为真实值）：
 
 ```bash
 export LLM_LIVE=1
-export LLM_BASE_URL="https://<your-host>/v1"
+export LLM_BASE_URL="<含已确认路径段的端点地址>"
 export LLM_API_KEY="<your-key>"
 export LLM_MODEL="<your-model>"
 export LLM_MODEL_CONFIRMED="<与上一行完全相同>"
@@ -140,7 +145,7 @@ bash scripts/run-llm-live.sh --print-record-roots
 
 预期输出两行：`crates/infrastructure/.tmp/llm-live`、`.tmp/llm-live`。
 
-3. 正式采样（串行、失败即停）：
+3. 正式采样（串行执行、失败以退出码上报）：
 
 ```bash
 bash scripts/run-llm-live.sh; echo "rc=$?"
@@ -182,21 +187,23 @@ cargo run -p meeting-copilot-desktop --features llm-https
 
 3. 按清单逐项验收并记录"通过/失败"：
 
-| 检查项 | 操作 | 通过标准 |
-|---|---|---|
-| 窗口 | 启动后观察 | 标题"会议副驾 Meeting Copilot"，默认 1240×820，最小 960×640，居中 |
-| 设置入口 | 点顶栏"设置" | 进入设置页；"返回卡片"可返回 |
-| Key 掩码 | 输入 Key 后保存并重开 | 界面只显示掩码，不显示明文 |
-| 保存/清除 | 点"保存设置"/"清除设置" | 分别提示"设置已保存"/"设置已清除"；重开应用状态保持 |
-| 凭据落点 | PowerShell 执行 `cmdkey /list`，筛选 meeting-copilot | 存在目标 `meeting-copilot/llm-api-key` |
-| 配置文件 | PowerShell：`Get-Content "$env:APPDATA\com.meetingcopilot.desktop\settings.json"` | 恰 4 键；无 Key、无地址、无模型名 |
-| 卡片渲染 | 触发出卡后观察 | 禁用卡不可点；详情内联展开；不抢焦点 |
-| 投屏/紧急遮蔽 | 模拟投屏或紧急态 | 正文隐藏，只留条数角标 |
-| 联网 E2E | 用 `--features llm-https` 构建后点"测试" | 成功提示"连接成功"；失败时落到 8 类可读原因 |
+| 检查项     | 操作                                                                               | 通过标准                                               |
+| ------- | -------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 窗口      | 启动后观察                                                                            | 标题"会议副驾 Meeting Copilot"，默认 1240×820，最小 960×640，居中 |
+| 设置入口    | 点顶栏"设置"                                                                          | 进入设置页；"返回卡片"可返回                                    |
+| Key 掩码  | 输入 Key 后保存并重开                                                                    | 界面只显示掩码，不显示明文                                      |
+| 保存/清除   | 点"保存设置"/"清除设置"                                                                   | 分别提示"设置已保存"/"设置已清除"；重开应用状态保持                       |
+| 凭据落点    | PowerShell 执行 `cmdkey /list`，筛选 meeting-copilot                                  | 存在目标 `meeting-copilot/llm-api-key`                 |
+| 配置文件    | PowerShell：`Get-Content "$env:APPDATA\com.meetingcopilot.desktop\settings.json"` | 恰 4 键；无 Key、无地址、无模型名                               |
+| 卡片渲染    | 触发出卡后观察                                                                          | 禁用卡不可点；详情内联展开；不抢焦点                                 |
+| 投屏/紧急遮蔽 | 模拟投屏或紧急态                                                                         | 正文隐藏，只留条数角标                                        |
+| 联网 E2E  | 用 `--features llm-https` 构建后点"测试"                                                | 成功提示"连接成功"；失败时落到 8 类可读原因                           |
 
 4. 证据留存：截图只放本机（外层 `.screenshots/` 或 `.tmp/`），不要提交；在 `b4-status.md` 记录日期、构建命令、每项结论。注意：若截图放在外层 `.screenshots/`，先归档再执行 Q-06。
 
 5. 关闭口径：只有"联网 E2E + 真机 WebView2 + 窗口/焦点/投屏结论"三项都有记录，才可把 U-05 改为 `closed`；否则保持 `open`。
+
+> 执行记录（2026-11-23）：1~6、9、10 通过；7 卡片渲染与 8 投屏遮蔽未判定（无真实会议/投屏样本）。构建命令为 `cargo build -p meeting-copilot-desktop --features llm-https`；交互式启动须双击 `target/debug/meeting-copilot-desktop.exe`，agent 进程无法创建 WebView2 窗口。前端改动后必须 `cargo clean -p meeting-copilot-desktop` 再构建，否则会嵌入旧 `dist`。证据见 `b4-status.md §32`。
 
 ### 8.4 裁决并执行 Q-01 ~ Q-06
 

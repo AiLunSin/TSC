@@ -9,9 +9,9 @@ import { SettingsPage } from "./settings/SettingsPage";
 type ChannelState = "ready" | "degraded" | "off";
 
 const CHANNELS: readonly { name: string; state: ChannelState; detail: string }[] = [
-  { name: "字幕文本通道", state: "ready", detail: "腾讯会议 · 已连接" },
-  { name: "系统音频通道", state: "ready", detail: "WASAPI 进程级环回" },
-  { name: "本地 ASR", state: "degraded", detail: "模型热加载中" },
+  { name: "字幕文本通道", state: "off", detail: "未接入会议检测" },
+  { name: "系统音频通道", state: "off", detail: "WASAPI 未接入" },
+  { name: "本地 ASR", state: "off", detail: "模型未接入" },
 ];
 
 const STATE_TEXT: Record<ChannelState, string> = {
@@ -63,8 +63,8 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-meta">
-          <span className="pill">腾讯会议 · 产品评审会</span>
-          <span className="timer">00:18:42</span>
+          <span className="pill">未检测到会议</span>
+          <span className="timer">--:--</span>
           <button
             className="btn"
             type="button"
@@ -107,15 +107,15 @@ export default function App() {
           <dl className="privacy">
             <div>
               <dt>自动外发</dt>
-              <dd className="ok">已一次性授权</dd>
+              <dd>未接入</dd>
             </div>
             <div>
               <dt>查询脱敏</dt>
-              <dd className="ok">已启用</dd>
+              <dd>未接入</dd>
             </div>
             <div>
               <dt>审计</dt>
-              <dd>哈希链正常</dd>
+              <dd>未接入</dd>
             </div>
           </dl>
         </aside>
@@ -149,22 +149,7 @@ export default function App() {
         <aside className="panel timeline">
           <h2>要点时间轴</h2>
           <ol className="timeline-list">
-            <li>
-              <time>10:16</time>
-              <span>灰度范围限定华东两站点</span>
-            </li>
-            <li>
-              <time>10:14</time>
-              <span>确认 SLA 99.9% 与赔付比例</span>
-            </li>
-            <li>
-              <time>10:09</time>
-              <span>待办：补充压测报告</span>
-            </li>
-            <li>
-              <time>10:03</time>
-              <span>会议开始，自动采集已启动</span>
-            </li>
+            <li className="hint">暂无要点。</li>
           </ol>
         </aside>
       </main>

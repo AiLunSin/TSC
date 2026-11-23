@@ -21,6 +21,9 @@ use ipc::settings::AppFactsSource;
 use ipc::settings_store::FileSettingsConfigStore;
 use ipc::state::{AppState, CommandCounters};
 
+/// 无环境注入时的默认模型预设；只含显示名，不含端点或凭据。
+const DEFAULT_MODEL_PRESET: &str = "deepseek-flash";
+
 struct UsingPendingSources {
     view: ViewFactsSnapshot,
 }
@@ -97,8 +100,9 @@ fn main() {
                 .unwrap_or_else(|_| PathBuf::from("."));
             let presets = std::env::var("LLM_MODEL")
                 .ok()
+                .filter(|model| !model.trim().is_empty())
                 .map(|model| vec![model])
-                .unwrap_or_default();
+                .unwrap_or_else(|| vec![DEFAULT_MODEL_PRESET.to_owned()]);
             app.manage(build_state(config_dir, presets));
             tracing::info!(
                 protocol = IPC_PROTOCOL_VERSION,

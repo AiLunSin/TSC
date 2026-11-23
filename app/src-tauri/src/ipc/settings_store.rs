@@ -103,8 +103,11 @@ impl SettingsConfigStore for FileSettingsConfigStore {
     }
 
     fn reset(&self) -> Result<(), PortError> {
-        fs::create_dir_all(&self.dir).map_err(|_| PortError::Unavailable)?;
-        self.write_atomic(&SettingsFileV1::default())
+        match fs::remove_file(self.main_path()) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(PortError::Unavailable),
+        }
     }
 }
 
@@ -171,5 +174,25 @@ mod tests {
             store.load().expect("load missing"),
             SettingsConfig::default()
         );
+    }
+
+    #[test]
+    fn reset_removes_file_and_load_is_default() {
+        let dir = temp_dir("reset-removes");
+        let store = FileSettingsConfigStore::new(&dir);
+        store
+            .save(&SettingsConfig {
+                schema_version: 1,
+                model_index: 1,
+                endpoint_index: 0,
+                timeout_ms: 4_500,
+            })
+            .expect("save");
+        assert!(dir.join("settings.json").exists());
+
+        store.reset().expect("reset");
+        assert!(!dir.join("settings.json").exists());
+        assert_eq!(store.load().expect("load"), SettingsConfig::default());
+        store.reset().expect("reset twice");
     }
 }
