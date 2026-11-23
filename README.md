@@ -4,6 +4,7 @@
 
 > 仓库名 `TSC`；产品名 **Meeting Copilot（会议副驾）**。
 
+[![CI](https://github.com/AiLunSin/TSC/actions/workflows/ci.yml/badge.svg)](https://github.com/AiLunSin/TSC/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#许可证)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6)
 ![Rust 1.89+](https://img.shields.io/badge/rust-1.89%2B-000000)
