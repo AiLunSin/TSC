@@ -20,6 +20,7 @@ const MODEL_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../.tmp/asr/vosk-model-small-cn-0.22"
 );
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 struct Pipeline {

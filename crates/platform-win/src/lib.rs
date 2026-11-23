@@ -9,3 +9,6 @@ pub mod meeting;
 pub mod secure_store;
 #[cfg(windows)]
 pub mod wasapi;
+#[cfg(not(windows))]
+#[path = "wasapi_stub.rs"]
+pub mod wasapi;
