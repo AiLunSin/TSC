@@ -42,13 +42,22 @@ function toChannelState(value: string): ChannelState {
   return "off";
 }
 
+/**
+ * 识别状态位只回答"现在在做什么"。
+ *
+ * 停止转写后 `display_text` 还留着最后一句，早先直接铺在按钮右边，成了一行没有标签的
+ * 会议内容（截图里像按钮说明）。停止态改为带前缀的"最后识别到「…」"，只留尾部：
+ * partial 是累积增长的，尾部才是最新听到的几个字。
+ */
 function asrHintText(running: boolean, text: string): string {
-  if (text !== "") {
-    return text;
+  if (running) {
+    return text !== "" ? text : "系统音频实时识别，等待说话…";
   }
-  return running
-    ? "系统音频实时识别，等待说话…"
-    : "点「开始实时转写」，识别到的句子会逐条进入下方转写区。";
+  if (text !== "") {
+    const tail = text.length > 24 ? `…${text.slice(-24)}` : text;
+    return `已停止 · 最后识别到「${tail}」`;
+  }
+  return "点「开始实时转写」，识别到的句子会逐条进入下方转写区。";
 }
 
 function formatElapsed(totalSeconds: number): string {

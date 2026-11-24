@@ -1997,3 +1997,29 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - 冒烟失败提示补上「B 路径先访问 `<Worker>/health` 确认 secret 已注入」。
 
 **本机验证（未发起任何真实检索、未消耗额度）**：三个 `bash -n`、三个 `py_compile`、`node --check`、`tomllib`/`json` 解析通过；`deploy-worker.sh --dry-run` 通过；A/B/C 三条 `setup.sh` 路径的 `--check-only` 全部 rc=0；`preflight.py` 12 个分支（正常 / degraded 可用 / unavailable / 私网 / localhost / http / 缺凭据 / 非法 kind / 未知字段 / 重复 id / 无 authRef / 查询不足）rc 正确；默认 config 自动加载、C 路径文件 md5 前后不变、`--config` 不存在被拒、`--no-config` 手动 export、多 `authRef` 拒绝与通过均验证。**U-07-43 真实样本仍为 0/200，状态保持 open**——唯一缺的是使用者提供的公网 HTTPS 端点与凭据。
+
+## §49 真机截图复核②：卡片可点已确认，遮蔽仍缺界面判定（2026-11-24 19:55）
+
+用户发来三张截图：一张正常态界面、两张 `verify-privacy.ps1` 的运行记录。逐张核对后的结论是**一项推进、一项仍未判定**，不做"都过了"的合并陈述。
+
+**图 1（正常态）——第 7 项判定表第 1 格通过**
+
+卡片区"共 1 张 / 清空"正常；卡片显示"专有名词 · 19:42 / 木瓜蛋白酶 / 正文（以省略号收口）/ 引用 1 条 / 置信度 90% / 查看详情"。转写区可选中"木瓜蛋白酶"，下方释义面板出结果并给出"生成卡片"，状态行显示"已生成卡片。"。这说明 §48 之前的四处修复（`active_view` 的 `session_matches`、`KIND_TEXT` 中文映射、`tidy_cjk_spaces`、`fit_text` 收口）在真机上同时成立，卡片不再是"恒不可点"。
+
+判定表其余三格没有证据：截图只证明按钮是**可点态**，没有点击后的展开画面，也没有点"清空"、没有禁用卡样本。因此第 7 项记 **1/4 通过**。
+
+**图 2 / 图 3（隐私注入）——链路成立，但不能当判定**
+
+两次 `-Mode emergency`、一次 `-Mode screen` 都只打印到 `[verify] launched from <仓库根>`；应用窗口在画面里只露出标题栏，卡片区不在截图范围内。脚本本身只负责"设变量 + 启动 exe"，判据全在界面，所以这两张图只能证明**注入与启动可用**，不能证明"正文隐藏 / 0 张新卡"。第 8 项保持 open，补齐动作已写进 `open-items.md §8.3`（各一张卡片区截图即可）。
+
+**顺带修掉截图暴露的一处文案缺陷**
+
+图 1 里"开始实时转写"右边跟着一句**没有任何标签的会议原话**（"被广泛使用整个行业的潜规则"）。原因是 `asr_status` 的 `display_text` 停止后不清空，`asrHintText(running, text)` 又优先返回 `text`，于是最后一句识别文本被当成按钮说明铺在状态位。改为：
+
+- 运行中：仍显示实时文本，空则"系统音频实时识别，等待说话…"；
+- 已停止且有残留：`已停止 · 最后识别到「…尾 24 字」`（partial 是累积串，尾部才是最新内容）；
+- 已停止且无残留：保留原来的引导语。
+
+**验证**：`npm run typecheck`、`npm run lint`、`npm run check:bindings`（20 DTO）、`npm run build` 全部通过，产物 `dist/assets/index-C7yxVhFM.js`。**桌面 exe 未重建**：本机 `~/.cargo/bin/cargo.exe` 与 `rustup.exe` 均以 `0xC0000135`（DLL not found）退出，改用工具链内的 `cargo.exe`/`rustc.exe` 后最小程序可编译，但 `cargo build` 编依赖时 `rustc` 同样 `0xC0000135`（`windows-sys`、desktop build script 两处复现），属本机环境问题，已登记 `open-items.md §5`。**因此本轮交付的仍是 18:42 的 exe，界面里看不到这条文案修正**；环境修好后按 `cargo clean -p meeting-copilot-desktop && cargo build -p meeting-copilot-desktop --features llm-https` 重建即可。
+
+**状态不变**：U-05 第 7 项 1/4、第 8 项 0/2；U-07-43 仍是 0/200。
