@@ -509,16 +509,19 @@ fn quiet_command(program: &str, prefix_args: &[&str]) -> Command {
 pub fn parse_line(line: &str) -> Option<Recognized> {
     let value: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
     if let Some(text) = value.get("text").and_then(|item| item.as_str()) {
-        let text = text.trim();
+        // vosk 的中文结果是"按词带空格"的，展示前先合并中文字符间的空格。
+        let text = crate::ipc::transcript::tidy_cjk_spaces(text.trim());
         if !text.is_empty() {
-            return Some(Recognized::Stable(text.to_owned()));
+            return Some(Recognized::Stable(text));
         }
     }
     let partial = value.get("partial").and_then(|item| item.as_str())?.trim();
     if partial.is_empty() {
         None
     } else {
-        Some(Recognized::Partial(partial.to_owned()))
+        Some(Recognized::Partial(
+            crate::ipc::transcript::tidy_cjk_spaces(partial),
+        ))
     }
 }
 
@@ -750,7 +753,8 @@ mod tests {
         );
         assert_eq!(
             parse_line(r#"{"partial": "灰度 范围"}"#),
-            Some(Recognized::Partial("灰度 范围".to_owned()))
+            // vosk 的中文按词带空格，解析时合上再交给界面。
+            Some(Recognized::Partial("灰度范围".to_owned()))
         );
     }
 
@@ -770,7 +774,7 @@ mod tests {
         if let Some(Recognized::Partial(text)) = parse_line(r#"{"partial": "灰度 范围"}"#) {
             pipeline.set_last_text(&text);
         }
-        assert_eq!(pipeline.last_text(), "灰度 范围");
+        assert_eq!(pipeline.last_text(), "灰度范围");
         assert!(pipeline.cards.cards().is_empty(), "中间结果不直接出卡");
     }
 

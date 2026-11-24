@@ -103,6 +103,9 @@ impl CardStore {
     }
 
     fn ingest_inner(&self, text: &str, limited: bool) -> Result<usize, IpcErrorDto> {
+        // 转写文本可能带 vosk 的词间空格，抽词和摘要前统一合上。
+        let text = crate::ipc::transcript::tidy_cjk_spaces(text.trim());
+        let text = text.as_str();
         let keywords = self.extract_keywords(text);
         if keywords.is_empty() {
             return Err(IpcErrorDto::new(
@@ -111,7 +114,8 @@ impl CardStore {
                 false,
             ));
         }
-        let excerpt: String = text.trim().chars().take(80).collect();
+        // 多留一些原料，摘要再按句子边界截到 80 字（见 `fit_text`）。
+        let excerpt: String = text.chars().take(200).collect();
         let now = now_ms();
         let Some(gate) = card_gate::evaluate(
             text,
@@ -197,8 +201,11 @@ impl CardStore {
     /// 与 `ingest` 的区别：不抽关键词，标题固定为用户选中的文字，
     /// 结论用释义摘要；门控与隐私判定照旧走 `card_gate::evaluate`。
     pub fn ingest_explanation(&self, word: &str, explanation: &str) -> Result<usize, IpcErrorDto> {
-        let word = word.trim();
-        let explanation = explanation.trim();
+        // 选区可能来自带空格的转写行，标题也要合上，否则卡片标题是"学历 歧视"。
+        let word = crate::ipc::transcript::tidy_cjk_spaces(word.trim());
+        let word = word.as_str();
+        let explanation = crate::ipc::transcript::tidy_cjk_spaces(explanation.trim());
+        let explanation = explanation.as_str();
         if word.is_empty() || explanation.is_empty() {
             return Err(IpcErrorDto::new(
                 "empty_explanation",
@@ -219,7 +226,8 @@ impl CardStore {
         if matches!(&gate.decision, GateDecision::Deny { .. }) {
             return Ok(0);
         }
-        let excerpt: String = explanation.chars().take(80).collect();
+        // 释义最长 180 字，这里留全量，由 `build_draft` 按句子边界截到卡片上限。
+        let excerpt: String = explanation.chars().take(300).collect();
         let mut store = self
             .cards
             .lock()
@@ -291,7 +299,7 @@ fn build_draft(
     privacy: PrivacyMode,
 ) -> Option<KeywordCardDraft> {
     let title: String = keyword.chars().take(TitleText::LIMIT).collect();
-    let summary: String = excerpt.chars().take(ConclusionText::LIMIT).collect();
+    let summary = fit_text(excerpt, ConclusionText::LIMIT);
     let keyword_text = TitleText::new(title).ok()?;
     let normalized_term = NormalizedTerm::new(keyword).ok()?;
     let candidate = KeywordCandidate {
@@ -348,6 +356,29 @@ fn build_draft(
         card_status: KeywordCardStatus::Displayed,
         click_state: admission.click_state,
     })
+}
+
+/// 把长文本截到卡片上限以内，并尽量停在句子/分句边界上。
+///
+/// 直接 `take(80)` 会把英文词切成 `educational c` 这种残片，看着像故障。
+/// 优先在 `。！？；，` 处收口并补省略号；找不到断点才硬截。
+fn fit_text(text: &str, limit: usize) -> String {
+    let chars: Vec<char> = text.trim().chars().collect();
+    if chars.len() <= limit {
+        return chars.into_iter().collect();
+    }
+    const BREAKS: [char; 7] = ['。', '！', '？', '；', '，', '!', ','];
+    if let Some(position) = chars[..limit].iter().rposition(|c| BREAKS.contains(c)) {
+        let mut out: String = chars[..=position].iter().collect();
+        // 断点本身可能正好贴着上限，补省略号会超一位，这时就不补。
+        if position + 2 <= limit {
+            out.push('…');
+        }
+        return out;
+    }
+    let mut out: String = chars[..limit - 1].iter().collect();
+    out.push('…');
+    out
 }
 
 fn classify_kind(keyword: &str) -> KeywordKind {
@@ -587,5 +618,33 @@ mod tests {
         );
         assert!(draft.click_state_is_consistent());
         assert_eq!(draft.gate_decision_ref.trace_id(), &gate.trace_id);
+    }
+
+    /// 摘要不能把英文词切成 `educational c` 这种残片。
+    #[test]
+    fn summary_truncates_on_sentence_boundary() {
+        let long = "这里的学历歧视指招聘时以学历区别对待求职者。它并非严格专业术语，通常对应英文 degree discrimination 或 \
+                    educational credential discrimination。上下文用它引出个案背后的普遍问题。";
+        let summary = fit_text(long, 80);
+        assert!(summary.chars().count() <= 80, "{summary}");
+        assert!(summary.ends_with('…'), "{summary}");
+        assert!(!summary.contains("educational c…"), "{summary}");
+        // 短文本原样返回，不补省略号。
+        assert_eq!(fit_text("一句话结论。", 80), "一句话结论。");
+    }
+
+    /// 从带空格的转写行选中文字出卡，标题也要合上空格。
+    #[test]
+    fn explanation_title_merges_cjk_spaces() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        let added = store
+            .ingest_explanation("学历 歧视", "指招聘时以学历高低区别对待求职者。")
+            .expect("added");
+        assert_eq!(added, 1);
+        let cards = store.cards();
+        let CardSnapshotEntry::Draft(draft) = &cards[0] else {
+            panic!("应为草案卡");
+        };
+        assert_eq!(draft.keyword_text.as_str(), "学历歧视");
     }
 }

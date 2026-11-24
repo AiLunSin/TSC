@@ -42,13 +42,19 @@ impl ViewFactsSource for UsingPendingSources {
     }
 }
 
-fn pending_view() -> ViewFactsSnapshot {
+/// 当前会话的视图事实。
+///
+/// `session_matches` 必须是 **true**：桌面端只有一个进程内会话，卡片就是在这个会话里
+/// 造出来的（`build_draft` 的 `candidate.session_id` 与 `current_session` 同源）。
+/// 早先这里硬编码 false，等于告诉门控"卡片属于别的会话"，于是**每张卡一生成就是
+/// 「引用已过期 / 不可点击」**，用户点不开详情。
+fn active_view(privacy: crate::privacy::PrivacyMode) -> ViewFactsSnapshot {
     ViewFactsSnapshot {
-        session_matches: false,
+        session_matches: true,
         authorization_revoked: false,
         reference_stale: false,
-        screen_share: false,
-        emergency_masked: false,
+        screen_share: privacy.screen_share,
+        emergency_masked: privacy.emergency_masked,
         visible_card_count: 0,
     }
 }
@@ -78,7 +84,7 @@ fn build_state(
         facts,
         cards,
         view_facts: Arc::new(UsingPendingSources {
-            view: pending_view(),
+            view: active_view(crate::privacy::PrivacyMode::from_env()),
         }),
         catalog,
         memory_key,

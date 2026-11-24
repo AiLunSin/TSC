@@ -9,6 +9,19 @@ const DISABLED_REASON_TEXT: Record<string, string> = {
   reference_unverified: "引用未经核实",
 };
 
+/** 关键词类型：契约里是英文枚举，界面上要给人看中文。 */
+const KIND_TEXT: Record<string, string> = {
+  proper_noun: "专有名词",
+  acronym: "缩写",
+  institution_role: "机构 / 角色",
+  policy_standard: "政策 / 标准",
+  metric: "指标",
+};
+
+function kindLabel(kind: string): string {
+  return KIND_TEXT[kind] ?? kind;
+}
+
 export function conclusionText(conclusion: ConclusionDto): string {
   if (conclusion === "noReliableSource") {
     return "未找到可靠来源";
@@ -48,7 +61,7 @@ export function KeywordCard({ card, onOpen }: KeywordCardProps) {
   return (
     <li className={enabled ? "card" : "card card-disabled"}>
       <div className="card-top">
-        <span className="kind">{card.keywordKind}</span>
+        <span className="kind">{kindLabel(card.keywordKind)}</span>
         <span className="time">{timeLabel(card.triggeredAtMs)}</span>
       </div>
       <h3>{body.title}</h3>

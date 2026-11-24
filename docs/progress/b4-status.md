@@ -1817,3 +1817,25 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 - 真实 Key 下多句释义的实际质量（需真机配 Key 后手测；prompt 里已明确"不逐句翻译、不复述原文"）。
 - 冷却/额度参数（90s、8 张/分）的实际手感：目前是保守取值，可按真实会议密度再调。
+
+## §42 真机截图复核：卡片恒不可点、英文枚举外露、转写空格与摘要残句（2026-11-24）
+
+用户提供真机截图（转写 → 选中"学历 歧视" → 模型释义 → 生成卡片 全链路已通），逐项复核发现四处"链路通但结果不对"：
+
+| # | 现象 | 根因 | 修法 |
+|---|---|---|---|
+| 1 | 每张卡一生成就是「引用已过期 / 不可点击」 | `main.rs` 的 `pending_view()` 把 `session_matches` 硬编码为 `false`，门控据此判定"卡片属于别的会话"→ `ClickDisabledReason::StaleReference` | 改为 `active_view(privacy)`，`session_matches: true`（桌面端只有一个进程内会话，`build_draft` 的 `candidate.session_id` 与 `current_session` 同源）；顺带把 `screen_share` / `emergency_masked` 从 `privacy::PrivacyMode` 注入，U-05 第 8 项的环境变量注入这才真正作用到 `body_visible` |
+| 2 | 卡片左上角显示 `proper_noun` | 契约字段 `keyword_kind` 直接渲染 | `KeywordCard.tsx` 增加 `KIND_TEXT` 映射（专有名词 / 缩写 / 机构·角色 / 政策·标准 / 指标），未知值原样兜底 |
+| 3 | 转写被切成「学历 歧视 的 现象」 | vosk 中文按词输出空格，原样入库 | `transcript::tidy_cjk_spaces`：只在"相邻两字都是中文/中文标点"时丢空格，英文短语与中英混排保留（`degree discrimination`、`SLA 指标` 不受影响）；在 `parse_line`（界面文本位 + 全文缓冲）与 `ingest` / `ingest_explanation`（抽词、标题）处统一调用 |
+| 4 | 卡片正文截成 `…educational c` | 摘要按 80 字硬切 | 新增 `fit_text`：在 `。！？；，` 处收口再补省略号，找不到断点才硬截；原料上限从 80 提到 200/300 字，交给 `fit_text` 收口 |
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**73 passed / 0 failed**（新增 3 例：中文空格合并与英文保留、摘要在句边界收口、带空格选区出卡后标题为「学历歧视」）。
+- `clippy --all-targets --features llm-https -- -D warnings`、`rustfmt --check`、B4 零转录、分层、UI 集成、G2 宣称、`check-bindings`(13 DTO)、`scan-secrets-docs` 全部 rc=0；`tsc --noEmit`、`eslint .`、`npm run build` 通过。
+- 产物：`target/debug/meeting-copilot-desktop.exe`（16:55，`--features llm-https`，21.0 MB）。
+
+未验证：
+
+- 修完后的「查看详情」真机点击（应在卡片为非遮蔽态时可打开、且不抢焦点）。
+- 4 秒强制收句导致的半句（截图中"仍然比较"被切断）：属实时转写的已知折中，未改阈值。

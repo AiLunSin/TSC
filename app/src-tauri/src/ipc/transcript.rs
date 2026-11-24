@@ -163,6 +163,41 @@ pub fn transcript_snapshot(
     Ok(state.snapshot())
 }
 
+/// 去掉**两个中文片段之间**的空格。
+///
+/// vosk 的中文结果是按词带空格的（`学历 歧视 的 现象`），直接展示像被切碎，
+/// 抽关键词和选中查询也会被空格干扰。这里只在"上一个字和下一个字都是中文/中文标点"
+/// 时丢掉空格：英文短语（`degree discrimination`）、中英混排（`SLA 指标`）保持原样。
+pub fn tidy_cjk_spaces(text: &str) -> String {
+    fn joins(c: char) -> bool {
+        matches!(c as u32,
+            0x3000..=0x303F   // 中文标点（、。〈〉《》「」…）
+            | 0x3400..=0x4DBF // 扩展 A
+            | 0x4E00..=0x9FFF // 基本汉字
+            | 0xF900..=0xFAFF // 兼容汉字
+            | 0xFF01..=0xFF5E // 全角字符与标点
+            | 0xFFE0..=0xFFE6 // 全角货币等符号
+        )
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut pending_space = false;
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            pending_space = !out.is_empty();
+            continue;
+        }
+        if pending_space {
+            pending_space = false;
+            let both_cjk = out.chars().next_back().is_some_and(joins) && joins(ch);
+            if !both_cjk {
+                out.push(' ');
+            }
+        }
+        out.push(ch);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -228,5 +263,21 @@ mod tests {
         let parts = split_sentences("第一句。第二句！第三句? 第四句;");
         assert_eq!(parts, vec!["第一句", "第二句", "第三句", "第四句"]);
         assert!(split_sentences("   ").is_empty());
+    }
+
+    /// vosk 的中文按词带空格，展示前要合上；英文短语与中英混排的空格要留。
+    #[test]
+    fn tidies_cjk_spaces_but_keeps_english() {
+        assert_eq!(
+            tidy_cjk_spaces("学历 歧视 的 现象 仍 不 少见"),
+            "学历歧视的现象仍不少见"
+        );
+        assert_eq!(
+            tidy_cjk_spaces("通常 对应 英文 degree discrimination"),
+            "通常对应英文 degree discrimination"
+        );
+        assert_eq!(tidy_cjk_spaces("SLA 指标 看 99.9%"), "SLA 指标看 99.9%");
+        assert_eq!(tidy_cjk_spaces("  多  余  空  格  "), "多余空格");
+        assert_eq!(tidy_cjk_spaces("中文 ， 标点"), "中文，标点");
     }
 }
