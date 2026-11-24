@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "providers": [
+    {
+      "id": "u07-43-source",
+      "name": "U-07-43 采样源",
+      "kind": "custom",
+      "priority": 1,
+      "weight": 60,
+      "enabled": "enabled",
+      "timeout": 8000,
+      "rateLimit": {
+        "perMinute": 60,
+        "perDay": 2000
+      },
+      "blockedDomains": [],
+      "health": "healthy",
+      "adapter": "http_json",
+      "endpoint": "https://search.example.org/search",
+      "authRef": "SEARCH_API_TOKEN"
+    }
+  ]
+}

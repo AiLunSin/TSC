@@ -1970,3 +1970,30 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 **本机验证**：`bash -n` 通过；`--check-only` 预检通过（含 authRef 缺失被拒、端点变更重建两条分支）；`verdict.py` 四分支 rc 正确；用占位端点跑 `--smoke-only` 复现并确认失败提示；`cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live --no-run` 编译通过；Python 两脚本 `py_compile`、Worker `node --check`、查询集 240 条去重（前 200 条覆盖 50 个术语）均通过。回归：`cargo fmt --all -- --check`、两套 clippy `-D warnings`、六门禁 + B4 七规则 + `check-bindings` 全绿；`cargo test --workspace -- --test-threads=1` **1049 passed / 0 failed / 12 ignored**（上轮 1047 + §46 的 2 例）。未发起任何真实检索、未消耗任何额度。
 
 **顺带查清的两个本机测试坑**（已写入 `open-items.md §8.11`）：① `TEMP` 用 MSYS 风格 `/c/...` 时，`infrastructure --lib` 的 4 个临时文件用例报「拒绝访问 / CannotOpen」，换 Windows 风格绝对路径后 149 passed；② `export TEMP=新值 TMP="${TEMP}"` 写在同一行时 `${TEMP}` 展开的是旧值（shell 先展开后赋值），`GetTempPathW` 优先读 TMP 又落回系统临时目录——必须拆成两行 export，脚本已按此修正。
+
+## §48 B/C 两条采样路径配齐，改成「填完直接跑」（2026-11-24 19:35）
+
+用户要求把上一轮只有文字说明的 B（转发 Worker）和 C（自定义 providers.json）也配好。此前 A 只需 `export SEARCH_ENDPOINT` 就能跑，B/C 却要用户自己拼 wrangler 命令、手写 providers.json，并且主脚本对自定义文件只是「碰巧能用」——端点不一致时会重建覆盖、预检只查第一个源。
+
+**B 路径：Worker 可部署脚手架 + 自动写配置**
+
+- 新增 `scripts/u07-43/wrangler.toml`、`package.json`、`deploy-worker.sh`。用户只需一个输入：`UPSTREAM_KEY='<检索 Key>' bash scripts/u07-43/deploy-worker.sh --provider bocha`；`SHARED_TOKEN` 缺省时用 `secrets.token_urlsafe(24)` 随机生成且不回显。
+- 部署顺序修正为**先 `wrangler deploy` 再 `wrangler secret put`**：Worker 不存在时 secret 写入会失败；secret 是绑定，注入后立即生效。脚本从 deploy 日志解析 Worker 地址，连同令牌写入 `.tmp/u07-43/config.env`（`.tmp/` 已忽略），并按需 `curl /health` 自检。`--dry-run` 只做本机语法/环境检查，不部署、不写配置。
+- 修掉 `search-proxy.worker.js` 两个真问题：
+  1. **空标题会让整批样本失败**：`TitleText::new` 拒绝空串（`crates/domain/src/vo/text.rs`），而上游偶尔不给 `title`/`name`；`http_json.rs` 遇到一条空标题就返回 `MalformedResponse`，5 条结果全废。现在用 URL 主机名兜底并截到 40 字（与 `TitleText::LIMIT` 对齐）。
+  2. **`SHARED_TOKEN` 为空时不鉴权**：原实现 `if (expected)` 才校验，未配置时任何人都能拿 Worker 消耗上游额度。现在未配置直接 503，且鉴权放在查询处理之前。
+  另加 `/health`（不消耗上游、不回显凭据）、`q` ≤200 字校验；429 重试一次与「空结果返回 502 而不是空列表」的既有语义保留。
+
+**C 路径：模板 + 严格预检 + 绝不覆盖**
+
+- 新增 `scripts/u07-43/providers.example.json`（字段与 `profile_store.rs::RawProvider` 的 `deny_unknown_fields` 完全对齐）。
+- 新增 `scripts/u07-43/preflight.py` 替代主脚本里的内联预检，逐项对齐 Rust 侧：字段/枚举（`kind`/`enabled`/`health`/`adapter`）、`name` ≤50 字、`weight (0,100]`、`rateLimit` 范围、`id`/`priority` 唯一、每个可用源的 HTTPS + 公网主机（拒绝环回/私网/链路本地）、每个 `authRef` 的环境变量非空、查询 ≥200 且不重复且 ≤200 字。**关键口径修正**：`ProviderProfile::is_usable` 是 `enabled && health != unavailable`，所以 `degraded` 也算可用源；旧预检只认 `healthy`，会误拒合法配置。
+- 主脚本新增 `CUSTOM_PROVIDERS` 判定：`SEARCH_PROVIDERS_FILE` 显式指向已存在的文件时**跳过生成、跳过端点不一致重建、绝不覆盖**，预检模式标 `custom`。旧的「只检查 `usable[0]`」也换成逐源检查。
+
+**三条路径共用：配置自动加载**
+
+- 新增 `scripts/u07-43/config.env.example` 与 `setup.sh`（`--mode a|b|c`，支持 `--token`、`--auth-ref`、`--env NAME=VALUE`、`--out`、`--no-check`）。生成后自动跑一次 `--check-only` 预检；多 `authRef` 时要求逐个给值。
+- 主脚本默认加载 `${OUT_DIR}/config.env`（`set -a` + `source`，赋值在 `SEARCH_*` 默认值之前），新增 `--config FILE` / `--no-config`；`--check-only` 输出配置路径与 `generated|custom` 模式。手动 `export` 的旧用法完全保留。
+- 冒烟失败提示补上「B 路径先访问 `<Worker>/health` 确认 secret 已注入」。
+
+**本机验证（未发起任何真实检索、未消耗额度）**：三个 `bash -n`、三个 `py_compile`、`node --check`、`tomllib`/`json` 解析通过；`deploy-worker.sh --dry-run` 通过；A/B/C 三条 `setup.sh` 路径的 `--check-only` 全部 rc=0；`preflight.py` 12 个分支（正常 / degraded 可用 / unavailable / 私网 / localhost / http / 缺凭据 / 非法 kind / 未知字段 / 重复 id / 无 authRef / 查询不足）rc 正确；默认 config 自动加载、C 路径文件 md5 前后不变、`--config` 不存在被拒、`--no-config` 手动 export、多 `authRef` 拒绝与通过均验证。**U-07-43 真实样本仍为 0/200，状态保持 open**——唯一缺的是使用者提供的公网 HTTPS 端点与凭据。

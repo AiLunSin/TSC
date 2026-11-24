@@ -1,0 +1,9 @@
+# U-07-43 采样转发端点（B 路径）。部署：bash scripts/u07-43/deploy-worker.sh
+# 三个值由部署脚本通过 wrangler secret put 注入，绝不写进本文件：
+#   UPSTREAM_KEY       博查 / Tavily 的检索 Key
+#   SHARED_TOKEN       采样脚本使用的 Bearer 令牌
+#   UPSTREAM_PROVIDER  bocha 或 tavily
+# 首次使用需先 wrangler login，或设置 CLOUDFLARE_API_TOKEN。
+name = "u07-43-search-proxy"
+main = "search-proxy.worker.js"
+compatibility_date = "2026-11-01"

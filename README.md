@@ -189,16 +189,28 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 ```
 
   需同时设置 `SEARCH_PROVIDERS_FILE`、`SEARCH_QUERIES_FILE` 与 `<authRef>`；可选 `SEARCH_REPORT_PATH` 输出只含计数与时延的 JSON。`smoke_three_rounds` 对应 H-34-G 的 3 次验收，`collect_200_real_samples` 对应 200 条真实样本。**两个 `search_live` 用例都必须带 `--features llm-https`**：缺省特性下 `HttpJsonProvider` 没有真实 TLS 传输，每次检索都会 `Unreachable`；另外三个 `SEARCH_*` 路径必须传**绝对路径**（`cargo test` 的进程 CWD 是 crate 根目录，相对路径会被当成「文件不存在」而静默得到零源）。
-- U-07-43 的 200 条采样可一键编排（预检 → 3 次冒烟 → 200 条 → 判定）：
+- U-07-43 的 200 条采样可一键编排（预检 → 3 次冒烟 → 200 条 → 判定）。**A / B / C 三条接入路径都已配好**，填完端点与凭据后直接跑同一条命令：
 
 ```bash
-export SEARCH_ENDPOINT="https://<公网 HTTPS 检索端点>/search"
-export SEARCH_AUTH_REF="SEARCH_API_TOKEN"   # 可选，环境变量「名」不是值
-export SEARCH_API_TOKEN="<Bearer 凭据>"      # 仅当设置了 authRef
+# A. 自建 / 可用的 SearXNG（需启用 format=json）
+bash scripts/u07-43/setup.sh --mode a --endpoint "https://<SearXNG 公网域名>/search"
+
+# B. 已有的博查 / Tavily Key：一键部署转发 Worker 并写好配置
+UPSTREAM_KEY='<检索服务 Key>' bash scripts/u07-43/deploy-worker.sh --provider bocha
+
+# C. 自定义 providers.json（模板 scripts/u07-43/providers.example.json）
+cp scripts/u07-43/providers.example.json .tmp/u07-43/providers.json
+# 改里面的 endpoint / authRef，然后：
+bash scripts/u07-43/setup.sh --mode c --providers .tmp/u07-43/providers.json --token '<凭据>'
+
+# 三条路径最后都是同一条命令（自动加载 .tmp/u07-43/config.env）
 bash scripts/run-u07-43-samples.sh
 ```
 
-  脚本自动生成 `providers.json` 与 240 条互不重复的查询（`scripts/u07-43/gen-queries.py`），用 `scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / 超时率 ≤ 2%`；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`：自建 SearXNG 可直接填，已有的博查/Tavily Key 可部署 `scripts/u07-43/search-proxy.worker.js` 做协议转换。**真实样本数仍为 0/200**，需要使用者提供端点与凭据后才会产生结论。
+  - **B 路径**：`deploy-worker.sh` 用 `scripts/u07-43/wrangler.toml` + `package.json` 部署 `search-proxy.worker.js`，自动注入 `UPSTREAM_KEY` / `SHARED_TOKEN` / `UPSTREAM_PROVIDER`（`SHARED_TOKEN` 缺省时随机生成，不回显）。Worker 把 `GET ?q=&format=json` 转成博查/Tavily 的 POST，提供 `/health` 自检；上游无可用结果返回 502 而不是空列表，避免凑出假样本。Worker 地址与令牌写入本地 `config.env`，不入库。首次需 `wrangler login`；`--dry-run` 可只做本机检查。
+  - **C 路径**：`SEARCH_PROVIDERS_FILE` 指向已存在的文件即进入自定义模式，脚本**不重建、不覆盖**；`scripts/u07-43/preflight.py` 按 Rust 侧约束逐项校验字段/枚举/`id` 与 `priority` 唯一性/公网 HTTPS 主机/每个 `authRef` 的环境变量非空（`degraded` 也算可用源，与 `ProviderProfile::is_usable` 对齐）。多 `authRef` 用 `--env NAME=VALUE` 逐个给值。
+  - 配置统一写 `.tmp/u07-43/config.env`（`.tmp/` 已忽略）；主脚本自动加载，可用 `--config FILE` 指定、`--no-config` 忽略；也支持手动 `export SEARCH_ENDPOINT` / `SEARCH_AUTH_REF` / `<凭据>` / `SEARCH_PROVIDERS_FILE`。
+  - 脚本用 `scripts/u07-43/gen-queries.py` 生成 240 条互不重复查询（前 200 条覆盖全部 50 个术语），`scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / 超时率 ≤ 2%`；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`。**真实样本数仍为 0/200**，需要使用者提供端点与凭据后才会产生结论。
 - 报告与日志不记录查询原文、URL 查询串、页面正文或标题结论。
 
 ## 关键词卡片

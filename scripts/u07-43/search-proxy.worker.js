@@ -1,21 +1,21 @@
-// U-07-43 采样用的 HTTPS 检索适配端点（Cloudflare Workers / Deno Deploy 通用）。
+// U-07-43 采样用的 HTTPS 检索适配端点（Cloudflare Workers）。
 //
 // 背景：`infrastructure::search::http_json` 只发 GET `?q=<query>&format=json`，
 // 且要求响应形如 `{"results":[{"url":"https://...","title":"..."}]}`；
 // 博查 / Tavily 都是 POST + 自有响应形状，无法直接接进 `search_live.rs`。
 // 本 Worker 把两侧对上，让已有的检索 Key 能用于 200 条真实样本采集。
 //
-// 部署（Cloudflare Workers）：
-//   wrangler deploy
+// 一键部署（推荐）：
+//   UPSTREAM_KEY='<检索服务 Key>' bash scripts/u07-43/deploy-worker.sh --provider bocha
+// 脚本会注入三个 secret、执行 wrangler deploy，并写好 .tmp/u07-43/config.env。
+//
+// 手工部署：wrangler deploy，然后依次
 //   wrangler secret put UPSTREAM_KEY       # 博查/Tavily 的 Key
-//   wrangler secret put SHARED_TOKEN       # 自定义一段随机串，给采样脚本当 Bearer
-//   wrangler secret put UPSTREAM_PROVIDER  # bocha 或 tavily（也可用 vars 配置）
+//   wrangler secret put SHARED_TOKEN       # 自定义随机串，采样脚本当 Bearer 用
+//   wrangler secret put UPSTREAM_PROVIDER  # bocha 或 tavily
 //
-// 然后把 Worker 的公开 HTTPS 地址填给采样脚本的 SEARCH_ENDPOINT，
-// 例如 `https://u07-43-search.<your-subdomain>.workers.dev/search`。
-//
-// 注意：不要把任何 Key 写进本文件、providers.json 或提交信息。
-// 查询原文只在请求内存中使用，不写日志；失败时只回状态码。
+// 不要把任何 Key 写进本文件、providers.json 或提交信息。
+// 查询原文只在请求内存中使用，不写日志；失败时只回状态码与错误标签。
 
 const UPSTREAM = {
   bocha: {
@@ -37,6 +37,8 @@ const UPSTREAM = {
 };
 
 const MAX_RESULTS = 5;
+const MAX_QUERY_CHARS = 200; // 与 domain::vo::SanitizedQuery 上限一致
+const MAX_TITLE_CHARS = 40; // 与 domain::vo::TitleText::LIMIT 一致
 // 采样端硬超时 8s；上游留 6.2s，给 TLS 与 JSON 解析留余量。
 const UPSTREAM_TIMEOUT_MS = 6200;
 
@@ -52,11 +54,25 @@ function json(body, status = 200) {
 
 function normalize(raw) {
   const url = typeof raw.url === "string" ? raw.url : "";
-  const title = typeof raw.title === "string" ? raw.title : typeof raw.name === "string" ? raw.name : "";
-  const published = raw.publishedDate ?? raw.published_date ?? raw.dateLastCrawled ?? null;
-  // 适配器只接受 http(s) 绝对地址且不含空白，这里先过滤，避免整批被判 MalformedResponse。
+  // 适配器只接受 http(s) 绝对地址且不含空白，这里先过滤，
+  // 避免整批结果被判 MalformedResponse。
   if (!/^https?:\/\//i.test(url) || /\s/.test(url)) return null;
-  const hit = { url, title: title.slice(0, 200) };
+  let host = "";
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    return null;
+  }
+  if (!host) return null;
+  const supplied =
+    (typeof raw.title === "string" && raw.title.trim()) ||
+    (typeof raw.name === "string" && raw.name.trim()) ||
+    "";
+  // TitleText::new 拒绝空串：上游偶尔不给标题，用主机名兜底，
+  // 否则一条空标题就会让整个响应的 5 条结果全部失败。
+  const title = (supplied || host).slice(0, MAX_TITLE_CHARS);
+  const published = raw.publishedDate ?? raw.published_date ?? raw.dateLastCrawled ?? null;
+  const hit = { url, title };
   if (published !== null && published !== undefined && published !== "") {
     hit.publishedDate = String(published).slice(0, 32);
   }
@@ -95,21 +111,32 @@ async function callUpstream(config, query, token) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const query = (url.searchParams.get("q") ?? "").trim();
 
-    const expected = env.SHARED_TOKEN;
-    if (expected) {
-      const auth = request.headers.get("authorization") ?? "";
-      if (auth !== `Bearer ${expected}`) {
-        return json({ error: "unauthorized" }, 401);
-      }
+    // 部署自检：不消耗上游额度，也不回显任何凭据值。
+    if (url.pathname === "/health") {
+      return json({
+        ok: Boolean(env.SHARED_TOKEN && env.UPSTREAM_KEY),
+        provider: (env.UPSTREAM_PROVIDER ?? "bocha").toLowerCase(),
+        authRequired: true,
+      });
     }
+
+    // 没配共享令牌就拒绝服务：否则任何人都能拿这个 Worker 消耗上游额度。
+    const expected = env.SHARED_TOKEN;
+    if (!expected) return json({ error: "proxy_not_configured" }, 503);
+    const auth = request.headers.get("authorization") ?? "";
+    if (auth !== `Bearer ${expected}`) {
+      return json({ error: "unauthorized" }, 401);
+    }
+    if (!env.UPSTREAM_KEY) return json({ error: "upstream_key_missing" }, 500);
+
+    const query = (url.searchParams.get("q") ?? "").trim();
     if (!query) return json({ error: "missing_query" }, 400);
+    if (query.length > MAX_QUERY_CHARS) return json({ error: "query_too_long" }, 400);
 
     const provider = (env.UPSTREAM_PROVIDER ?? "bocha").toLowerCase();
     const config = UPSTREAM[provider];
     if (!config) return json({ error: "unknown_provider" }, 500);
-    if (!env.UPSTREAM_KEY) return json({ error: "upstream_key_missing" }, 500);
 
     let result = await callUpstream(config, query, env.UPSTREAM_KEY);
     // 429 时等一小段重试一次；重试的耗时计入本次样本时延，是真实端到端开销。
