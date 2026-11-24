@@ -210,9 +210,11 @@ fn collect_200_real_samples() {
     );
     let samples = store.load().expect("读取样本");
     let summary = summarize(&samples);
+    // 先落报告再断言：部分达标时也要留下 real_samples / timeouts / p95，
+    // 否则一次失败的采集什么都不写，无法判断差多少、卡在哪。
+    emit(&samples, harness.sources.len());
     assert_eq!(
         summary.real_sample_count, 200,
         "真实成功样本不足 200（缓存命中、失败或超时不计），请补测"
     );
-    emit(&samples, harness.sources.len());
 }

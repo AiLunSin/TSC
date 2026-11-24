@@ -29,7 +29,7 @@
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线（2026-11-24 18:15 实测）：**1047 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **91 例**、平台层 **30 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`（默认特性与 `llm-https` 两套）、分层、密钥、许可证门禁通过。桌面层由 55 例增至 91 例：实时转写协议解析与半句拼接、中文词间空格合并、摘要按句读收口、自动出卡限流、检索响应解析与来源回退、辅助回复 JSON 解析与提醒窗口切分等；平台层另含 UIA 字幕过滤与 OCR 兜底。
+最近一次全量基线（2026-11-24 19:10 实测）：**1049 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **93 例**、平台层 **30 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`（默认特性与 `llm-https` 两套）、分层、密钥、许可证门禁通过。桌面层由 55 例增至 93 例：实时转写协议解析与半句拼接、中文词间空格合并、摘要按句读收口、自动出卡限流、检索响应解析与来源回退、辅助回复 JSON 解析、提醒窗口切分与越界夹取等；平台层另含 UIA 字幕过滤与 OCR 兜底。
 
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
 
@@ -188,7 +188,17 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live -- --ignored
 ```
 
-  需同时设置 `SEARCH_PROVIDERS_FILE`、`SEARCH_QUERIES_FILE` 与 `<authRef>`；可选 `SEARCH_REPORT_PATH` 输出只含计数与时延的 JSON。`smoke_three_rounds` 对应 H-34-G 的 3 次验收，`collect_200_real_samples` 对应 200 条真实样本。
+  需同时设置 `SEARCH_PROVIDERS_FILE`、`SEARCH_QUERIES_FILE` 与 `<authRef>`；可选 `SEARCH_REPORT_PATH` 输出只含计数与时延的 JSON。`smoke_three_rounds` 对应 H-34-G 的 3 次验收，`collect_200_real_samples` 对应 200 条真实样本。**两个 `search_live` 用例都必须带 `--features llm-https`**：缺省特性下 `HttpJsonProvider` 没有真实 TLS 传输，每次检索都会 `Unreachable`；另外三个 `SEARCH_*` 路径必须传**绝对路径**（`cargo test` 的进程 CWD 是 crate 根目录，相对路径会被当成「文件不存在」而静默得到零源）。
+- U-07-43 的 200 条采样可一键编排（预检 → 3 次冒烟 → 200 条 → 判定）：
+
+```bash
+export SEARCH_ENDPOINT="https://<公网 HTTPS 检索端点>/search"
+export SEARCH_AUTH_REF="SEARCH_API_TOKEN"   # 可选，环境变量「名」不是值
+export SEARCH_API_TOKEN="<Bearer 凭据>"      # 仅当设置了 authRef
+bash scripts/run-u07-43-samples.sh
+```
+
+  脚本自动生成 `providers.json` 与 240 条互不重复的查询（`scripts/u07-43/gen-queries.py`），用 `scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / 超时率 ≤ 2%`；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`：自建 SearXNG 可直接填，已有的博查/Tavily Key 可部署 `scripts/u07-43/search-proxy.worker.js` 做协议转换。**真实样本数仍为 0/200**，需要使用者提供端点与凭据后才会产生结论。
 - 报告与日志不记录查询原文、URL 查询串、页面正文或标题结论。
 
 ## 关键词卡片

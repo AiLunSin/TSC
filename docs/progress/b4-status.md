@@ -1947,3 +1947,26 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - `tsc --noEmit`、`eslint .`、`npm run build` 通过；产物 `target/debug/meeting-copilot-desktop.exe`（18:42，22.23 MB，内嵌 `index-DPYUbDUf`）。
 
 未验证：真实 Key 下限额计数与两家服务端的计费口径是否一致（本地按请求次数计，不按 token）；`search-quota.json`/`assist.json` 在配置目录权限异常时的降级表现只在单测里覆盖。
+
+## §47 U-07-43 200 条采样：可执行编排落地（2026-11-24 18:50）
+
+用户要求「写个脚本跑起来」。此前 §8.9-C 只有一句裸 `cargo test`，且缺两个必要条件，实际照抄一定失败：
+
+**查到并修掉的三个真问题**
+
+1. **裸命令缺 `--features llm-https`**：`HttpJsonProvider::with_default_transport` 在缺省特性下不装 TLS 传输，每次检索直接 `Unreachable`，200 条样本不可能达标。`README.md` 的总命令带了特性，但 `open-items.md §8.9-B/C` 两条都没有，已补齐。
+2. **`SEARCH_*` 必须用绝对路径**：`cargo test` 的测试进程 CWD 是 `crates/infrastructure/`，而脚本/文档里的 `.tmp/...` 相对路径在那里不存在；`ProfileStore::load()` 把「文件不存在」当零源返回空列表且不报错，表现为 `providers.json 没有可用检索源`。本机用占位端点跑冒烟复现了这两种失败，修后确认配置能被解析、源可用、TLS 真的发起连接。脚本用 `os.path.abspath()`（Windows 原生路径）统一转换。
+3. **`collect_200_real_samples` 断言失败时不写报告**：`emit()` 在 `assert_eq!` 之后，一次只采到 173 条的失败运行什么都不留，无法定位差多少。已把 `emit()` 提到断言之前（只改测试文件，不改业务语义），失败也留 `real_samples / timeouts / p95`。
+
+**新增文件**
+
+- `scripts/run-u07-43-samples.sh`：一键编排。生成 `providers.json` 与 240 条查询 → 预检（端点 HTTPS、源启用健康、查询 ≥200 条且互不重复、authRef 环境变量非空，**只打印主机名不打印凭据**）→ 3 次冒烟 → 200 条采样 → 判定。换端点重跑会检测不一致并重建配置；`--check-only` 不出网、`--smoke-only` 只冒烟。退出码 0/1/2/3 区分达标、测试失败、配置错误、时延超预算。
+- `scripts/u07-43/gen-queries.py`：50 个会议/工程术语 × 6 个提问角度，确定性生成 240 条互不重复的查询（前 200 条覆盖 50×4）。重复查询会命中 `CacheService` 而不计入真实样本，所以生成器自带去重断言。
+- `scripts/u07-43/verdict.py`：判定 `real_samples ≥ 200`、`p95 ≤ 8000 ms`、`timeouts/samples ≤ 2%`，输出可粘贴的取证记录行；四种分支（达标 / 样本不足 / p95 超 / 超时率超）已用合成报告验证。报告不含 p99，SPEC 的 p99 ≤ 12s 需另按原始分位数核对，脚本如实提示。
+- `scripts/u07-43/search-proxy.worker.js`：给已有博查/Tavily Key 用的 HTTPS 转发端点（Cloudflare Workers 形态）。把 `GET ?q=&format=json` 转成上游 POST，响应规整为 `{results:[{url,title}]}`；上游无可用结果时返回 502 而不是空列表——空列表会被适配器当成一次「成功」样本，那是假样本。429 重试一次，重试耗时计入真实端到端时延。
+
+**为什么本机没有真的跑出 200 条**：外发白名单明确拒绝环回/私网/链路本地地址，本机代理不算真实源；SPEC 7.3 要求「使用者配置至少 1 个真实源并走真实网络，测试替身不计入性能样本」。所以脚本把「端点 + 凭据」留作唯一输入，三种接入方式写在脚本头部与 README：自建 SearXNG、部署转发 Worker、自定义 `providers.json`。**U-07-43 真实样本仍为 0/200，状态保持 open。**
+
+**本机验证**：`bash -n` 通过；`--check-only` 预检通过（含 authRef 缺失被拒、端点变更重建两条分支）；`verdict.py` 四分支 rc 正确；用占位端点跑 `--smoke-only` 复现并确认失败提示；`cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live --no-run` 编译通过；Python 两脚本 `py_compile`、Worker `node --check`、查询集 240 条去重（前 200 条覆盖 50 个术语）均通过。回归：`cargo fmt --all -- --check`、两套 clippy `-D warnings`、六门禁 + B4 七规则 + `check-bindings` 全绿；`cargo test --workspace -- --test-threads=1` **1049 passed / 0 failed / 12 ignored**（上轮 1047 + §46 的 2 例）。未发起任何真实检索、未消耗任何额度。
+
+**顺带查清的两个本机测试坑**（已写入 `open-items.md §8.11`）：① `TEMP` 用 MSYS 风格 `/c/...` 时，`infrastructure --lib` 的 4 个临时文件用例报「拒绝访问 / CannotOpen」，换 Windows 风格绝对路径后 149 passed；② `export TEMP=新值 TMP="${TEMP}"` 写在同一行时 `${TEMP}` 展开的是旧值（shell 先展开后赋值），`GetTempPathW` 优先读 TMP 又落回系统临时目录——必须拆成两行 export，脚本已按此修正。

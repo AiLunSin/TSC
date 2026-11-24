@@ -8,7 +8,7 @@
 ## 0. 状态速览
 
 - **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）、本地门禁 34/34 复核（2026-11-23）、Q-01/Q-06 清理与重建回归（2026-11-23）、Q-07 入库、AUD-17 门禁进 CI、X-AUD-15 OnceLock 改造（2026-11-23）、U-07-52 归档保留期（2026-11-24，方案 B：5 年，个人自用简化确认）。
-- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07-43（实现完成，真实样本 0/200）、U-08（真实 LLM 采样子项已于 2026-11-23 与 2026-11-24 两次取证，AC-20/AC-22 基线 120 样本 success=1.0；其余未判定）、U-09（A~F 已实现并推送 `f3d66a4`，H-34-G 手工验收入口已就绪，待真实端点验收）、`platform-win` 的 UIA 字幕适配器已实现并与采集状态接线（2026-11-24；腾讯会议/飞书窗口 UIA 元素数为 0，真实字幕文本未取得，保持 open）、OCR 已实现（前台会议窗口底部区域，2026-11-24；未在真实会议字幕上验证）、12 个 `#[ignore]`（含 H-34-G 的两个真实源入口）、`tests/replay/`。
+- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07-43（实现完成、200 条采样脚本已就绪，真实样本仍 0/200，缺使用者提供的公网检索端点与凭据）、U-08（真实 LLM 采样子项已于 2026-11-23 与 2026-11-24 两次取证，AC-20/AC-22 基线 120 样本 success=1.0；其余未判定）、U-09（A~F 已实现并推送 `f3d66a4`，H-34-G 手工验收入口已就绪，待真实端点验收）、`platform-win` 的 UIA 字幕适配器已实现并与采集状态接线（2026-11-24；腾讯会议/飞书窗口 UIA 元素数为 0，真实字幕文本未取得，保持 open）、OCR 已实现（前台会议窗口底部区域，2026-11-24；未在真实会议字幕上验证）、12 个 `#[ignore]`（含 H-34-G 的两个真实源入口）、`tests/replay/`。
 - **待裁决**：Q-01、Q-06 已于 2026-11-23 执行关闭；Q-02~Q-05 已于 2026-11-23 删除；治理项 Q-07、AUD-17、X-AUD-15 已于 2026-11-23 执行。
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
 - **本轮闭环（2026-11-24）**：平台层新增 UIA 字幕与 OCR 兜底（提交 `9c6ca08`）；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复 Toolhelp 快照漏掉 64 位主进程；OCR 默认关闭（`OCR_FALLBACK=1` 开启），ASR 仍为主链路；新增开发期隐私注入入口 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（`app/src-tauri/src/privacy.rs`，默认关、只认 `"1"`、不加 IPC 命令），为设置页第 8 项备好取证手段；用一次性临时凭据跑通 `llm_live` 9 例与 120 样本基线（`b4-status.md §34`）；全量基线 **1000 passed / 0 failed / 12 ignored**，改动包 47（desktop）+ 27（platform-win，串行）通过，clippy/fmt 与四条门禁 rc=0。真实会议字幕文本未取得，U-05/U-08 保持 open。
@@ -31,7 +31,7 @@
 | U-05 | 设置向导 + 卡片前端产品化接入 | 部分取证：第 1~6、9、10 项真机通过；第 7 卡片渲染与第 8 投屏遮蔽未判定（2026-11-23，见 `b4-status.md §32`）；**第 8 项开发期注入入口已于 2026-11-24 就绪并接入视图事实**（`app/src-tauri/src/privacy.rs` → `main.rs::active_view`，`screen_share`/`emergency_masked` 真正作用到 `body_visible` 与点击态，见 §8.3）；**第 7/8 项取证步骤已改为不依赖真实会议**（2026-11-24，手动文本出卡 + 环境变量启动 exe，含判定表） | 卡片渲染与投屏/紧急遮蔽的真机结论 | 有可复现的联网与真机记录 | 投屏 / 会议样本 |
 | U-07-41.5 | 负反馈加权 | **已实现并提交（`c96f381`）**：事件/权重表、加权与硬抑制、三维统计、门禁扫描面 | 无（真实使用数据由后续会议累积） | 已满足 | — |
 | U-07-42 | 缓存 / outbox | **已实现并提交（`c96f381`）**：TTL/LRU、重启恢复、3 次退避、500 上限 | “≤3 秒识别断网、30 秒补齐率 ≥98%”需真实断网取证 | 真实断网演练记录 | 断网环境 |
-| U-07-43 | 按需补全实体 | **机制已实现并提交（`c96f381`）**；G-43-D 五类异常已覆盖；真实样本 0/200 | 阻塞项 U-09 的 A~F 已实现，待真实端点 H-34-G 验收后启动采样 | U-09 真实端点验收 + 用户配置真实源 + 样本达标 | 检索源、性能样本 |
+| U-07-43 | 按需补全实体 | **机制已实现并提交（`c96f381`）**；G-43-D 五类异常已覆盖；**200 条采样编排已就绪（2026-11-24）：`run-u07-43-samples.sh` + 240 条查询集 + 转发端点模板 + 判定脚本**；真实样本仍 0/200 | 阻塞项 U-09 的 A~F 已实现；脚本预检/冒烟/失败路径已本机验证，只差真实 HTTP 端点 | U-09 真实端点验收 + 用户配置真实源 + 跑出 200 条达标样本 | 检索源、性能样本 |
 | U-07-52 | 审计哈希链存储 | **已实现并提交（`c96f381`）**：只追加表、触发器、哈希链、月度归档；G-52-D 运行时摘要扫描已接入；**已关闭（2026-11-24）** | 无（方案 B：在线 180 天 + 归档 5 年；个人自用简化确认） | 已满足 | — |
 | U-08 | 真实端点 / 真机判定 | 部分取证：真实 LLM 采样 9/9 通过（2026-11-23，见 `b4-status.md §31`）；**2026-11-24 复测 9/9 + 基线 120 样本、4 任务 success_rate=1.0、0 degraded、`leak_hits=0`**（见 `§34`）；`ac23` 窗口内未触发限流 | 真实检索源、真实冷却、真机性能与误触发率均无结论 | 凭据可用 + 真机记录 + 指标达标 | 端点凭据、真机、样本 |
 | U-09 | 检索源接入（任务 34 最小闭环） | **A~F 已实现（2026-11-24）**：`providers.json` 校验、注册表、健康分类、`http_json`、零源模式与按需 runner；H-34-G 手工入口 `search_live.rs` 已就绪并编译通过 | 真实端点与凭据；3 次手工检索；200 条真实样本 | 自动化用例已过；需真实端点验收 | 真实端点与凭据 |
@@ -576,21 +576,36 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test llm_liv
 **B. 检索源冒烟**（`search_live.rs::smoke_three_rounds`，H-34-G）
 
 ```bash
+# 三个 SEARCH_* 路径必须是绝对路径：cargo test 进程 CWD 是 crate 根目录
 export SEARCH_PROVIDERS_FILE="<providers.json 绝对路径>"
 export SEARCH_QUERIES_FILE="<查询文件绝对路径，至少 3 条>"
 export <authRef>="<Bearer 凭据>"
-export SEARCH_REPORT_PATH=".tmp/search-report.json"   # 可选，只含计数与时延
+export SEARCH_REPORT_PATH="<报告绝对路径>"   # 可选，只含计数与时延
 
-cargo test -p meeting-copilot-infrastructure --test search_live smoke_three_rounds -- --ignored --test-threads=1
+# 必须带 --features llm-https：缺省特性下没有真实 TLS 传输，检索全部 Unreachable
+cargo test -p meeting-copilot-infrastructure --features llm-https \
+  --test search_live smoke_three_rounds -- --ignored --test-threads=1 --nocapture
 ```
 
 把 `<authRef>` 替换成 `providers.json` 里登记的真实变量名；不要把凭据写进仓库或提交信息。
+推荐直接使用 `bash scripts/run-u07-43-samples.sh --smoke-only` 完成上述编排（含路径与特性修正）。
 
 **C. 200 条真实样本**（`search_live.rs::collect_200_real_samples`，U-07-43）
 
 ```bash
-export SEARCH_QUERIES_FILE="<至少 200 条纯文本路径>"
-cargo test -p meeting-copilot-infrastructure --test search_live collect_200_real_samples -- --ignored --test-threads=1
+export SEARCH_ENDPOINT="https://<公网 HTTPS 检索端点>/search"
+export SEARCH_AUTH_REF="<环境变量名>"        # 可选
+export <authRef 变量>="<Bearer 凭据>"
+bash scripts/run-u07-43-samples.sh
+```
+
+脚本会生成 `providers.json` 与 240 条互不重复查询、先跑 3 次冒烟、再跑 200 条，最后用
+`scripts/u07-43/verdict.py` 判定；`--check-only` 只预检。等价的裸命令（务必带特性与绝对路径）：
+
+```bash
+export SEARCH_QUERIES_FILE="<至少 200 条纯文本绝对路径>"
+cargo test -p meeting-copilot-infrastructure --features llm-https \
+  --test search_live collect_200_real_samples -- --ignored --test-threads=1 --nocapture
 ```
 
 判定：真实成功样本必须 `=200`；缓存命中、失败、超时都不计。报告只含 `real_samples`、`p50_ms`、`p95_ms`、`status`，不含查询原文。
@@ -632,3 +647,7 @@ export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 4. `secure_store` 用例偶发互踩 → 加 `--test-threads=1`。
 5. 前端改动后启动仍是旧界面 → `cargo clean -p meeting-copilot-desktop` 再 `cargo build`。
 6. agent 进程无法创建 WebView2 → 真机必须双击 `target\debug\meeting-copilot-desktop.exe`。
+7. `search_live` 报「providers.json 没有可用检索源」→ 多半是 `SEARCH_PROVIDERS_FILE` 用了相对路径：`cargo test` 进程 CWD 是 `crates/infrastructure/`，`ProfileStore::load()` 按「文件不存在」返回空列表，不会报错。用绝对路径（`run-u07-43-samples.sh` 已自动转换）。
+8. `search_live` 三次检索全部 `Unreachable` → 忘了 `--features llm-https`；缺省特性下 `HttpJsonProvider::with_default_transport` 不装 TLS 传输。
+9. `run-u07-43-samples.sh` 复用上一次的占位 `providers.json` → 换端点时脚本会检测不一致并重建；也可删掉 `.tmp/u07-43/providers.json` 后重跑。
+10. `infrastructure --lib` 里 `audit/retention`、`profile_store`、`store/repo` 的临时文件用例报「拒绝访问 / CannotOpen」→ `TEMP` 用了 MSYS 风格 `/c/...`。改成 Windows 风格绝对路径（如 `C:\...\TSC\.tmp\msvc-temp`）后 149 passed / 0 failed；`run-u07-43-samples.sh` 已按此处理。
