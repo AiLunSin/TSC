@@ -31,7 +31,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 PATTERNS=(
-  'sk-[A-Za-z0-9_-]{16,}'
+  # `sk-` 必须落在 token 左边界：真实密钥形如 `sk-proj-...`、`"sk-..."`，
+  # 而 `vosk-model-small-cn-0.22` 这类标识符里的 `sk-` 不是凭据。
+  '(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}'
   'sk-[A-Za-z0-9]{4,}\*{3,}[A-Za-z0-9]{2,}'
   '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
   'https?://[^ \t"'\'']+\?[^ \t"'\'']+'
@@ -49,9 +51,8 @@ scan_file() {
       matched="$(printf '%s\n' "${matched}" \
         | grep -vE '禁止|不得|不调用|否决|严禁|不允许|防止|规则 [0-9]|\*\*不\*\*|不.*调用' || true)"
     fi
-    printf '%s\n' "${matched}" | grep -v '^$' \
-      | cut -d: -f1 \
-      | sed "s|^|${file}:|"
+    printf '%s\n' "${matched}" | grep -v '^$' | cut -d: -f1 \
+      | while IFS= read -r lineno; do printf '%s:%s\n' "${file}" "${lineno}"; done
   done
 }
 
@@ -152,6 +153,13 @@ if [[ ${SELF_TEST} -eq 1 ]]; then
   fi
   if printf '%s' "${out}" | grep -q 'abcdefghij'; then
     echo "self-test failed: 回显了内容" >&2
+    exit 1
+  fi
+  # 反例：`vosk-model-...` 这类标识符中的 `sk-` 不是凭据，不得误报。
+  printf 'model=vosk-model-small-cn-0.22\npath=app/src-tauri/asr/vosk-model-small-cn-0.22\n' \
+    > "${tmp}/benign.md"
+  if [[ -n "$(scan_file "${tmp}/benign.md")" ]]; then
+    echo "self-test failed: 误报了模型目录名" >&2
     exit 1
   fi
   echo "self-test ok: 只输出 文件:行号"
