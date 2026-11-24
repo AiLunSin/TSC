@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { invokeCommand } from "../bridge/tauri";
 import type {
+  AssistConfigDto,
   EndpointChoiceDto,
   ModelChoiceDto,
   ProbeReportDto,
@@ -58,6 +59,10 @@ function issueText(codes: readonly string[]): string {
 
 export function SettingsPage() {
   const [snapshot, setSnapshot] = useState<SettingsSnapshotDto | null>(null);
+  const [assistConfig, setAssistConfig] = useState<AssistConfigDto | null>(null);
+  const [tipLines, setTipLines] = useState(5);
+  const [contextLines, setContextLines] = useState(12);
+  const [assistNotice, setAssistNotice] = useState<string | null>(null);
   const [keyDraft, setKeyDraft] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -77,6 +82,20 @@ export function SettingsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 辅助回复的窗口设置独立于模型设置，单独读一份。
+  useEffect(() => {
+    void (async () => {
+      try {
+        const config = await invokeCommand<AssistConfigDto>("assist_config");
+        setAssistConfig(config);
+        setTipLines(config.tipLines);
+        setContextLines(config.contextLines);
+      } catch {
+        // 读不到就按默认值展示
+      }
+    })();
+  }, []);
 
   if (errorText !== null && snapshot === null) {
     return (
@@ -170,6 +189,22 @@ export function SettingsPage() {
     }
   }
 
+  async function saveAssist(): Promise<void> {
+    try {
+      const config = await invokeCommand<AssistConfigDto>("assist_config_save", {
+        input: { tipLines, contextLines },
+      });
+      setAssistConfig(config);
+      setTipLines(config.tipLines);
+      setContextLines(config.contextLines);
+      setAssistNotice(
+        `已保存：提醒看最近 ${String(config.tipLines)} 句，回应参考最近 ${String(config.contextLines)} 句。`,
+      );
+    } catch (error) {
+      setAssistNotice(ipcErrorText(error) ?? "保存失败，请稍后重试。");
+    }
+  }
+
   const advancedVisible = advancedOpen || !snapshot.advancedCollapsed;
   const canSaveNow = snapshot.canSave || keyDraft.trim() !== "";
   const canTestNow = snapshot.canTest || keyDraft.trim() !== "";
@@ -256,6 +291,55 @@ export function SettingsPage() {
             打开日志
           </button>
         </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>辅助回复</h3>
+        <div className="settings-actions">
+          <label className="field field-inline">
+            <span>提醒看最近（句）</span>
+            <input
+              type="number"
+              min={3}
+              max={10}
+              value={tipLines}
+              onChange={(event) => {
+                setTipLines(Number.parseInt(event.target.value, 10) || 0);
+              }}
+            />
+          </label>
+          <label className="field field-inline">
+            <span>上下文（句）</span>
+            <input
+              type="number"
+              min={5}
+              max={20}
+              value={contextLines}
+              onChange={(event) => {
+                setContextLines(Number.parseInt(event.target.value, 10) || 0);
+              }}
+            />
+          </label>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => {
+              void saveAssist();
+            }}
+          >
+            保存
+          </button>
+        </div>
+        <p className="hint">
+          当前：提醒看最近 {assistConfig?.tipLines ?? 5} 句、回应参考最近{" "}
+          {assistConfig?.contextLines ?? 12} 句。提醒只依据最后几句，上下文供&quot;怎么回&quot;参考；
+          越界会夹到 3~10 / 5~20 句。
+        </p>
+        {assistNotice === null ? null : (
+          <p className="settings-notice" role="status">
+            {assistNotice}
+          </p>
+        )}
       </div>
 
       <button

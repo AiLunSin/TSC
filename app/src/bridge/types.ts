@@ -45,6 +45,26 @@ export interface SearchConfigDto {
   hasKey: boolean;
   auto: boolean;
   ready: boolean;
+  hourlyLimit: number;
+  usedThisHour: number;
+}
+
+export interface SearchConfigInputDto {
+  provider: string;
+  key: string;
+  auto: boolean;
+  hourlyLimit: number;
+  clearKey: boolean;
+}
+
+export interface AssistConfigDto {
+  tipLines: number;
+  contextLines: number;
+}
+
+export interface AssistConfigInputDto {
+  tipLines: number;
+  contextLines: number;
 }
 
 export interface SearchHitDto {
@@ -185,8 +205,11 @@ export const IPC_COMMANDS = [
   "ingest_explanation",
   "search_config",
   "search_config_save",
+  "search_clear_key",
   "web_search",
   "assist_reply",
+  "assist_config",
+  "assist_config_save",
 ] as const;
 
 export type IpcCommand = (typeof IPC_COMMANDS)[number];

@@ -159,6 +159,7 @@ fn main() {
                 config_dir.clone(),
                 search_secure,
             )));
+            app.manage(Arc::new(ipc::assist::AssistState::new(config_dir.clone())));
             app.manage(build_state(config_dir, presets, cards.clone()));
             tracing::info!(
                 protocol = IPC_PROTOCOL_VERSION,
@@ -188,8 +189,11 @@ fn main() {
             ipc::explain::ingest_explanation,
             ipc::search::search_config,
             ipc::search::search_config_save,
+            ipc::search::search_clear_key,
             ipc::search::web_search,
-            ipc::assist::assist_reply
+            ipc::assist::assist_reply,
+            ipc::assist::assist_config,
+            ipc::assist::assist_config_save
         ])
         .run(tauri::generate_context!())
         .expect("failed to run meeting-copilot desktop");

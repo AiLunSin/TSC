@@ -95,7 +95,9 @@
     "provider",
     "hasKey",
     "auto",
-    "ready"
+    "ready",
+    "hourlyLimit",
+    "usedThisHour"
   ],
   "SearchHitDto": [
     "title",
@@ -112,5 +114,20 @@
     "points",
     "replies",
     "note"
+  ],
+  "SearchConfigInputDto": [
+    "provider",
+    "key",
+    "auto",
+    "hourlyLimit",
+    "clearKey"
+  ],
+  "AssistConfigDto": [
+    "tipLines",
+    "contextLines"
+  ],
+  "AssistConfigInputDto": [
+    "tipLines",
+    "contextLines"
   ]
 }

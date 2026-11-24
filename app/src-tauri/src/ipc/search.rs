@@ -7,6 +7,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use meeting_copilot_application::settings::{PortError, SecureStore};
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,14 @@ use crate::ipc::dto::{
 /// 配置文件固定放在应用配置目录下，与 `settings.json` 分开：
 /// 设置文件是"恰 4 键"的强契约，不宜混入检索配置。
 const CONFIG_FILE: &str = "search.json";
+/// 限额计数单独存一个文件：只在查询时写，不与配置写竞争。
+const QUOTA_FILE: &str = "search-quota.json";
+/// 限额窗口：按整小时滚动，窗口过期即重置计数。
+const QUOTA_WINDOW_SECS: u64 = 3_600;
+/// 默认每小时最多查 20 次；够开会用，也不至于把免费额度一轮打完。
+const DEFAULT_HOURLY_LIMIT: u32 = 20;
+/// 限额上限：再高就等于不设限，不如直接用 0。
+const MAX_HOURLY_LIMIT: u32 = 200;
 /// 单次查询上限：查询串只应是"一个词或一句短语"。
 const MAX_QUERY_CHARS: usize = 80;
 /// 单次返回条数：够做卡片来源即可，多了界面放不下。
@@ -72,13 +81,20 @@ impl SearchProvider {
     }
 }
 
-/// 落盘的检索配置：3 键，版本不符直接回默认。
+/// 落盘的检索配置：4 键，版本不符直接回默认。
+/// `hourly_limit` 带默认值：旧文件缺这一键也能读，不会把 provider/auto 一起丢掉。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SearchFileV1 {
     schema_version: u32,
     provider: String,
     auto: bool,
+    #[serde(default = "default_hourly_limit")]
+    hourly_limit: u32,
+}
+
+fn default_hourly_limit() -> u32 {
+    DEFAULT_HOURLY_LIMIT
 }
 
 impl Default for SearchFileV1 {
@@ -88,8 +104,35 @@ impl Default for SearchFileV1 {
             provider: SearchProvider::Bocha.as_str().to_owned(),
             // 自动补来源默认关：出网必须由用户显式开启。
             auto: false,
+            hourly_limit: DEFAULT_HOURLY_LIMIT,
         }
     }
+}
+
+/// 限额计数：`window_start` 为本次窗口起点（Unix 秒），过窗即重置。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct QuotaFile {
+    schema_version: u32,
+    window_start: u64,
+    count: u32,
+}
+
+impl QuotaFile {
+    fn fresh(now: u64) -> Self {
+        Self {
+            schema_version: 1,
+            window_start: now,
+            count: 0,
+        }
+    }
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .unwrap_or(0)
 }
 
 impl SearchFileV1 {
@@ -133,6 +176,34 @@ impl SearchStore {
         fs::write(&tmp, json).map_err(|_| PortError::Unavailable)?;
         fs::rename(&tmp, self.main_path()).map_err(|_| PortError::Unavailable)
     }
+
+    fn quota_path(&self) -> PathBuf {
+        self.dir.join(QUOTA_FILE)
+    }
+
+    /// 读限额计数：窗口过期或文件损坏都从零开始，不因为一个坏文件把用户挡在外面。
+    fn load_quota(&self, now: u64) -> QuotaFile {
+        let Ok(text) = fs::read_to_string(self.quota_path()) else {
+            return QuotaFile::fresh(now);
+        };
+        match serde_json::from_str::<QuotaFile>(&text) {
+            Ok(file)
+                if file.schema_version == 1
+                    && now.saturating_sub(file.window_start) < QUOTA_WINDOW_SECS =>
+            {
+                file
+            }
+            _ => QuotaFile::fresh(now),
+        }
+    }
+
+    fn save_quota(&self, quota: &QuotaFile) -> Result<(), PortError> {
+        fs::create_dir_all(&self.dir).map_err(|_| PortError::Unavailable)?;
+        let json = serde_json::to_vec_pretty(quota).map_err(|_| PortError::Corrupted)?;
+        let tmp = self.dir.join("search-quota.json.tmp");
+        fs::write(&tmp, json).map_err(|_| PortError::Unavailable)?;
+        fs::rename(&tmp, self.quota_path()).map_err(|_| PortError::Unavailable)
+    }
 }
 
 /// 检索运行态：配置 + 独立凭据。由 Tauri 管理，不放进 `AppState`。
@@ -158,6 +229,14 @@ impl SearchState {
             .filter(|key| !key.trim().is_empty()))
     }
 
+    /// 清除凭据：失败说明存储不可用，不假装成功。
+    pub fn clear_key(&self) -> Result<SearchConfigDto, IpcErrorDto> {
+        self.secure
+            .delete()
+            .map_err(|_| IpcErrorDto::new("search_key_unwritable", "检索 Key 清除失败。", true))?;
+        Ok(self.config())
+    }
+
     pub fn config(&self) -> SearchConfigDto {
         let file = self.store.load();
         let has_key = self.read_key().unwrap_or(None).is_some();
@@ -166,10 +245,13 @@ impl SearchState {
             has_key,
             auto: file.auto,
             ready: has_key && cfg!(feature = "llm-https"),
+            hourly_limit: file.hourly_limit,
+            used_this_hour: self.store.load_quota(unix_now()).count,
         }
     }
 
-    /// 保存：留空 Key 表示沿用现有凭据；服务名非法直接拒绝。
+    /// 保存：留空 Key 表示沿用现有凭据，`clearKey` 表示删掉已存凭据；
+    /// 限额超过上限按上限记，0 表示不限额。
     pub fn save_config(
         &self,
         input: &SearchConfigInputDto,
@@ -178,7 +260,11 @@ impl SearchState {
             IpcErrorDto::new("search_provider_invalid", "不支持的检索服务。", false)
         })?;
         let raw_key = input.key.trim();
-        if !raw_key.is_empty() {
+        if input.clear_key {
+            self.secure.delete().map_err(|_| {
+                IpcErrorDto::new("search_key_unwritable", "检索 Key 清除失败。", true)
+            })?;
+        } else if !raw_key.is_empty() {
             let secret = meeting_copilot_application::settings::SecretBytes::new(
                 raw_key.as_bytes().to_vec(),
             );
@@ -197,11 +283,32 @@ impl SearchState {
                 schema_version: 1,
                 provider: provider.as_str().to_owned(),
                 auto: input.auto,
+                hourly_limit: input.hourly_limit.min(MAX_HOURLY_LIMIT),
             })
             .map_err(|_| {
                 IpcErrorDto::new("search_config_unwritable", "检索配置保存失败。", true)
             })?;
         Ok(self.config())
+    }
+
+    /// 扣一次限额；`limit = 0` 表示不限额。超限时给出可照做的提示。
+    fn consume_quota(&self, limit: u32) -> Result<(), IpcErrorDto> {
+        if limit == 0 {
+            return Ok(());
+        }
+        let now = unix_now();
+        let mut quota = self.store.load_quota(now);
+        if quota.count >= limit {
+            return Err(IpcErrorDto::new(
+                "search_quota_exceeded",
+                &format!("本小时联网查已用满 {limit} 次，可调高限额或下个整点后再试。"),
+                true,
+            ));
+        }
+        quota.count = quota.count.saturating_add(1);
+        // 计数写不进去不影响本次查询，只是下次可能少扣一次。
+        let _ = self.store.save_quota(&quota);
+        Ok(())
     }
 
     /// 单次查询：未配置时给出可照做的提示，而不是空列表。
@@ -223,6 +330,8 @@ impl SearchState {
                 false,
             ));
         };
+        // 先扣额度再出网：请求一发出，服务商那边就已经计费了。
+        self.consume_quota(file.hourly_limit)?;
         let hits = run_search(provider, &key, &query)?;
         Ok(SearchResponseDto {
             provider: provider.display_name().to_owned(),
@@ -413,6 +522,14 @@ pub fn search_config_save(
     input: SearchConfigInputDto,
 ) -> Result<SearchConfigDto, IpcErrorDto> {
     state.save_config(&input)
+}
+
+/// 清除已存检索 Key；配置本身（服务名、限额、自动补来源）保留。
+#[tauri::command]
+pub fn search_clear_key(
+    state: State<'_, Arc<SearchState>>,
+) -> Result<SearchConfigDto, IpcErrorDto> {
+    state.clear_key()
 }
 
 #[tauri::command]

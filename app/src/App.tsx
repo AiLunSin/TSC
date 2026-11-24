@@ -106,6 +106,7 @@ export default function App() {
   const [searchProvider, setSearchProvider] = useState("bocha");
   const [searchKey, setSearchKey] = useState("");
   const [searchAuto, setSearchAuto] = useState(false);
+  const [searchLimit, setSearchLimit] = useState(20);
   const [searchBusy, setSearchBusy] = useState(false);
   const [searchNotice, setSearchNotice] = useState<string | null>(null);
   const [searchConfigNotice, setSearchConfigNotice] = useState<string | null>(null);
@@ -165,6 +166,7 @@ export default function App() {
           setSearchConfig(config);
           setSearchProvider(config.provider);
           setSearchAuto(config.auto);
+          setSearchLimit(config.hourlyLimit);
         }
       } catch {
         // 读不到就按"未配置"展示
@@ -321,17 +323,40 @@ export default function App() {
     setSearchConfigNotice(null);
     try {
       const config = await invokeCommand<SearchConfigDto>("search_config_save", {
-        input: { provider: searchProvider, key: searchKey, auto: searchAuto },
+        input: {
+          provider: searchProvider,
+          key: searchKey,
+          auto: searchAuto,
+          hourlyLimit: searchLimit,
+          clearKey: false,
+        },
       });
       setSearchConfig(config);
       setSearchProvider(config.provider);
       setSearchAuto(config.auto);
+      setSearchLimit(config.hourlyLimit);
       setSearchKey("");
       setSearchConfigNotice(
         config.ready ? "已保存，联网查可用。" : "已保存，但当前构建或 Key 还不足以联网。",
       );
     } catch (error) {
       setSearchConfigNotice(errorMessage(error, "保存失败，请稍后重试。"));
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  // 清除检索凭据：配置（服务名、限额）保留，Key 从系统凭据里删掉。
+  async function clearSearchKey(): Promise<void> {
+    setSearchBusy(true);
+    setSearchConfigNotice(null);
+    try {
+      const config = await invokeCommand<SearchConfigDto>("search_clear_key");
+      setSearchConfig(config);
+      setSearchKey("");
+      setSearchConfigNotice("已清除检索 Key，联网查会提示先配置。");
+    } catch (error) {
+      setSearchConfigNotice(errorMessage(error, "清除失败，请稍后重试。"));
     } finally {
       setSearchBusy(false);
     }
@@ -359,6 +384,12 @@ export default function App() {
       setSearchNotice(errorMessage(error, "联网查失败，请稍后重试。"));
     } finally {
       setSearchBusy(false);
+      // 用完一次就刷新计数，让"本小时 N/上限"跟着变。
+      try {
+        setSearchConfig(await invokeCommand<SearchConfigDto>("search_config"));
+      } catch {
+        // 计数刷不到不影响查询结果
+      }
     }
   }
 
@@ -637,7 +668,11 @@ export default function App() {
                   {searchConfig === null
                     ? "读取配置中…"
                     : searchConfig.ready
-                      ? `${SEARCH_PROVIDER_TEXT[searchConfig.provider] ?? searchConfig.provider} 已就绪`
+                      ? `${SEARCH_PROVIDER_TEXT[searchConfig.provider] ?? searchConfig.provider} 已就绪 · 本小时 ${
+                          searchConfig.hourlyLimit === 0
+                            ? `${String(searchConfig.usedThisHour)} 次（不限）`
+                            : `${String(searchConfig.usedThisHour)}/${String(searchConfig.hourlyLimit)} 次`
+                        }`
                       : searchConfig.hasKey
                         ? "已存 Key，当前构建未启用传输"
                         : "未配置 · 点开填 Key"}
@@ -669,6 +704,21 @@ export default function App() {
                         setSearchKey(event.target.value);
                       }}
                     />
+                    <label className="field field-inline">
+                      <span>每小时上限</span>
+                      <input
+                        className="key-input key-limit"
+                        type="number"
+                        min={0}
+                        max={200}
+                        step={5}
+                        value={searchLimit}
+                        onChange={(event) => {
+                          const next = Number.parseInt(event.target.value, 10);
+                          setSearchLimit(Number.isNaN(next) ? 0 : next);
+                        }}
+                      />
+                    </label>
                     <button
                       className="btn"
                       type="button"
@@ -678,6 +728,16 @@ export default function App() {
                       }}
                     >
                       {searchBusy ? "保存中…" : "保存"}
+                    </button>
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={searchBusy || searchConfig?.hasKey !== true}
+                      onClick={() => {
+                        void clearSearchKey();
+                      }}
+                    >
+                      清除 Key
                     </button>
                   </div>
                   <label className="checkline">

@@ -24,7 +24,7 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义 + 联网查证 + 辅助回复**：AC-B4-111~130 离线通过；23 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片、检索配置、联网查询、辅助回复）、3+3 端口、双系统凭据目标、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义 + 联网查证 + 辅助回复**：AC-B4-111~130 离线通过；26 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片、检索配置/清 Key、联网查询、辅助回复/窗口设置）、3+3 端口、双系统凭据目标、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
@@ -38,7 +38,7 @@ U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_rep
 - **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。第 8 项的注入入口已就绪（`PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`，见“隐私与凭据”），只差真机截图与结论。
 - **U-07**：负反馈加权、缓存/outbox 已实现；按需补全机制完成，真实 200 样本未采集（U-07-43 `open`）；审计哈希链与 5 年归档已关闭（U-07-52）。
 - **U-08**：真实 LLM 采样子项已关闭（2026-11-24：9 例 live 通过 + 4 任务 × 30 样本基线，见 `docs/progress/b4-status.md §34`）；其余仍 open——真实检索源（由 U-09 承接，待 H-34-G）、真实 LLM 冷却（本次窗口未触发 429，不作结论）、真机性能与误触发率；12 个 `#[ignore]` 用例保持不跑（含 H-34-G 两个手工入口）。
-- **桌面联网查与辅助回复**：链路、DTO、门禁都已落地（`web_search` / `assist_reply`），但两项都只有"代码可跑"，没有"效果已验收"——**真实检索 Key 下的中文召回质量与配额未测**（需自备博查/Tavily Key），**辅助回复在真实会议里的可用度未测**（提醒 5 句 / 上下文 12 句这组数是按"别翻旧账、还能接上前文"定的，需手测后调）。检索结果只展示地址、不打开浏览器，暂无"清除检索 Key"入口。
+- **桌面联网查与辅助回复**：链路、DTO、门禁都已落地（`web_search` / `assist_reply`），额度有每小时限额兜底（默认 20 次，可调 0~200），但两项都只有"代码可跑"，没有"效果已验收"——**真实检索 Key 下的中文召回质量未测**（需自备博查/Tavily Key），**辅助回复在真实会议里的可用度未测**（提醒 5 句 / 上下文 12 句这组数已开放给用户自行调整，但好坏仍需手测）。检索结果只展示地址、不打开浏览器。
 - **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`）、窗口 + 进程映像名会议检测（`meeting`）与 WASAPI 共享模式环回采集（`wasapi`，`AudioSource` 实现，含混音/单声道解码单测）；UIA 字幕通道已实现（窗口探测、500ms 差量泵、`SubtitleSource` 适配、文本直连出卡、采集状态投影），实测腾讯会议/飞书窗口 UIA 元素数为 0、真实字幕文本未取得，按降级状态展示；OCR 已实现（`Windows.Media.Ocr`，仅当前台会议窗口客户区底部 40% 区域；实测可识别中英文，未在真实会议字幕上验证；默认关闭，`OCR_FALLBACK=1` 时才作为 UIA 回退，避免与开源 ASR 并行重复出卡）；`platform-mac` 不适用（保留占位）。
 - **产品能力口径**：38/39/51 只交付契约与视图；前端已只读消费 DTO，但仍不宣称“产品级可点击卡片”或真机可用。
 
@@ -53,7 +53,7 @@ crates/
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
 app/                 React 19 + TypeScript + Vite 前端
-app/src-tauri/       Tauri 2 桌面壳（23 个 IPC 命令与装配）
+app/src-tauri/       Tauri 2 桌面壳（26 个 IPC 命令与装配）
 docs/sdd/            需求规格、技术方案、任务清单
 docs/progress/       各批次状态与验收记录
 docs/baseline/       LLM 与 ASR 基线
@@ -170,7 +170,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（23 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`clear_cards`、`start_asr`/`stop_asr`/`asr_status`/`set_auto_cards`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`、`search_config`/`search_config_save`/`web_search`、`assist_reply`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（26 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`clear_cards`、`start_asr`/`stop_asr`/`asr_status`/`set_auto_cards`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`、`search_config`/`search_config_save`/`search_clear_key`/`web_search`、`assist_reply`/`assist_config`/`assist_config_save`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
 - 采集状态栏由 `capture_status` 驱动：系统音频通道读取 WASAPI 环回健康度（可用即"就绪"）；字幕文本通道由 UIA 轮询驱动，检测到会议即自动启动（窗口无可读文本时"降级"、无会议窗口时"未启用"）；本地 ASR 读取实时管线运行状态（运行中即"就绪"）。识别进程异常退出时，`asr_status` 第三项回传可见原因（缺 vosk、模型不可读、无音频设备），不再静默失败。
 - UIA 字幕通道只接受"像一句话"的元素（长度、中英文标识符占比、固定控件标签词表三重过滤）；腾讯会议窗口里那些 `DanmuContainer`／`pageContainer`／`最小化` 之类的控件名会被全部丢弃，该通道因此常态为"降级"而不是假装就绪。字幕文本与 ASR 文本**分开存放**：文本位优先展示 ASR，ASR 为空才回退字幕，避免两条通道互相覆盖。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 2 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。
@@ -207,6 +207,9 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 - 联网查证（可选）：「联网查资料」折叠块里选服务（博查 Bocha / Tavily）、填检索 Key 并保存 → `search_config_save`。之后选中文字点"联网查"→ `web_search`，只把**选中的那段文字（≤80 字）**发出去（8s 超时），返回最多 5 条标题/站点/摘要/地址。检索 Key 存在**独立的系统凭据目标**（`meeting-copilot/search-api-key`），与模型 Key 互不覆盖，配置文件里只有服务名与开关。
   - **不会自动出网**：默认只在用户点"联网查"时查询。想省掉这一步，可勾选"生成卡片时自动补来源"——只影响用户点"生成卡片"那一下，且查不到就静默退回本机引用。
   - 服务端点固定为两家预设，不接受任意地址，避免把查询发到不可控主机。
+  - **每小时限额**：默认每小时最多查 20 次，可在同一折叠块里改（`0` = 不限，上限 200）。计数落在 `search-quota.json`（只有时间戳与次数），按整小时窗口重置；超限时直接拒绝并说明，不会悄悄继续消耗你的额度。折叠标题实时显示"本小时 N/上限"。
+  - **清除 Key**：同一折叠块里的"清除 Key"从系统凭据中删除检索凭据，服务名、限额与"自动补来源"配置保留。
+- 辅助回复的窗口可调：设置页"辅助回复"里改提醒句数（3~10，默认 5）与上下文句数（5~20，默认 12），保存后落 `assist.json`；越界值自动夹到范围内，提醒窗口不会长于上下文窗口。
 - 辅助回复（大模型）：转写区右上"AI 提醒 / 怎么回" → `assist_reply`。上下文**固定最近 12 句（≤900 字）**，其中**提醒只看最后 5 句**，更早的句子只供回应参考；可带选中的一句。返回两条提醒（下一步注意什么、可能被追问什么）与 1~2 条可以直接说出口的回应，逐条可复制。两段在同一次请求里分开标注，不多花一次调用。模型不按 JSON 格式返回时不会装作成功，而是把原文交回面板。无 Key 时直接提示去设置页配置，不静默降级。
 - 构建差异：`llm-https` 是**非默认特性**，只有带该特性构建的桌面壳才能真正出网（`cargo build -p meeting-copilot-desktop --features llm-https`）；不带特性的构建里"查意思"只会给出本机上下文，联网查与辅助回复会明确报"未启用传输"。
 - 打包：`asr/stream_asr.py` 随仓库入库并默认打包；vosk 模型（约 52MB）不入库——发布前复制到 `app/src-tauri/asr/vosk-model-small-cn-0.22/`，再叠加 `app/src-tauri/tauri.asr.conf.json`（Tauri CLI 参数 `--config tauri.asr.conf.json`）打包。基础配置不含模型，因此 CI 与 `cargo clippy`/`cargo test` 无需模型即可编译。
@@ -218,7 +221,7 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 - `Failed`/`Unverified` 仍可展示但不可点；投屏态由 G1 直接拒卡（0 卡），紧急遮蔽照常出卡但隐藏正文且不可点；撤回不可复活。
 - 前端 `app/src/cards/KeywordCard.tsx` / `CardDetail.tsx` 只读消费 10/5 项 DTO；仅 `enabled` 绑点击，禁用卡 `aria-disabled`，隐藏态只留条数角标，详情内联不抢焦点。
 - 点击只展开本地详情，不发起检索、不调 LLM、不外发、不写审计。
-- 联网查与辅助回复都由用户点击触发：联网查只发选中的词（≤80 字），辅助回复只发最近 12 句（提醒部分只依据最后 5 句）+ 选中句（≤900 字）；两者都不发整场转写、不落盘、不写日志正文。检索 Key 与模型 Key 使用两个独立的系统凭据目标。
+- 联网查与辅助回复都由用户点击触发：联网查只发选中的词（≤80 字），辅助回复只发最近 12 句（提醒部分只依据最后 5 句，两句数均可在设置里改）+ 选中句（≤900 字）；两者都不发整场转写、不落盘、不写日志正文。检索 Key 与模型 Key 使用两个独立的系统凭据目标。
 
 ## 隐私与凭据
 

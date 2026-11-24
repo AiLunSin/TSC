@@ -684,3 +684,19 @@ body {
   gap: 14px;
   margin-top: 16px;
 }
+
+/* 行内小字段：限额、窗口句数这类单个数字 */
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-inline input {
+  width: 88px;
+}
+
+.key-limit {
+  min-width: 72px;
+  max-width: 88px;
+}

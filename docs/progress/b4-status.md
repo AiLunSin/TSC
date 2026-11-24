@@ -1929,3 +1929,21 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 验证：`tsc --noEmit`、`eslint .`、`npm run build` 通过；分层、UI 集成六规则、G2 宣称、`scan-secrets`、`scan-secrets-docs --all-md`、`check-bindings`(17 DTO) 全绿；用无头 Edge 对 1082/1440 两种窗口宽度截图复核（有卡片、有转写、有 AI 面板的状态）；产物 `target/debug/meeting-copilot-desktop.exe`（18:01，`--features llm-https`，22.19 MB，内嵌 `index-CuPk4bR_`）。
 
 未验证：真机 125%/150% 缩放下折叠区与转写框的手感；右栏在 1180~1300px 之间仍会出现并被压窄。
+
+## §46 检索限额、清 Key 与辅助回复窗口可调（2026-11-24 18:40）
+
+用户三点要求：额度不用我操心（加限额功能）、辅助回复的窗口让用户自己调、把剩余 bug 修掉。
+
+- **每小时限额**：`search.json` 增第 4 键 `hourlyLimit`（`#[serde(default)]`，旧文件缺键也照读，不会把 provider/auto 一起丢掉）；默认 20，保存时 `min(200)`，`0` 视为不限。计数落 `search-quota.json`（`windowStart` + `count`，只有时间戳与次数），窗口 3600 秒过期自动重置；文件损坏/过期都从零开始，不把用户卡死在限额上。**先扣额度再出网**——请求一发出服务商就计费，所以失败也算一次。超限返回 `search_quota_exceeded`（可重试），界面提示"可调高限额或下个整点后再试"。
+- **清除检索 Key**：新命令 `search_clear_key`，走 `SecureStore::delete`，配置（服务名、限额、自动补来源）保留；界面在折叠块里给了按钮，未存 Key 时禁用。
+- **辅助回复窗口可调**：新 `assist.json`（`tipLines` / `contextLines`），`assist_config` / `assist_config_save` 两个命令；保存时夹取：提醒 3~10、上下文 5~20，且提醒不得长于上下文。设置页新增"辅助回复"一节，显示当前值并说明含义。
+- 前端：折叠标题实时显示"本小时 N/上限"；每次查询后刷新计数；限额用 `type=number`（0 表示不限）。
+- IPC 23 → **26**；`schema.json` 17 → **20 个 DTO**（新增 `SearchConfigInputDto`、`AssistConfigDto`、`AssistConfigInputDto`），`types.ts` 与 `check-bindings` 三处同步。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins --features llm-https`：**93 passed / 0 failed**（新增 2 例：窗口越界夹取、默认 5/12）。
+- 两套 clippy `-D warnings`、rustfmt、分层、UI 集成六规则、G2 宣称、`check-bindings`(20 DTO)、`scan-secrets`、`scan-secrets-docs` 全绿。
+- `tsc --noEmit`、`eslint .`、`npm run build` 通过；产物 `target/debug/meeting-copilot-desktop.exe`（18:42，22.23 MB，内嵌 `index-DPYUbDUf`）。
+
+未验证：真实 Key 下限额计数与两家服务端的计费口径是否一致（本地按请求次数计，不按 token）；`search-quota.json`/`assist.json` 在配置目录权限异常时的降级表现只在单测里覆盖。
