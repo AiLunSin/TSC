@@ -11,9 +11,9 @@
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB)
 
-当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写已接通，真机可出完整转写文本并支持选中查义、联网查证、按需出卡与大模型辅助回复，主栏已按“卡片 / 联网配置（默认收起）/ 转写 / 手动粘贴”分区；通用检索源适配器（U-09 A~F）已实现但未接入桌面卡片链路，桌面联网查走独立的两家预设（博查/Tavily），真实 Key 验收待进行；按需补全的 200 条真实检索样本已于 2026-11-24 用零账号 D 路径取证达标（见下文「检索源接入」）；设置页真机第 1~6、9、10 项已通过，UIA 字幕适配器已接线但腾讯会议窗口无可读文本、OCR 已实现（仅前台会议窗口底部区域），卡片渲染/投屏遮蔽真机结论仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写已接通，真机可出完整转写文本并支持选中查义、联网查证、按需出卡与大模型辅助回复，主栏已按“卡片 / 联网配置（默认收起）/ 转写 / 手动粘贴”分区；通用检索源适配器（U-09 A~F）已实现但未接入桌面卡片链路，桌面联网查走独立的两家预设（博查/Tavily），真实 Key 验收待进行；按需补全的 200 条真实检索样本已于 2026-11-24 用零账号 D 路径取证达标，三轮独立运行均 200/200、满足 ≥3 时段（见下文「检索源接入」与 `b4-status.md §50`）；桌面 exe 已于 21:57 重建，含停止态状态位文案修正；设置页真机第 1~6、9、10 项已通过，卡片渲染第 7 项判定表 1/4 通过（卡片正文完整、「查看详情」为可点态已由真机截图确认），UIA 字幕适配器已接线但腾讯会议窗口无可读文本、OCR 已实现（仅前台会议窗口底部区域），卡片展开详情/清空归零/禁用卡文案三格与投屏/紧急遮蔽两格仍缺界面截图**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
-仓库状态（2026-11-24）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（2026-11-23：web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。2026-11-23 完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。2026-11-24 完成检索源接入 A~F 与归档保留期确认（方案 B，在线 180 天 + 归档 5 年，U-07-52 关闭）；同日用一次性临时凭据复测真实 LLM 采样——9 个 live 用例通过、120 样本基线落表（见 `docs/progress/b4-status.md §34`），临时凭据在验收后作废。同日新增零账号 D 路径（本机桥把必应 RSS 转成适配器 JSON + 免账号 quick tunnel），U-07-43 三轮真实 200 样本均达标并关闭（p95 4461~4759 ms、p99 ≤6789 ms、超时率 ≤0.61%，详见 `b4-status.md §50`）。
+仓库状态（2026-11-24）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（2026-11-23：web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。2026-11-23 完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。2026-11-24 完成检索源接入 A~F 与归档保留期确认（方案 B，在线 180 天 + 归档 5 年，U-07-52 关闭）；同日用一次性临时凭据复测真实 LLM 采样——9 个 live 用例通过、120 样本基线落表（见 `docs/progress/b4-status.md §34`），临时凭据在验收后作废。同日新增零账号 D 路径（本机桥把必应 RSS 转成适配器 JSON + 免账号 quick tunnel），U-07-43 三轮真实 200 样本均达标并关闭（p95 4461~4759 ms、p99 ≤6789 ms、超时率 ≤0.61%，三时段 3/3 满足 G-43-C DoD，详见 `b4-status.md §50`）。21:48 查明本机 Rust 代理异常根因并把工具链 `bin` 前置到用户 PATH，21:57 重建桌面 exe；`b4-status.md §51` 记录收尾修复清单与残留限制（`rustup` 自身仍是坏代理，需 `rustup-init` 重装）。
 
 ## 当前进度
 
@@ -24,23 +24,23 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义 + 联网查证 + 辅助回复**：AC-B4-111~130 离线通过；26 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片、检索配置/清 Key、联网查询、辅助回复/窗口设置）、3+3 端口、双系统凭据目标、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义 + 联网查证 + 辅助回复**：AC-B4-111~130 离线通过；26 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片、检索配置/清 Key、联网查询、辅助回复/窗口设置）、3+3 端口、双系统凭据目标、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过；卡片渲染第 7 项判定表 1/4 通过（正文与「查看详情」可点态已确认），其余三格与投屏遮蔽两格待界面截图（U-05 `open`，见 `b4-status.md §49`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；H-34-G 的 3 次手工验收仍待真实端点，200 条真实样本已由 U-07-43 用 D 路径完成（三轮均 200/200） |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线（2026-11-24 19:10 实测）：**1049 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **93 例**、平台层 **30 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`（默认特性与 `llm-https` 两套）、分层、密钥、许可证门禁通过。桌面层由 55 例增至 93 例：实时转写协议解析与半句拼接、中文词间空格合并、摘要按句读收口、自动出卡限流、检索响应解析与来源回退、辅助回复 JSON 解析、提醒窗口切分与越界夹取等；平台层另含 UIA 字幕过滤与 OCR 兜底。
+最近一次全量基线（2026-11-24 22:25 复测，工具链修复与本轮脚本改动后数字不变）：**1049 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **93 例**、平台层 **30 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`（默认特性与 `llm-https` 两套）、分层、密钥、许可证门禁通过。桌面层由 55 例增至 93 例：实时转写协议解析与半句拼接、中文词间空格合并、摘要按句读收口、自动出卡限流、检索响应解析与来源回退、辅助回复 JSON 解析、提醒窗口切分与越界夹取等；平台层另含 UIA 字幕过滤与 OCR 兜底。
 
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
 
 仍未完成：
 
-- **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。第 8 项的注入入口已就绪（`PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`，见“隐私与凭据”），只差真机截图与结论。
-- **U-07**：负反馈加权、缓存/outbox 已实现；按需补全已闭环（U-07-43 三轮真实 200 样本均达标：p95 4461~4759 ms、p99 ≤6789 ms、超时率 ≤0.61%，见 `docs/progress/b4-status.md §50`）；审计哈希链与 5 年归档已关闭（U-07-52）。
-- **U-08**：真实 LLM 采样子项已关闭（2026-11-24：9 例 live 通过 + 4 任务 × 30 样本基线，见 `docs/progress/b4-status.md §34`）；其余仍 open——真实检索源已完成 200 样本取证（U-07-43 D 路径，三轮均 200/200），H-34-G 的 3 次手工验收仍待真实端点、真实 LLM 冷却（本次窗口未触发 429，不作结论）、真机性能与误触发率；12 个 `#[ignore]` 用例保持不跑（含 H-34-G 两个手工入口）。
-- **桌面联网查与辅助回复**：链路、DTO、门禁都已落地（`web_search` / `assist_reply`），额度有每小时限额兜底（默认 20 次，可调 0~200），但两项都只有"代码可跑"，没有"效果已验收"——**真实检索 Key 下的中文召回质量未测**（需自备博查/Tavily Key），**辅助回复在真实会议里的可用度未测**（提醒 5 句 / 上下文 12 句这组数已开放给用户自行调整，但好坏仍需手测）。检索结果只展示地址、不打开浏览器。
+- **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）的判定表 **1/4 通过**（2026-11-24 19:55 真机截图确认卡片正文、中文类型、引用/置信度角标与「查看详情」可点态），**点击展开详情、清空归零、禁用卡原因文案三格未取证**；投屏/紧急遮蔽（8）的注入入口与启动已验证（`[verify] launched`），但两模式的应用窗口内容未入镜、遮蔽表现无判定像素。**U-05 保持 `open`**，补齐只需两张卡片区截图（见 `open-items.md §8.3`），不需要真实会议。
+- **U-07**：负反馈加权、缓存/outbox 已实现；按需补全已闭环（U-07-43 三轮真实 200 样本均达标：p95 4461~4759 ms、p99 ≤6789 ms、超时率 ≤0.61%，三时段 3/3，见 `docs/progress/b4-status.md §50`）；审计哈希链与 5 年归档已关闭（U-07-52）。**整体仍 `open`**：AUD-03/AUD-04/AUD-06 三项未结，缓存/outbox 的「≤3 秒识别断网、30 秒补齐率 ≥98%」还缺真实断网演练记录。
+- **U-08**：真实 LLM 采样子项已关闭（2026-11-24：9 例 live 通过 + 4 任务 × 30 样本基线，见 `docs/progress/b4-status.md §34`）；其余仍 open——检索源适配器已完成 200 条真实出网样本取证（U-07-43 D 路径，三轮均 200/200），但 **H-34-G 的 3 次手工验收仍待真实端点**、真实 LLM 冷却（本次窗口未触发 429，不作结论）、真机性能与误触发率；12 个 `#[ignore]` 用例默认不跑，其中 U-07-43 的两个检索用例已由采样脚本显式 `--ignored` 运行达标，H-34-G 两个手工入口仍未跑。
+- **桌面联网查与辅助回复**：链路、DTO、门禁都已落地（`web_search` / `assist_reply`），额度有每小时限额兜底（默认 20 次，可调 0~200），但两项都只有"代码可跑"，没有"效果已验收"——**真实检索 Key 下的中文召回质量未测**（需自备博查/Tavily Key；U-07-43 的 200 条样本是检索源适配器在 D 路径下的链路取证，不等于桌面两家预设的效果验收），**辅助回复在真实会议里的可用度未测**（提醒 5 句 / 上下文 12 句这组数已开放给用户自行调整，但好坏仍需手测）。检索结果只展示地址、不打开浏览器。
 - **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`）、窗口 + 进程映像名会议检测（`meeting`）与 WASAPI 共享模式环回采集（`wasapi`，`AudioSource` 实现，含混音/单声道解码单测）；UIA 字幕通道已实现（窗口探测、500ms 差量泵、`SubtitleSource` 适配、文本直连出卡、采集状态投影），实测腾讯会议/飞书窗口 UIA 元素数为 0、真实字幕文本未取得，按降级状态展示；OCR 已实现（`Windows.Media.Ocr`，仅当前台会议窗口客户区底部 40% 区域；实测可识别中英文，未在真实会议字幕上验证；默认关闭，`OCR_FALLBACK=1` 时才作为 UIA 回退，避免与开源 ASR 并行重复出卡）；`platform-mac` 不适用（保留占位）。
-- **产品能力口径**：38/39/51 只交付契约与视图；前端已只读消费 DTO，但仍不宣称“产品级可点击卡片”或真机可用。
+- **产品能力口径**：38/39/51 只交付契约与视图；前端已只读消费 DTO，真机已确认卡片正文与「查看详情」可点态（§49，判定表 1/4），但展开详情/清空/禁用卡/遮蔽未收口，**不宣称产品级已完整验收或真机可用**。
 
 ## 目录结构
 
@@ -59,7 +59,7 @@ docs/progress/       各批次状态与验收记录
 docs/baseline/       LLM 与 ASR 基线
 docs/compliance/     许可证复核、SBOM
 scripts/             静态门禁、SBOM、用例名差集
-scripts/u07-43/      真实检索采样：A/B/C/D 四路径配置、预检、判定与本机桥（D 路径零账号）
+scripts/u07-43/      真实检索采样：A/B/C/D 四路径配置、预检、判定、本机桥（D 路径零账号）与 Windows 构建包装
 ```
 
 ## 界面
@@ -74,12 +74,14 @@ scripts/u07-43/      真实检索采样：A/B/C/D 四路径配置、预检、判
 
 ### 环境（Windows）
 
-本机 rustup shim 可能不可用；直接使用工具链内可执行文件，或前置 PATH：
+本机 `~/.cargo/bin` 下的 rustup 代理不可用（16 个 exe 的 SHA256 一致，实际是同一个 rustfmt 二进制，依赖只存在于工具链 `bin` 下的 `rustc_driver-*.dll`）。已查明根因并把工具链 `bin` **前置**到用户级 PATH 持久修复；`rustup` 自身仍是坏代理，`rustup update` 等功能需另跑 `rustup-init` 重装（见 `docs/progress/open-items.md §5`）。新开终端若仍异常，手动前置一次即可：
 
 ```bash
-export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
+export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$HOME/.cargo/bin:$PATH"
 export TEMP="$PWD/.tmp/test-temp"; export TMP="$TEMP"; mkdir -p "$TEMP"
 ```
+
+顺序不能反：只把工具链 `bin` **追加**到末尾时 `cargo` 仍会命中 `~/.cargo/bin` 的伪代理，表现为 `cargo --version` 输出 `rustfmt 1.11.0`、`cargo metadata --no-deps` 报 `Unrecognized option`。
 
 ### Rust
 
@@ -176,7 +178,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 - UIA 字幕通道只接受"像一句话"的元素（长度、中英文标识符占比、固定控件标签词表三重过滤）；腾讯会议窗口里那些 `DanmuContainer`／`pageContainer`／`最小化` 之类的控件名会被全部丢弃，该通道因此常态为"降级"而不是假装就绪。字幕文本与 ASR 文本**分开存放**：文本位优先展示 ASR，ASR 为空才回退字幕，避免两条通道互相覆盖。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 2 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。
 - 凭据经 `crates/platform-win/src/secure_store.rs` 写入 Windows 凭据管理器（唯一目标名）；非敏感配置为 `settings.json` **恰 4 键**、原子写、损坏回默认；Key 固定掩码 `masked`、不落盘明文、不进日志/审计/回放。
-- 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；设置页真机第 1~6、9、10 项已通过，卡片渲染与投屏遮蔽仍未判定，**不宣称整体界面已验收**。
+- 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；设置页真机第 1~6、9、10 项已通过，卡片渲染第 7 项 1/4 通过、投屏遮蔽两格待界面截图，**不宣称整体界面已验收**。
 - 真实采样入口：`bash scripts/run-llm-live.sh`（需 `LLM_LIVE=1` 与端点、模型、白名单、`LLM_LIVE_CALL_CAP` 齐备）；2026-11-24 复测 9 个 live 用例通过、4 任务 × 30 样本基线落表，结论与时延见 `docs/progress/b4-status.md §34`。基线需 `LLM_LIVE_CALL_CAP ≥ 120`，且记录根目录须先创建，否则脚本以 `record_dir_missing` 退出 2。
 
 ## 检索源接入
@@ -213,11 +215,11 @@ bash scripts/u07-43/setup.sh --mode c --providers .tmp/u07-43/providers.json --t
 bash scripts/run-u07-43-samples.sh
 ```
 
-  - **D 路径**：`scripts/u07-43/local-bridge.py` 把 `GET ?q=&format=json` 转成必应 RSS 请求并规整为 `{"results":[{"url","title"}]}`；`scripts/u07-43/start-bing-bridge.sh` 启动桥 + `cloudflared` 免账号 quick tunnel（不需要 Cloudflare 账号），注入随机令牌、写 `config.env`、做公网自检后跑采样。必应无结果时返回 502，避免用空列表凑假样本；上游单次抖动在桥内重试 3 次。quick tunnel 创建被限流（429）时会等待重试，仍不行才回退 localhost.run（后者域名会轮换，只适合短跑）。首次运行会自动把 `cloudflared` 下载到 `.tmp/u07-43/bin`；依赖 Python 3.8+，回退 localhost.run 时才需要 `ssh`。Windows 上采样经 `scripts/u07-43/run-cargo.ps1` 注入 MSVC 环境并关闭 dev debuginfo，避免 `sqlite3.c` 编译时因内存不足静默失败。
+  - **D 路径**：`scripts/u07-43/local-bridge.py` 把 `GET ?q=&format=json` 转成必应 RSS 请求并规整为 `{"results":[{"url","title"}]}`；`scripts/u07-43/start-bing-bridge.sh` 启动桥 + `cloudflared` 免账号 quick tunnel（不需要 Cloudflare 账号），注入随机令牌、写 `config.env`、做公网自检后跑采样。启动前会检测 8788 端口，**已有桥实例时直接报错退出**，避免多实例各自起隧道、互相覆盖 `config.env` 造成端点漂移；health 通过后还会确认进程确实是本次启动的桥。必应无结果时返回 502，避免用空列表凑假样本；上游单次抖动在桥内重试 3 次；桥日志只记方法、去参路径、状态码与长度，不记 query 原文。quick tunnel 创建被限流（429）时会等待重试，仍不行才回退 localhost.run（后者域名会轮换，只适合短跑）。首次运行会自动把 `cloudflared` 下载到 `.tmp/u07-43/bin`；依赖 Python 3.8+，回退 localhost.run 时才需要 `ssh`。Windows 上采样经 `scripts/u07-43/run-cargo.ps1` 注入 MSVC 环境并关闭 dev debuginfo，避免 `sqlite3.c` 编译时因内存不足静默失败；该脚本还会在 `Enter-VsDevShell` 前对大小写重复的代理变量去重，避免 INCLUDE 为空导致 `libsqlite3-sys` 静默 exit 2。
   - **B 路径**：`deploy-worker.sh` 用 `scripts/u07-43/wrangler.toml` + `package.json` 部署 `search-proxy.worker.js`，自动注入 `UPSTREAM_KEY` / `SHARED_TOKEN` / `UPSTREAM_PROVIDER`（`SHARED_TOKEN` 缺省时随机生成，不回显）。Worker 把 `GET ?q=&format=json` 转成博查/Tavily 的 POST，提供 `/health` 自检；上游无可用结果返回 502 而不是空列表，避免凑出假样本。Worker 地址与令牌写入本地 `config.env`，不入库。首次需 `wrangler login`；`--dry-run` 可只做本机检查。
   - **C 路径**：`SEARCH_PROVIDERS_FILE` 指向已存在的文件即进入自定义模式，脚本**不重建、不覆盖**；`scripts/u07-43/preflight.py` 按 Rust 侧约束逐项校验字段/枚举/`id` 与 `priority` 唯一性/公网 HTTPS 主机/每个 `authRef` 的环境变量非空（`degraded` 也算可用源，与 `ProviderProfile::is_usable` 对齐）。多 `authRef` 用 `--env NAME=VALUE` 逐个给值。
   - 配置统一写 `.tmp/u07-43/config.env`（`.tmp/` 已忽略）；主脚本自动加载，可用 `--config FILE` 指定、`--no-config` 忽略；也支持手动 `export SEARCH_ENDPOINT` / `SEARCH_AUTH_REF` / `<凭据>` / `SEARCH_PROVIDERS_FILE`。
-  - 脚本用 `scripts/u07-43/gen-queries.py` 生成 400 条互不重复查询（前 200 条覆盖全部 50 个术语）；采样会继续往后取查询，直到攒满 200 个真实成功样本，单条查询最多试 2 次——公网隧道偶发丢连接不会让整轮作废。`scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / p99 ≤ 12s / 超时率 ≤ 2%`；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`。
+  - 脚本用 `scripts/u07-43/gen-queries.py` 生成互不重复查询（主脚本默认 400 条，可用 `U07_QUERY_COUNT` 覆盖；单独调用 `gen-queries.py` 默认 240 条，前 200 条固定覆盖 50 个术语 × 4 个角度）；采样会继续往后取查询，直到攒满 200 个真实成功样本，单条查询最多试 2 次——公网隧道偶发丢连接不会让整轮作废。`scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / p99 ≤ 12s / 超时率 ≤ 2%`（`search_live.rs` 结尾断言同为 `>= 200`，多源配置下一次写入多条不会误判失败）；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`。
 - 报告与日志不记录查询原文、URL 查询串、页面正文或标题结论。
 
 ## 关键词卡片
@@ -278,7 +280,7 @@ bash scripts/run-u07-43-samples.sh
 | `docs/progress/b2-offline-closure.md` | 离线闭环 43 项 AC |
 | `docs/progress/b2-24-merge.md` | 双通道合并验收 |
 | `docs/progress/b3-status.md` | 理解层进度 |
-| `docs/progress/b4-status.md` | 门控/卡片/设置向导与 AC 三态（§29 为 P-UI 收口，§34 为 U-08 真实 LLM 采样基线，§50 为 U-07-43 三轮真实 200 样本取证） |
+| `docs/progress/b4-status.md` | 门控/卡片/设置向导与 AC 三态（§29 P-UI 收口、§34 U-08 真实 LLM 采样基线、§49 U-05 真机截图复核、§50 U-07-43 三轮真实 200 样本取证、§51 工具链根因与收尾修复） |
 | `docs/progress/handoff-2026-11-22.md` | 批次交接说明 |
 | `docs/progress/handoff-2026-11-22-pui.md` | P-UI 落地交接（C1~C7） |
 | `docs/progress/open-items.md` | 未完成事项总表与逐项关闭操作手册 |

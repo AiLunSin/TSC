@@ -2099,3 +2099,15 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 **验证**：`py_compile` rc=0、`cargo fmt --all -- --check` rc=0、`bash -n`（两个脚本）rc=0、PS `Parser::ParseFile` 无语法错误（329 tokens）、DevShell 去重后加载成功且能找到 `link.exe`；占用 8788 后 `start-bing-bridge.sh` rc=2 并给出可读提示，`ps -W` 第 4 列实测为 WINPID；工具链前置后 `cargo build -p meeting-copilot-desktop --features llm-https` 35.08s 完成，`cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live --no-run` 13.05s rc=0（确认 `search_live.rs` 改动可编译）。本节与 §50 的文档、D 路径脚本、连接地址预算修复已随 `1989d86` 与 `df87623` 提交，工作区干净；exe 与 PATH 备份只留本机，不入库。
 
 **仍 open**：U-05 第 7 项 1/4、第 8 项 0/2（见 §49）；`rustup` 代理待重装。
+
+## §52 文档口径同步与全量基线复测（2026-11-24 22:25）
+
+第三轮采样与收尾修复归档后，把门面文档统一到 §49~§51 的事实，**不改任何代码**。
+
+- `README.md`：当前定位/仓库状态补三轮 200 样本达标（3/3 满足 G-43-C DoD）、21:57 exe 重建、工具链 PATH 前置修复；P-UI 行与「仍未完成」段的 U-05 改为**第 7 项 1/4 通过**（正文/可点态已确认，其余三格与第 8 项两格待界面截图），并区分「U-07-43 检索源适配器链路取证」与「桌面两家预设在真实 Key 下的召回质量验收」；U-07 补注整体仍 open（AUD-03/04/06），U-08 修正 12 个 `#[ignore]` 口径（U-07-43 两个检索用例已由脚本显式 `--ignored` 跑过，H-34-G 两个入口仍未跑）；环境节写明 rustup 伪代理根因与 PATH 前置顺序；检索源接入节补 D 路径端口占用拒绝、桥日志不记 query 原文、`run-cargo.ps1` 代理变量去重、查询条数 400/240 双口径与 `real ≥ 200` 判定；文档索引补 §49/§51。
+- `docs/ABOUT.md`：此前停留在 18:43 的口径（测试基线 1000、U-07 四项全列为未交付、卡片渲染/遮蔽未判定），现同步为 1049/0/12、U-07-43 与 U-07-52 已关闭、U-09 A~F 与 D 路径已交付、U-05 第 7 项 1/4 通过，并保留「整体仍 open」的边界。
+- `docs/progress/open-items.md`：修四处与代码事实冲突的口径——§8.1 基线不再写死 1000（改为以 README 最近一次基线为准）、§8.9-C 查询条数 240→主脚本默认 400、判定 `=200`→`≥200`（与 `search_live.rs` / `verdict.py` 一致）、§8.11-1 PATH 前置命令补上 `~/.cargo/bin` 的顺序说明。
+
+**复测**：工具链前置修复后跑 `cargo test --workspace`，64 个 `test result` 行汇总为 **1049 passed / 0 failed / 12 ignored**，rc=0，与 README 原有数字一致，本轮脚本改动未改变用例数；`check-g2-claims`、`scan-secrets-docs --all-md`、`check-b4-gates --rule=zero-transcript`、`check-mac-scope --rule=claims`、`check-ui-integration` 五道门禁 rc=0。
+
+**状态不变**：U-05 第 7 项 1/4、第 8 项 0/2；U-07-43 关闭；U-07 整体 open；`rustup` 坏代理待重装。

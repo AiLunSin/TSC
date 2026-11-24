@@ -155,7 +155,7 @@ bash scripts/test-name-inventory.sh
 
 > 并发注意：`platform-win` 的 3 个 `secure_store` 用例并行写同一凭据目标会互踩（`test-key-idempotent` vs `test-key-roundtrip`）。若随机失败，先按串行复核：`cargo test -p meeting-copilot-platform-win -p meeting-copilot-desktop -- --test-threads=1`。这是既存的测试隔离缺陷，不是本轮改动引入。
 
-验收：测试为 `1000 passed / 0 failed / 12 ignored`（2026-11-24 实测；此前 996/0/12，桌面层由 43 增至 47 例，新增隐私开关解析与投屏/紧急遮蔽用例），四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
+验收：以 README「当前进度」的最近一次全量基线为准（当前 `1049 passed / 0 failed / 12 ignored`，桌面层 93 例、平台层 30 例）；四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
 
 ### 8.2 关闭 U-08 的"真实 LLM 采样"子项
 
@@ -622,7 +622,7 @@ bash scripts/run-u07-43-samples.sh
 - C：识别到 `SEARCH_PROVIDERS_FILE` 指向已存在的文件即进入自定义模式，**不重建、不覆盖**；`preflight.py` 校验字段、枚举、`id`/`priority` 唯一性、公网 HTTPS 主机与每个 `authRef` 的环境变量。多个 `authRef` 用 `--env NAME=VALUE` 逐个给值。
 - 不写配置文件也可手动 `export SEARCH_ENDPOINT` / `SEARCH_AUTH_REF` / `<凭据>` / `SEARCH_PROVIDERS_FILE`，或给主脚本 `--config FILE` / `--no-config`。
 
-脚本会生成 240 条互不重复查询、先跑 3 次冒烟、再跑 200 条，最后用
+主脚本默认生成 400 条互不重复查询（`U07_QUERY_COUNT` 可覆盖；单独调用 `gen-queries.py` 时默认 240 条）、先跑 3 次冒烟、再跑 200 条，最后用
 `scripts/u07-43/verdict.py` 判定；`--check-only` 只预检。等价的裸命令（务必带特性与绝对路径）：
 
 ```bash
@@ -631,7 +631,7 @@ cargo test -p meeting-copilot-infrastructure --features llm-https \
   --test search_live collect_200_real_samples -- --ignored --test-threads=1 --nocapture
 ```
 
-判定：真实成功样本必须 `=200`；缓存命中、失败、超时都不计。报告只含 `real_samples`、`p50_ms`、`p95_ms`、`status`，不含查询原文。
+判定：真实成功样本 `≥ 200`（`search_live.rs` 结尾断言与 `verdict.py` 的 `real < target` 同口径；多源配置下一次 `run` 可能写入多条，写死 `=200` 会误判失败）；缓存命中、失败、超时都不计。报告只含 `real_samples`、`p50_ms`、`p95_ms`、`p99_ms`、`timeouts`、`failures`、`cache_hits`、`status` 等计数与时延，不含查询原文。
 
 **D. 本机音频冒烟**（`wasapi::tests::loopback_opens_and_captures_when_audio_is_active`）
 
@@ -659,10 +659,10 @@ bash scripts/scan-secrets-docs.sh --all-md
 
 ### 8.11 本机常见坑（照抄即可）
 
-1. `cargo` 报 `rustc_driver-*.dll` 缺失 → 用 rustup toolchain 的 cargo：
+1. `cargo` 报 `rustc_driver-*.dll` 缺失，或 `cargo --version` 输出 `rustfmt 1.11.0` → 把 rustup toolchain 的 `bin` **前置**（必须排在 `~/.cargo/bin` **之前**；2026-11-24 已写入用户级 PATH 持久修复，见 §5）：
 
 ```bash
-export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
+export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$HOME/.cargo/bin:$PATH"
 ```
 
 2. MSVC `D8050` / `LNK1104` → 设 `TEMP/TMP` 与 `CARGO_PROFILE_DEV_DEBUG=0`（见 §8.1）。
