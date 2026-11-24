@@ -1886,7 +1886,8 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 ### 辅助回复
 
-- 新命令 `assist_reply`：**最近 12 句（≤900 字）+ 可选中的一句**交给模型，要求严格 JSON（`points` 2~3 条提醒、`replies` 1~2 条可直接说的话），解析时容忍 ```json 围栏与前后废话。
+- 新命令 `assist_reply`：上下文**固定最近 12 句（≤900 字）**，其中**提醒只依据最后 5 句**，更早的句子只作回应参考；可带选中的一句。一次调用产出严格 JSON（`points` 2~3 条提醒、`replies` 1~2 条可直接说的话），解析时容忍 ```json 围栏与前后废话。
+- 两段在请求里分开标注（「更早的对话（只作背景，不要据此写提醒）」/「最近 5 句（提醒只依据这几句）」）：不需要两次调用，也不让模型拿上半场的话题反复提醒；不足 5 句时只给一段「最近 N 句」。
 - 模型不按格式返回时**不装作成功**：面板显示原文并标注"模型没按格式返回"，而不是给空列表。
 - 未配置 Key 直接提示去设置页，不静默降级成"本机上下文"（辅助回复没有本机替代品）。
 - 回复逐条可复制；剪贴板被拒时提示手动选中，不静默失败。
@@ -1902,7 +1903,7 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 验证：
 
-- `cargo test -p meeting-copilot-desktop --bins`：**90 passed / 0 failed**（新增 11 例：两家响应解析、空形状、服务名严格解析、辅助回复 JSON/围栏/截断/拒空、带来源引用、空来源回退）。
+- `cargo test -p meeting-copilot-desktop --bins --features llm-https`：**91 passed / 0 failed**（新增 11 例：两家响应解析、空形状、服务名严格解析、辅助回复 JSON/围栏/截断/拒空、带来源引用、空来源回退；本轮再加 1 例：12 句时提醒窗口只取最后 5 句、不足 5 句只给一段）。
 - `cargo test -p meeting-copilot-platform-win`：30 passed / 1 ignored。
 - clippy（含 `--features llm-https` 与默认特性两套）`-D warnings`、rustfmt、B4 零转录、分层、UI 集成六规则、G2 宣称、`check-bindings`(17 DTO)、`scan-secrets`、`scan-secrets-docs` 全绿。
 - `tsc --noEmit`、`eslint .`、`npm run build` 通过；产物 `target/debug/meeting-copilot-desktop.exe`（17:16，`--features llm-https`，22.2 MB）。
@@ -1910,5 +1911,5 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 未验证：
 
 - 真实检索 Key 下的结果质量、配额与中文召回（需用户自备博查/Tavily Key 后手测）。
-- 辅助回复在真实会议里的可用度：目前上下文只看最近 12 句，跨话题会议可能需要手动选中锚定。
+- 辅助回复在真实会议里的可用度：提醒窗口 5 句、上下文 12 句是按"提醒别翻旧账、回应还能接上前文"定的，跨话题会议若仍偏题，需要真机手测后再调这两个数。
 - 检索结果只展示不打开浏览器（界面里给出地址文本），点开外链未实现。

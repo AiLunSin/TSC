@@ -1,6 +1,7 @@
 //! 辅助回复：把最近一段转写（可带选中句）交给模型，产出"该注意什么"与"可以直接怎么说"。
 //!
 //! 边界：只有用户点按钮才会出网；发送内容是最近 12 句（≤900 字）+ 选中的一句，
+//! 其中**提醒只依据最后 5 句**，更早的句子只作回应参考；
 //! 不发送整场转写，不落盘、不写日志正文。
 
 use std::sync::Arc;
@@ -11,8 +12,10 @@ use crate::ipc::dto::{AssistInputDto, AssistResultDto, IpcErrorDto};
 use crate::ipc::state::AppState;
 use crate::ipc::transcript::TranscriptLog;
 
-/// 送上文的句数上限：够看出话题，又不会把整场会议发出去。
+/// 上下文句数上限：够看出话题，又不会把整场会议发出去。
 const CONTEXT_LINES: usize = 12;
+/// 提醒窗口：只拿最后 5 句写"该注意什么"，免得反复念叨早就翻篇的话题。
+const TIP_LINES: usize = 5;
 /// 上下文总字数上限。
 const MAX_CONTEXT_CHARS: usize = 900;
 /// 选中句上限。
@@ -25,12 +28,14 @@ const MAX_POINT_CHARS: usize = 40;
 const MAX_REPLY_CHARS: usize = 80;
 
 const SYSTEM_PROMPT: &str = "你是会议实时助手。用户正在开会，给你最近一段会议转写\
-（可能带语音识别错字、口语重复），以及（可选的）他刚选中的一句话。\
+（分成「更早的对话」和「最近几句话」两段，可能带语音识别错字、口语重复），以及（可选的）他刚选中的一句话。\
 请只输出一个 JSON 对象，不要 Markdown 代码块、不要任何解释文字，格式严格为：\
 {\"points\":[\"...\"],\"replies\":[\"...\"]}。\
 points 放 2~3 条提醒：接下来要注意什么、可能被追问什么、哪里有风险或待确认项，每条不超过 30 字，\
-只写具体动作或风险，不写\"保持沟通\"这类套话。\
-replies 放 1~2 条可以直接说出口的回应，每条不超过 60 字，口语、自然、不堆术语，能接上对方的话。\
+只写具体动作或风险，不写\"保持沟通\"这类套话；提醒只依据「最近几句话」这一段，\
+不要拿更早的对话里已经翻篇的内容反复提醒。\
+replies 放 1~2 条可以直接说出口的回应，每条不超过 60 字，口语、自然、不堆术语，能接上对方的话；\
+可以结合更早的对话。\
 不要编造数字、日期、人名或承诺；信息不足时写成\"确认…\"而不是替用户下结论。";
 
 /// 生成辅助提醒与回复。
@@ -95,10 +100,24 @@ fn recent_lines(transcripts: &TranscriptLog) -> Vec<String> {
     picked
 }
 
+/// 拼请求正文：把上下文切成「更早的对话」与「最近 N 句」两段，
+/// 让模型知道哪几句才允许用来写提醒（一次调用同时产出提醒与回应，不额外多花一次请求）。
 fn build_user_message(focus: &str, recent: &[String]) -> String {
     let mut parts: Vec<String> = Vec::new();
-    if !recent.is_empty() {
-        parts.push(format!("最近转写：\n{}", recent.join("\n")));
+    let split = recent.len().saturating_sub(TIP_LINES);
+    let (earlier, latest) = recent.split_at(split);
+    if !earlier.is_empty() {
+        parts.push(format!(
+            "更早的对话（只作背景，不要据此写提醒）：\n{}",
+            earlier.join("\n")
+        ));
+    }
+    if !latest.is_empty() {
+        parts.push(format!(
+            "最近 {} 句（提醒只依据这几句）：\n{}",
+            latest.len(),
+            latest.join("\n")
+        ));
     }
     if !focus.is_empty() {
         parts.push(format!("刚选中的一句：{focus}"));
@@ -194,9 +213,25 @@ mod tests {
     }
 
     #[test]
-    fn user_message_carries_recent_and_focus() {
-        let message = build_user_message("灰度范围", &["前面一句".to_owned()]);
-        assert!(message.contains("最近转写：\n前面一句"));
+    fn user_message_splits_tip_window() {
+        let recent: Vec<String> = (1..=12).map(|index| format!("第{index}句")).collect();
+        let message = build_user_message("", &recent);
+        let (earlier, latest) = message.split_once("最近 5 句").expect("两段");
+        // 前 7 句只作背景，最后 5 句才是提醒依据。
+        assert!(earlier.contains("更早的对话"));
+        assert!(earlier.contains("第1句"));
+        assert!(earlier.contains("第7句"));
+        assert!(!earlier.contains("第8句"));
+        assert!(latest.contains("第8句"));
+        assert!(latest.contains("第12句"));
+    }
+
+    #[test]
+    fn short_context_keeps_single_section() {
+        let recent: Vec<String> = (1..=3).map(|index| format!("第{index}句")).collect();
+        let message = build_user_message("灰度范围", &recent);
+        assert!(!message.contains("更早的对话"));
+        assert!(message.contains("最近 3 句（提醒只依据这几句）：\n第1句"));
         assert!(message.contains("刚选中的一句：灰度范围"));
     }
 }

@@ -711,7 +711,8 @@ export default function App() {
               {assist === null ? null : (
                 <div className="explain-panel">
                   <p className="explain-source">
-                    模型辅助（基于最近转写{selection === "" ? "" : " + 选中句"}）
+                    模型辅助（提醒看最近 5 句，回应参考最近 12 句
+                    {selection === "" ? "" : " + 选中句"}）
                   </p>
                   {assist.points.length === 0 ? null : (
                     <>
