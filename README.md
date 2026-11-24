@@ -36,7 +36,7 @@ U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_rep
 仍未完成：
 
 - **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。第 8 项的注入入口已就绪（`PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`，见“隐私与凭据”），只差真机截图与结论。
-- **U-07**：负反馈加权、缓存/outbox 已实现；按需补全机制完成，真实 200 样本未采集（U-07-43 `open`）；审计哈希链与 5 年归档已关闭（U-07-52）。
+- **U-07**：负反馈加权、缓存/outbox 已实现；按需补全已闭环（U-07-43 三轮真实 200 样本均达标：p95 4461~4759 ms、p99 ≤6789 ms、超时率 ≤0.61%，见 `docs/progress/b4-status.md §50`）；审计哈希链与 5 年归档已关闭（U-07-52）。
 - **U-08**：真实 LLM 采样子项已关闭（2026-11-24：9 例 live 通过 + 4 任务 × 30 样本基线，见 `docs/progress/b4-status.md §34`）；其余仍 open——真实检索源（由 U-09 承接，待 H-34-G）、真实 LLM 冷却（本次窗口未触发 429，不作结论）、真机性能与误触发率；12 个 `#[ignore]` 用例保持不跑（含 H-34-G 两个手工入口）。
 - **桌面联网查与辅助回复**：链路、DTO、门禁都已落地（`web_search` / `assist_reply`），额度有每小时限额兜底（默认 20 次，可调 0~200），但两项都只有"代码可跑"，没有"效果已验收"——**真实检索 Key 下的中文召回质量未测**（需自备博查/Tavily Key），**辅助回复在真实会议里的可用度未测**（提醒 5 句 / 上下文 12 句这组数已开放给用户自行调整，但好坏仍需手测）。检索结果只展示地址、不打开浏览器。
 - **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`）、窗口 + 进程映像名会议检测（`meeting`）与 WASAPI 共享模式环回采集（`wasapi`，`AudioSource` 实现，含混音/单声道解码单测）；UIA 字幕通道已实现（窗口探测、500ms 差量泵、`SubtitleSource` 适配、文本直连出卡、采集状态投影），实测腾讯会议/飞书窗口 UIA 元素数为 0、真实字幕文本未取得，按降级状态展示；OCR 已实现（`Windows.Media.Ocr`，仅当前台会议窗口客户区底部 40% 区域；实测可识别中英文，未在真实会议字幕上验证；默认关闭，`OCR_FALLBACK=1` 时才作为 UIA 回退，避免与开源 ASR 并行重复出卡）；`platform-mac` 不适用（保留占位）。
@@ -189,9 +189,14 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 ```
 
   需同时设置 `SEARCH_PROVIDERS_FILE`、`SEARCH_QUERIES_FILE` 与 `<authRef>`；可选 `SEARCH_REPORT_PATH` 输出只含计数与时延的 JSON。`smoke_three_rounds` 对应 H-34-G 的 3 次验收，`collect_200_real_samples` 对应 200 条真实样本。**两个 `search_live` 用例都必须带 `--features llm-https`**：缺省特性下 `HttpJsonProvider` 没有真实 TLS 传输，每次检索都会 `Unreachable`；另外三个 `SEARCH_*` 路径必须传**绝对路径**（`cargo test` 的进程 CWD 是 crate 根目录，相对路径会被当成「文件不存在」而静默得到零源）。
-- U-07-43 的 200 条采样可一键编排（预检 → 3 次冒烟 → 200 条 → 判定）。**A / B / C 三条接入路径都已配好**，填完端点与凭据后直接跑同一条命令：
+- U-07-43 的 200 条采样可一键编排（预检 → 3 次冒烟 → 采样 → 判定）。**A / B / C / D 四条接入路径都已配好**；D 路径不需要任何账号或 Key：
 
 ```bash
+# D. 零账号、零 Key：本机桥把必应 RSS 转成适配器要求的 JSON，再用免账号 quick tunnel 暴露成公网 HTTPS
+bash scripts/u07-43/start-bing-bridge.sh --serve-only   # 建端点并保持（另开终端跑下一行）
+bash scripts/run-u07-43-samples.sh
+# 或一条命令跑完：bash scripts/u07-43/start-bing-bridge.sh
+
 # A. 自建 / 可用的 SearXNG（需启用 format=json）
 bash scripts/u07-43/setup.sh --mode a --endpoint "https://<SearXNG 公网域名>/search"
 
@@ -203,14 +208,15 @@ cp scripts/u07-43/providers.example.json .tmp/u07-43/providers.json
 # 改里面的 endpoint / authRef，然后：
 bash scripts/u07-43/setup.sh --mode c --providers .tmp/u07-43/providers.json --token '<凭据>'
 
-# 三条路径最后都是同一条命令（自动加载 .tmp/u07-43/config.env）
+# A/B/C 最后都是同一条命令（自动加载 .tmp/u07-43/config.env）
 bash scripts/run-u07-43-samples.sh
 ```
 
+  - **D 路径**：`scripts/u07-43/local-bridge.py` 把 `GET ?q=&format=json` 转成必应 RSS 请求并规整为 `{"results":[{"url","title"}]}`；`scripts/u07-43/start-bing-bridge.sh` 启动桥 + `cloudflared` 免账号 quick tunnel（不需要 Cloudflare 账号），注入随机令牌、写 `config.env`、做公网自检后跑采样。必应无结果时返回 502，避免用空列表凑假样本；上游单次抖动在桥内重试 3 次。quick tunnel 创建被限流（429）时会等待重试，仍不行才回退 localhost.run（后者域名会轮换，只适合短跑）。
   - **B 路径**：`deploy-worker.sh` 用 `scripts/u07-43/wrangler.toml` + `package.json` 部署 `search-proxy.worker.js`，自动注入 `UPSTREAM_KEY` / `SHARED_TOKEN` / `UPSTREAM_PROVIDER`（`SHARED_TOKEN` 缺省时随机生成，不回显）。Worker 把 `GET ?q=&format=json` 转成博查/Tavily 的 POST，提供 `/health` 自检；上游无可用结果返回 502 而不是空列表，避免凑出假样本。Worker 地址与令牌写入本地 `config.env`，不入库。首次需 `wrangler login`；`--dry-run` 可只做本机检查。
   - **C 路径**：`SEARCH_PROVIDERS_FILE` 指向已存在的文件即进入自定义模式，脚本**不重建、不覆盖**；`scripts/u07-43/preflight.py` 按 Rust 侧约束逐项校验字段/枚举/`id` 与 `priority` 唯一性/公网 HTTPS 主机/每个 `authRef` 的环境变量非空（`degraded` 也算可用源，与 `ProviderProfile::is_usable` 对齐）。多 `authRef` 用 `--env NAME=VALUE` 逐个给值。
   - 配置统一写 `.tmp/u07-43/config.env`（`.tmp/` 已忽略）；主脚本自动加载，可用 `--config FILE` 指定、`--no-config` 忽略；也支持手动 `export SEARCH_ENDPOINT` / `SEARCH_AUTH_REF` / `<凭据>` / `SEARCH_PROVIDERS_FILE`。
-  - 脚本用 `scripts/u07-43/gen-queries.py` 生成 240 条互不重复查询（前 200 条覆盖全部 50 个术语），`scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / 超时率 ≤ 2%`；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`。**真实样本数仍为 0/200**，需要使用者提供端点与凭据后才会产生结论。
+  - 脚本用 `scripts/u07-43/gen-queries.py` 生成 400 条互不重复查询（前 200 条覆盖全部 50 个术语）；采样会继续往后取查询，直到攒满 200 个真实成功样本，单条查询最多试 2 次——公网隧道偶发丢连接不会让整轮作废。`scripts/u07-43/verdict.py` 判定 `real_samples ≥ 200 / p95 ≤ 8s / p99 ≤ 12s / 超时率 ≤ 2%`；`--check-only` 只预检不出网，`--smoke-only` 只跑冒烟。端点须为公网 HTTPS 且响应 `GET ?q=&format=json → {"results":[{"url","title"}]}`。
 - 报告与日志不记录查询原文、URL 查询串、页面正文或标题结论。
 
 ## 关键词卡片

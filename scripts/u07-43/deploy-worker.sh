@@ -65,7 +65,8 @@ esac
 
 PY=""
 for candidate in "${PYTHON:-}" python3 python py; do
-  if [[ -n "${candidate}" ]] && command -v "${candidate}" >/dev/null 2>&1; then
+  if [[ -n "${candidate}" ]] && command -v "${candidate}" >/dev/null 2>&1 \
+    && "${candidate}" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
     PY="${candidate}"; break
   fi
 done

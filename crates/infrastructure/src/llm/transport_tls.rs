@@ -82,17 +82,27 @@ impl TlsTransport {
         if cancel.is_cancelled() {
             return Err(TransportError::Cancelled);
         }
-        let addresses = (request.host.as_str(), request.port)
+        let addresses: Vec<_> = (request.host.as_str(), request.port)
             .to_socket_addrs()
-            .map_err(|_| TransportError::DnsFailure)?;
+            .map_err(|_| TransportError::DnsFailure)?
+            .collect();
+        if addresses.is_empty() {
+            return Err(TransportError::DnsFailure);
+        }
         let mut last = TransportError::NetworkUnreachable;
-        for address in addresses {
+        // 逐个地址尝试，但给每个地址分配子预算：DNS 常把 IPv6 排在前面，
+        // 若本机没有可用的 IPv6 出口，第一个地址会把整个 deadline 吃光，
+        // 永远轮不到后面的 IPv4（curl 有 Happy Eyeballs，所以不受影响）。
+        for (index, address) in addresses.iter().enumerate() {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 return Err(TransportError::ConnectTimeout);
             }
-            let timeout = remaining.max(Duration::from_millis(1));
-            match TcpStream::connect_timeout(&address, timeout) {
+            let attempts_left = u32::try_from(addresses.len() - index).unwrap_or(1).max(1);
+            let timeout = (remaining / attempts_left)
+                .max(Duration::from_millis(1))
+                .min(remaining);
+            match TcpStream::connect_timeout(address, timeout) {
                 Ok(stream) => {
                     let _ = stream.set_nodelay(true);
                     return Ok(stream);

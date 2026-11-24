@@ -14,6 +14,10 @@
 #   C. 自定义 providers.json：
 #        cp scripts/u07-43/providers.example.json .tmp/u07-43/providers.json
 #        bash scripts/u07-43/setup.sh --mode c --providers .tmp/u07-43/providers.json --token '<凭据>'
+#   D. 零账号、零 Key（本机桥把必应 RSS 转成 JSON + 免账号 quick tunnel）：
+#        bash scripts/u07-43/start-bing-bridge.sh --serve-only   # 建端点并保持
+#        另开终端：bash scripts/run-u07-43-samples.sh
+#        （或一条命令：bash scripts/u07-43/start-bing-bridge.sh，内部自动跑本脚本）
 #   bash scripts/run-u07-43-samples.sh
 #
 # 也可以手动 export（不写配置文件）：
@@ -36,7 +40,7 @@
 #   --regenerate-queries  强制重新生成查询集（会覆盖自定义查询文件）
 #   -h | --help           显示本说明
 #
-# 样本门槛固定 200：`collect_200_real_samples` 在 Rust 侧写死取前 200 条查询。
+# 样本门槛固定 200：采样按顺序取查询，直到攒满 200 个真实成功样本（单条最多试 2 次）。
 # 退出码：0=达标 / 1=测试失败或样本不足 / 2=配置或预检错误 / 3=样本够但时延预算不达标
 
 set -uo pipefail
@@ -99,7 +103,8 @@ done
 
 PY=""
 for candidate in "${PYTHON:-}" python3 python py; do
-  if [[ -n "${candidate}" ]] && command -v "${candidate}" >/dev/null 2>&1; then
+  if [[ -n "${candidate}" ]] && command -v "${candidate}" >/dev/null 2>&1 \
+    && "${candidate}" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
     PY="${candidate}"; break
   fi
 done
@@ -206,8 +211,11 @@ PYEOF
 fi
 
 # ---------- 2. 准备查询集 ----------
+# 查询池留足余量：单条查询可能因上游抖动或隧道丢连接而失败，采样会继续往后取，
+# 直到攒满 200 个真实成功样本（见 search_live.rs::collect_200_real_samples）。
+QUERY_COUNT="${U07_QUERY_COUNT:-400}"
 if [[ ! -f "${SEARCH_QUERIES_FILE}" || "${REGEN_QUERIES}" -eq 1 ]]; then
-  "${PY}" scripts/u07-43/gen-queries.py --count 240 --out "${SEARCH_QUERIES_FILE}" \
+  "${PY}" scripts/u07-43/gen-queries.py --count "${QUERY_COUNT}" --out "${SEARCH_QUERIES_FILE}" \
     || { echo "查询集生成失败" >&2; exit 2; }
 fi
 
@@ -230,8 +238,10 @@ case "$(uname -s)" in
     export TEMP="$(abs_path "${ROOT}/.tmp/msvc-temp")"
     export TMP="${TEMP}"
     export CARGO_PROFILE_DEV_DEBUG=0
+    CARGO_VIA_POWERSHELL=1
     ;;
 esac
+CARGO_VIA_POWERSHELL="${CARGO_VIA_POWERSHELL:-0}"
 # 必须带 llm-https：缺省特性下 HttpJsonProvider 没有真实 TLS 传输，
 # 每次检索都会 Unreachable，200 条样本不可能达标。
 FEATURES=(--features llm-https)
@@ -242,13 +252,25 @@ if [[ "${CHECK_ONLY}" -eq 1 ]]; then
   echo "  providers : ${PROVIDERS_ABS}（${PREFLIGHT_MODE}）"
   echo "  queries   : ${QUERIES_ABS}"
   echo "  report    : ${REPORT_ABS}"
-  echo "  cargo test -p meeting-copilot-infrastructure ${FEATURES[*]} --test search_live collect_200_real_samples -- --ignored --test-threads=1 --nocapture"
+  if [[ "${CARGO_VIA_POWERSHELL}" -eq 1 ]]; then
+    echo "  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/u07-43/run-cargo.ps1 -Case collect_200_real_samples"
+  else
+    echo "  cargo test -p meeting-copilot-infrastructure ${FEATURES[*]} --test search_live collect_200_real_samples -- --ignored --test-threads=1 --nocapture"
+  fi
   exit 0
 fi
 
 run_case() {
   local case_name="$1" report="$2"
   echo "---- ${case_name} 开始（真实出网，串行执行，请耐心等待）----"
+  if [[ "${CARGO_VIA_POWERSHELL}" -eq 1 ]]; then
+    SEARCH_PROVIDERS_FILE="${PROVIDERS_ABS}" \
+    SEARCH_QUERIES_FILE="${QUERIES_ABS}" \
+    SEARCH_REPORT_PATH="$(abs_path "${report}")" \
+      powershell -NoProfile -ExecutionPolicy Bypass \
+        -File scripts/u07-43/run-cargo.ps1 -Case "${case_name}"
+    return $?
+  fi
   SEARCH_PROVIDERS_FILE="${PROVIDERS_ABS}" \
   SEARCH_QUERIES_FILE="${QUERIES_ABS}" \
   SEARCH_REPORT_PATH="$(abs_path "${report}")" \

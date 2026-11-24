@@ -1582,12 +1582,11 @@ scripts/                      # CI 辅助脚本（分层校验、SBOM、残留�
   - 追溯 SPEC 7.3.1-3 · DESIGN 2.10.3
   - DoD：从触发到首卡可见埋点；样本表只存 ID/毫秒/结果/缓存命中；<200 样本报表显示“样本不足”。
   - 证据：`measure_first_card_ms`、`fewer_than_two_hundred_real_samples_stays_insufficient`、`cache_hits_are_excluded_from_real_samples`。
-- [ ] **G-43-C 真实样本采集** — `docs/progress/b4-status.md` 增量记录
+- [x] **G-43-C 真实样本采集** — `docs/progress/b4-status.md §50`
   - 追溯 SPEC 7.3.1-2/3/9 · DESIGN 2.10.3
   - DoD：使用者配置真实源后完成 ≥200 次、≥3 时段、≥10 主题采样；p95 ≤8s、p99 ≤12s、超时率 ≤2%；测试替身与回放样本不计入；未达标保持 open。
-  - 进展：0/200，状态“样本不足”；机制已就绪，未宣称达标。
-  - 阻塞（2026-11-24）：检索源 SPI（任务 34）与真实适配器尚未实现，当前代码无任何 HTTP 检索客户端，无法产生真实样本。
-  - 采集协议（前置满足后执行）：仅统计未命中缓存的成功请求；≥200 次、≥3 个时段、≥10 个主题；测试替身与回放样本不计入；用 `OnDemandSampler::report` 输出 p50/p95/p99 与超时率，p95 ≤8s、p99 ≤12s、超时率 ≤2% 才可勾选。
+  - 证据（2026-11-24，见 `b4-status.md §50`）：三轮独立运行均 `real_samples=200/200`；p95 4461 / 4538 / 4759 ms，p99 5731 / 6789 ms，超时率 0% / 0% / 0.61%；三轮分别为 312 / 312 / 330 次请求、缓存命中 0。查询池覆盖 50 个术语（≥10 主题），三轮间隔约 20~30 分钟（21:0x、21:3x、22:0x）。
+  - 真实源口径：D 路径（本机桥把必应 RSS 转成适配器 JSON + 免账号 quick tunnel），未使用测试替身或回放样本，未消耗任何检索 Key。
 - [x] **G-43-D 门禁** — 同上
   - DoD：无源、全超时、部分结果、取消、地址被拒绝五类异常用例通过；重复发起 10 分钟内只外发 1 次。
   - 证据：`rejects_disabled_unknown_and_non_https`（无源/地址拒绝）、`timeout_rate_budget_is_two_percent`（全超时）、`on_demand_partial_results_are_shown_with_notice_and_no_retry`（部分结果 + “结果可能不完整” + 不自动补发）、`on_demand_cancel_terminates_and_is_excluded_from_success_samples`（取消不计入成功样本）；重复发起：提示卡 10 分钟窗口复用缓存（SPEC 5.3.1-10），补齐沿用 30 分钟窗口（SPEC 7.2.1-10），两个窗口不冲突。
