@@ -3,6 +3,8 @@
 监听会议对话、识别值得解释的关键词、经门控判定后主动提示，并可本地查看关键词详情的桌面 AI 助手。
 
 > 仓库名 `TSC`；产品名 **Meeting Copilot（会议副驾）**。
+>
+> 第一次使用？请直接看 [下载与使用指南（傻瓜版）](DOWNLOAD.md)。
 
 [![CI](https://github.com/AiLunSin/TSC/actions/workflows/ci.yml/badge.svg)](https://github.com/AiLunSin/TSC/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#许可证)
@@ -267,6 +269,7 @@ bash scripts/run-u07-43-samples.sh
 
 | 文档 | 说明 |
 |---|---|
+| `DOWNLOAD.md` | 下载、编译、首次配置与使用指南（傻瓜版） |
 | `docs/ABOUT.md` | 项目简介、当前状态与能力边界 |
 | `docs/sdd/spec.md` | 需求规格与验收标准 |
 | `docs/sdd/design.md` | 技术方案与追溯矩阵 |
