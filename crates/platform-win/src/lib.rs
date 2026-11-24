@@ -6,7 +6,9 @@
 
 pub const PLATFORM_NAME: &str = "windows";
 pub mod meeting;
+pub mod ocr;
 pub mod secure_store;
+pub mod subtitle;
 #[cfg(windows)]
 pub mod wasapi;
 #[cfg(not(windows))]

@@ -7,7 +7,7 @@ use crate::ipc::dto::IpcErrorDto;
 
 pub fn capture_status_impl(asr: &AsrPipeline) -> Vec<(String, String)> {
     vec![
-        ("字幕文本通道".to_owned(), "off".to_owned()),
+        ("字幕文本通道".to_owned(), asr.subtitle_status().to_owned()),
         (
             "系统音频通道".to_owned(),
             meeting_copilot_platform_win::wasapi::system_audio_status().to_owned(),
@@ -37,6 +37,7 @@ mod tests {
         );
         let rows = capture_status_impl(&asr);
         assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].1, "off", "字幕通道未启动时应为 off");
         let audio = &rows[1].1;
         assert!(
             audio == "ready" || audio == "degraded" || audio == "off",

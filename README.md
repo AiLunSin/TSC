@@ -11,7 +11,7 @@
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB)
 
-当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路已接通；检索源接入（U-09 A~F）已实现，真实端点验收待进行；设置页真机第 1~6、9、10 项已通过，UIA 字幕/OCR、卡片渲染/投屏遮蔽真机结论仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路已接通；检索源接入（U-09 A~F）已实现，真实端点验收待进行；设置页真机第 1~6、9、10 项已通过，UIA 字幕适配器已接线但腾讯会议窗口无可读文本、OCR 已实现（仅前台会议窗口底部区域），卡片渲染/投屏遮蔽真机结论仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
 仓库状态（2026-11-24）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（2026-11-23：web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。2026-11-23 完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。2026-11-24 完成检索源接入 A~F 与归档保留期确认（方案 B，在线 180 天 + 归档 5 年，U-07-52 关闭）。
 
@@ -29,7 +29,7 @@
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线（2026-11-24 实测）：**970 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **36 例**、平台层 **10 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
+最近一次全量基线（2026-11-24 实测）：**996 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **43 例**、平台层 **27 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。
 
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
 
@@ -38,7 +38,7 @@ U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_rep
 - **U-05 产品化接入**：设置向导与卡片前端已离线落地（AC-B4-111~130）；设置页真机第 1~6、9、10 项通过（含联网 E2E）；卡片渲染（7）与投屏/紧急遮蔽（8）缺真实样本未判定，**U-05 保持 `open`**。
 - **U-07**：负反馈加权、缓存/outbox 已实现；按需补全机制完成，真实 200 样本未采集（U-07-43 `open`）；审计哈希链与 5 年归档已关闭（U-07-52）。
 - **U-08**：真实检索源（由 U-09 承接，待 H-34-G）、真实 LLM 冷却、真机性能与误触发率；12 个 `#[ignore]` 用例保持不跑（含 H-34-G 两个手工入口）。
-- **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`）、进程名 + 窗口标题会议检测（`meeting`）与 WASAPI 共享模式环回采集（`wasapi`，`AudioSource` 实现，含混音/单声道解码单测）；UIA 字幕与 OCR 仍为接口占位；`platform-mac` 不适用（保留占位）。
+- **平台层**：`platform-win` 已提供 Windows 凭据管理器（`secure_store`）、窗口 + 进程映像名会议检测（`meeting`）与 WASAPI 共享模式环回采集（`wasapi`，`AudioSource` 实现，含混音/单声道解码单测）；UIA 字幕通道已实现（窗口探测、500ms 差量泵、`SubtitleSource` 适配、文本直连出卡、采集状态投影），实测腾讯会议/飞书窗口 UIA 元素数为 0、真实字幕文本未取得，按降级状态展示；OCR 已实现（`Windows.Media.Ocr`，仅当前台会议窗口客户区底部 40% 区域；实测可识别中英文，未在真实会议字幕上验证；默认关闭，`OCR_FALLBACK=1` 时才作为 UIA 回退，避免与开源 ASR 并行重复出卡）；`platform-mac` 不适用（保留占位）。
 - **产品能力口径**：38/39/51 只交付契约与视图；前端已只读消费 DTO，但仍不宣称“产品级可点击卡片”或真机可用。
 
 ## 目录结构
@@ -48,7 +48,7 @@ crates/
   domain/            领域模型、值对象、端口 trait（禁止依赖实现）
   application/       应用编排：采集、治理、理解层、门控、卡片、引用对齐、设置端口
   infrastructure/    存储、加密、审计链、度量、日志、LLM 传输、检索源装配
-  platform-win/      Windows 适配（凭据管理、会议检测、WASAPI 环回已实现；UIA 字幕与 OCR 仍占位）
+  platform-win/      Windows 适配（凭据管理、会议检测、WASAPI 环回已实现；UIA 字幕已实现但暂无可用文本；OCR 已实现，仅前台窗口底带）
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
 app/                 React 19 + TypeScript + Vite 前端

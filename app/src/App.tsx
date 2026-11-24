@@ -23,7 +23,7 @@ const STATE_TEXT: Record<ChannelState, string> = {
 const CHANNEL_DETAIL: Record<ChannelState, string> = {
   ready: "运行就绪",
   degraded: "运行中降级",
-  off: "未接入实现",
+  off: "未启动或不可用",
 };
 
 function toChannelState(value: string): ChannelState {

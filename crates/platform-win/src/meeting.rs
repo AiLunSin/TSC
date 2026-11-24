@@ -1,16 +1,16 @@
-//! 会议应用检测：进程名命中后，再按可见窗口标题过滤。
+//! 会议应用检测：遍历可见顶层窗口，按窗口进程映像名命中后再按标题过滤。
 //!
-//! 常驻类客户端（微信/钉钉）要求窗口标题含会议关键词，避免后台驻留被误判；
-//! 腾讯会议/飞书的窗口即通话界面，只要存在可见窗口即可判定。
-//! 只读取进程名与窗口标题，不读取会议内容。
+//! 常驻类客户端（微信/钉钉/飞书）要求窗口标题含会议关键词，避免把主界面或后台驻留当成会议；
+//! 腾讯会议的窗口标题固定含“会议”，只要求存在可见窗口。
+//! 只读取进程映像名与窗口标题，不读取会议内容。
 
 const TARGETS: &[(&str, &str, bool)] = &[
     ("wemeetapp.exe", "腾讯会议", false),
     ("tencentmeeting.exe", "腾讯会议", false),
     ("wechat.exe", "微信", true),
     ("weixin.exe", "微信", true),
-    ("feishu.exe", "飞书", false),
-    ("lark.exe", "飞书", false),
+    ("feishu.exe", "飞书", true),
+    ("lark.exe", "飞书", true),
     ("dingtalk.exe", "钉钉", true),
 ];
 
@@ -43,39 +43,49 @@ pub fn title_has_meeting_keyword(title: &str) -> bool {
 
 #[cfg(windows)]
 mod imp {
-    use windows_sys::Win32::Foundation::{CloseHandle, BOOL, HWND, INVALID_HANDLE_VALUE, LPARAM};
-    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
-        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
-        TH32CS_SNAPPROCESS,
+    use std::collections::HashMap;
+
+    use windows_sys::Win32::Foundation::{CloseHandle, BOOL, HWND, LPARAM, RECT};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
+        EnumWindows, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId,
         IsWindowVisible,
     };
 
     use super::{display_name_for, requires_title_match, title_has_meeting_keyword};
 
-    struct TargetProcess {
-        pid: u32,
-        display_name: &'static str,
-        requires_title: bool,
+    struct ScanContext {
+        pid_cache: HashMap<u32, Option<(&'static str, bool)>>,
+        found: Option<(&'static str, String)>,
+        best_priority: usize,
+        windows: Vec<(&'static str, isize)>,
     }
 
-    struct ScanContext {
-        targets: Vec<TargetProcess>,
-        found: Option<(&'static str, String)>,
+    impl ScanContext {
+        fn new() -> Self {
+            Self {
+                pid_cache: HashMap::new(),
+                found: None,
+                best_priority: usize::MAX,
+                windows: Vec::new(),
+            }
+        }
+    }
+
+    fn priority_for(display_name: &str) -> usize {
+        match display_name {
+            "腾讯会议" => 0,
+            "飞书" => 1,
+            "微信" => 2,
+            _ => 3,
+        }
     }
 
     /// 当前是否有已知会议客户端处于会议窗口状态。
     pub fn detect_running() -> Option<(&'static str, String)> {
-        let targets = collect_target_processes();
-        if targets.is_empty() {
-            return None;
-        }
-        let mut context = ScanContext {
-            targets,
-            found: None,
-        };
+        let mut context = ScanContext::new();
         // SAFETY: 回调在 EnumWindows 同步执行期间访问栈上的 context；
         // 回调只读取窗口标题与进程号，不做任何写操作。
         unsafe {
@@ -87,69 +97,109 @@ mod imp {
         context.found
     }
 
-    unsafe extern "system" fn scan_window(window: HWND, lparam: LPARAM) -> BOOL {
-        let context = &mut *(lparam as *mut ScanContext);
+    /// 收集目标会议进程的全部可见顶层窗口句柄，供 UI Automation 遍历。
+    pub fn find_meeting_windows() -> Option<Vec<(&'static str, isize)>> {
+        let mut context = ScanContext::new();
+        // SAFETY: 回调在 EnumWindows 同步执行期间访问栈上的 context；
+        // 只把匹配窗口的句柄追加到 Vec，不做其它写操作。
+        unsafe {
+            EnumWindows(
+                Some(collect_window),
+                &mut context as *mut ScanContext as LPARAM,
+            );
+        }
+        if context.windows.is_empty() {
+            return None;
+        }
+        context.windows.sort_by_key(|(name, _)| priority_for(name));
+        Some(context.windows)
+    }
+
+    unsafe fn matched_window(
+        context: &mut ScanContext,
+        window: HWND,
+    ) -> Option<(&'static str, String)> {
         if IsWindowVisible(window) == 0 {
-            return 1;
+            return None;
         }
         let mut pid = 0u32;
         GetWindowThreadProcessId(window, &mut pid);
-        let Some(target) = context.targets.iter().find(|item| item.pid == pid) else {
-            return 1;
-        };
+        let (display_name, requires_title) = target_for_pid(context, pid)?;
+        let mut rect: RECT = std::mem::zeroed();
+        if GetWindowRect(window, &mut rect) == 0 {
+            return None;
+        }
+        if rect.right <= rect.left || rect.bottom <= rect.top {
+            return None;
+        }
+        let title = window_title(window);
+        if requires_title && !title_has_meeting_keyword(&title) {
+            return None;
+        }
+        Some((display_name, title))
+    }
+
+    fn target_for_pid(context: &mut ScanContext, pid: u32) -> Option<(&'static str, bool)> {
+        if let Some(cached) = context.pid_cache.get(&pid) {
+            return *cached;
+        }
+        let found = exe_name_for_pid(pid)
+            .and_then(|exe| display_name_for(&exe).map(|name| (name, requires_title_match(&exe))));
+        context.pid_cache.insert(pid, found);
+        found
+    }
+
+    fn exe_name_for_pid(pid: u32) -> Option<String> {
+        // SAFETY: 句柄在本函数内关闭；缓冲区长度与 API 约定一致。
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle == 0 {
+                return None;
+            }
+            let mut buffer = [0u16; 520];
+            let mut size = buffer.len() as u32;
+            let ok = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut size);
+            CloseHandle(handle);
+            if ok == 0 {
+                return None;
+            }
+            let path = String::from_utf16_lossy(&buffer[..size as usize]);
+            path.rsplit(['\\', '/']).next().map(str::to_owned)
+        }
+    }
+
+    unsafe fn window_title(window: HWND) -> String {
         let length = GetWindowTextLengthW(window);
         if length <= 0 {
-            return 1;
+            return String::new();
         }
         let mut buffer = vec![0u16; length as usize + 1];
         let written = GetWindowTextW(window, buffer.as_mut_ptr(), buffer.len() as i32);
         if written <= 0 {
-            return 1;
+            return String::new();
         }
-        let title = String::from_utf16_lossy(&buffer[..written as usize]);
-        if target.requires_title && !title_has_meeting_keyword(&title) {
-            return 1;
-        }
-        context.found = Some((target.display_name, title));
-        0
+        String::from_utf16_lossy(&buffer[..written as usize])
     }
 
-    fn collect_target_processes() -> Vec<TargetProcess> {
-        // SAFETY: 快照句柄在本函数内关闭；结构体按 API 要求置零并设置 dwSize。
-        unsafe {
-            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if snapshot == INVALID_HANDLE_VALUE {
-                return Vec::new();
-            }
-            let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-            let mut targets = Vec::new();
-            if Process32FirstW(snapshot, &mut entry) != 0 {
-                loop {
-                    let name = wide_to_string(&entry.szExeFile);
-                    if let Some(display_name) = display_name_for(&name) {
-                        targets.push(TargetProcess {
-                            pid: entry.th32ProcessID,
-                            display_name,
-                            requires_title: requires_title_match(&name),
-                        });
-                    }
-                    if Process32NextW(snapshot, &mut entry) == 0 {
-                        break;
-                    }
-                }
-            }
-            CloseHandle(snapshot);
-            targets
+    unsafe extern "system" fn scan_window(window: HWND, lparam: LPARAM) -> BOOL {
+        let context = &mut *(lparam as *mut ScanContext);
+        let Some((display_name, title)) = matched_window(context, window) else {
+            return 1;
+        };
+        let priority = priority_for(display_name);
+        if priority < context.best_priority {
+            context.best_priority = priority;
+            context.found = Some((display_name, title));
         }
+        1
     }
 
-    fn wide_to_string(buffer: &[u16]) -> String {
-        let len = buffer
-            .iter()
-            .position(|unit| *unit == 0)
-            .unwrap_or(buffer.len());
-        String::from_utf16_lossy(&buffer[..len])
+    unsafe extern "system" fn collect_window(window: HWND, lparam: LPARAM) -> BOOL {
+        let context = &mut *(lparam as *mut ScanContext);
+        if let Some((display_name, _title)) = matched_window(context, window) {
+            context.windows.push((display_name, window));
+        }
+        1
     }
 }
 
@@ -159,9 +209,14 @@ mod imp {
     pub fn detect_running() -> Option<(&'static str, String)> {
         None
     }
+
+    /// 非 Windows 目标没有可遍历的窗口句柄。
+    pub fn find_meeting_windows() -> Option<Vec<(&'static str, isize)>> {
+        None
+    }
 }
 
-pub use imp::detect_running;
+pub use imp::{detect_running, find_meeting_windows};
 
 #[cfg(test)]
 mod tests {
@@ -182,7 +237,8 @@ mod tests {
         assert!(requires_title_match("WeChat.exe"));
         assert!(requires_title_match("DingTalk.exe"));
         assert!(!requires_title_match("wemeetapp.exe"));
-        assert!(!requires_title_match("Feishu.exe"));
+        assert!(requires_title_match("Feishu.exe"));
+        assert!(requires_title_match("Lark.exe"));
     }
 
     #[test]

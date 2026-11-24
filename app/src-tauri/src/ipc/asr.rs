@@ -10,7 +10,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use meeting_copilot_domain::model::enums::Platform;
-use meeting_copilot_domain::port::capture::AudioSource;
+use meeting_copilot_domain::port::capture::{
+    AudioSource, SourceHealth, SubtitleEvent, SubtitleSource,
+};
+use meeting_copilot_platform_win::subtitle::UiaSubtitleSource;
 use meeting_copilot_platform_win::wasapi::WasapiLoopbackSource;
 
 use crate::ipc::card_store::CardStore;
@@ -74,6 +77,7 @@ pub struct AsrPipeline {
     child: Mutex<Option<Child>>,
     cards: Arc<CardStore>,
     paths: AsrPaths,
+    subtitle: UiaSubtitleSource,
 }
 
 impl AsrPipeline {
@@ -85,12 +89,37 @@ impl AsrPipeline {
             child: Mutex::new(None),
             cards,
             paths,
+            subtitle: UiaSubtitleSource::new(Platform::TencentMeeting),
         }
     }
 
     fn set_last_text(&self, text: &str) {
         if let Ok(mut last) = self.last_text.lock() {
             *last = text.to_owned();
+        }
+    }
+
+    fn start_subtitle(self: &Arc<Self>) {
+        let cards = Arc::clone(&self.cards);
+        let pipeline = Arc::downgrade(self);
+        let sink = Box::new(move |event: SubtitleEvent| {
+            let text = event.text.as_str();
+            if let Some(pipeline) = pipeline.upgrade() {
+                pipeline.set_last_text(text);
+            }
+            let _ = cards.ingest(text);
+        });
+        let _ = self.subtitle.subscribe(sink);
+    }
+
+    pub fn subtitle_status(&self) -> &'static str {
+        if !self.subtitle.is_running() {
+            return "off";
+        }
+        match self.subtitle.health() {
+            SourceHealth::Ready => "ready",
+            SourceHealth::Degraded(_) => "degraded",
+            SourceHealth::Unavailable(_) => "off",
         }
     }
 
@@ -110,6 +139,7 @@ impl AsrPipeline {
         if self.running.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
+        self.start_subtitle();
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let spawned = spawn_recognizer(&self.paths);
         let (child, stdin, stdout) = match spawned {
@@ -207,6 +237,7 @@ impl AsrPipeline {
     /// 停止实时转写并回收子进程。
     pub fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
+        self.subtitle.stop();
         self.generation.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut slot) = self.child.lock() {
             if let Some(mut child) = slot.take() {
