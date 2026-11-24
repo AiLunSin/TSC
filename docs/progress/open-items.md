@@ -105,7 +105,7 @@
 | 本机绝对路径 | **已完成历史改写** | 历史提交曾含本机绝对路径 | 已完成：全历史检索旧路径 0 命中；备份分支与 bundle 已删、reflog 已清、gc 已做 |
 | 本机 `git push` | **已恢复**（2026-11-23 多次推送成功） | 此前网络/代理对 Git 传输的限制 | 已完成；如再失败按 §8.7 处理，不要反复重试 |
 | 本机 MSVC 重编译 | `zstd-sys` 报 `D8050`/`LNK1104` | 系统 `%TEMP%` 与调试记录写入异常 | **已绕过（2026-11-23）**：设 `TEMP/TMP=.tmp\msvc-temp` 与 `CARGO_PROFILE_DEV_DEBUG=0`；重建、测试均通过 |
-| 本机 Rust 代理 | `cargo --version` 无输出、bash `rc=127`；PowerShell 退出码 `-1073741515`（`0xC0000135`，DLL not found）。`rustup.exe` 同样失败 | `~/.cargo/bin` 下的 rustup 代理起不来（工具链本身完好：直接调 `~/.rustup/toolchains/.../bin/rustc.exe` 可编译最小程序） | **未修复（2026-11-24 19:55）**。改用工具链内 `cargo.exe` 后能开始构建，但编译 `windows-sys` / desktop build script 时 `rustc` 仍 `0xC0000135`，桌面 exe 本轮未重建（前端 `dist` 已更新）。下一步：重装 rustup（`rustup-init`）或补齐 VC 运行库后重试，不要反复重跑同一命令 |
+| 本机 Rust 代理 | `cargo --version` 无输出、bash `rc=127`；加 PATH 后仍输出 `rustfmt 1.11.0`、`cargo metadata` 报 `Unrecognized option: 'no-deps'` | **根因（2026-11-24 21:48 查明）**：`~/.cargo/bin` 下 16 个 exe 全是同一个二进制（SHA256 一致），它依赖 210 MB 的 `rustc_driver-7e26db7803845d2b.dll`（只在工具链 `bin` 下），且实际行为是 rustfmt 而非 rustup 代理。PATH 只有 `~/.cargo/bin` → `0xC0000135`；补上 DLL 也只是跑成 rustfmt | **已修复（2026-11-24 21:48）**：把 `%USERPROFILE%\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin` **前置**到 `HKCU\Environment\Path`，`~/.cargo/bin` 保留在后段（cargo-deny 等第三方工具仍可用）。原值备份于 `.tmp/rust-path-backup-20261124-214821.txt`。验证 `cargo 1.100.0`、`rustc 1.100.0`、`cargo metadata --no-deps` rc=0；21:57 已重建 exe。**残留**：`rustup` 自身仍是坏代理，`rustup update` 等功能需另跑 `rustup-init` 重装 |
 
 ## 6. 关闭条件优先级
 

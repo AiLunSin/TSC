@@ -2073,3 +2073,29 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 **宣称边界**：可以说「真实 200 样本达标（三轮 p95 4461/4538/4759 ms、p99 5731/6789 ms、超时率 ≤0.61%）」，但不能说「已用博查/Tavily 验收」；失败请求来自免账号隧道丢连接，已用查询池余量 + 单条重试消化，p95/p99 按**全部样本**计算，偏保守。三个时段间隔约 20~30 分钟，仍不建议据此宣称「跨天/跨网络稳定」。
 
 **状态**：U-07-43 关闭；U-07 整体仍待 AUD-03/AUD-04/AUD-06 三项，保持 open。
+
+## §51 收尾修复：Rust 工具链根因、桥日志与脚本缺陷（2026-11-24 21:55）
+
+第三轮采样在本节写作期间于 21:55 结束（`report.json`：`real_samples=200 / p50=2221 / p95=4759 / p99=6789 / timeouts=2 / failures=128 / cache_hits=0`，超时率 0.61%，`verdict.py` rc=0）；三轮结论与关闭口径已在 §50 归档，本节不重复宣称。
+
+**1. 上一轮「exe 未重建」的根因与修复**
+
+`dumpbin /DEPENDENTS` 查 `~/.cargo/bin/rustup.exe`：它依赖 210 MB 的 `rustc_driver-7e26db7803845d2b.dll`（只在工具链 `bin` 下）；而 `~/.cargo/bin` 下 16 个 exe 的 SHA256 完全一致，实际是同一个 rustfmt 二进制，不是 rustup 代理。于是：
+
+- PATH 只有 `~/.cargo/bin` → 找不到 DLL → `0xC0000135`（上一轮 `cargo` rc=127、PS `-1073741515` 的来源）；
+- 只把工具链 `bin` **追加**到 PATH → DLL 找到了，但 `cargo --version` 输出 `rustfmt 1.11.0`、`cargo metadata --no-deps` 报 `Unrecognized option: 'no-deps'`，仍不能用；
+- 正确修法是把工具链 `bin` **前置**到 `HKCU\Environment\Path`，让 `cargo`/`rustc` 直接命中真二进制；`~/.cargo/bin` 留在后段，`cargo-deny`/`cargo-cyclonedx` 等第三方工具照常可用。
+
+原 PATH 备份于 `.tmp/rust-path-backup-20261124-214821.txt`（不入库）。验证 `cargo 1.100.0`、`rustc 1.100.0`、`cargo metadata --no-deps` rc=0；**21:57 重建 `target/debug/meeting-copilot-desktop.exe` 成功**（22,237,696 B），内嵌 `index-C7yxVhFM.js`，即 §49 的 `asrHintText` 修正已进产物。残留：`rustup` 自身仍是坏代理，`rustup update` 等功能需另跑 `rustup-init` 重装，已登记 `open-items.md §5`。
+
+**2. 本轮修掉的代码缺陷（不影响第三轮已编译的测试二进制）**
+
+- `scripts/u07-43/local-bridge.py`：① 删掉 `if not hits` 的第二个不可达分支，`last_error` 改为写入失败日志（原来赋值后未使用）；② `log_message` 原先 `fmt % args` 会把**完整请求行（含 URL 编码的 query 原文）**写进 `bridge.log`，与文件头「查询原文不写日志」冲突，现只记方法、去参路径、状态码、长度；③ quick tunnel 是公网 URL，扫描器打 `/`、`/favicon.ico` 连续吃 401（单轮日志 40 条噪音），非 `/search`、`/health` 路径不再逐条落日志。
+- `scripts/u07-43/run-cargo.ps1`：`Enter-VsDevShell` 用大小写不敏感字典装载环境变量，终端里同时有 `HTTP_PROXY`/`http_proxy` 时会抛「已添加项。字典中的关键字」并让 INCLUDE 为空（随后 `libsqlite3-sys` 静默 exit 2）。进入 DevShell 前先去重小写项并恢复大写值；另加模块缺失检查与 `try/catch` 可读报错。
+- `crates/infrastructure/tests/search_live.rs`：`collect_200_real_samples` 结尾写死 `assert_eq!(real_sample_count, 200)`，多源配置下一次 `run` 可能写入多条真实样本，攒够时 real 会 >200 而误判失败。改为 `>= 200`，与 SPEC 7.3 和 `verdict.py` 的 `real < target` 口径一致。
+
+**3. 刻意没动的文件**：`run-u07-43-samples.sh`、`start-bing-bridge.sh`（两个 `--serve-only` 进程仍在 `sleep 3600`，改写可能触发 trap 关掉隧道）、`verdict.py`（第三轮末尾要调用）。这三处若仍有问题，等采样归档后再处理。
+
+**验证**：`py_compile` rc=0、`cargo fmt --all -- --check` rc=0、`bash -n` rc=0、PS `Parser::ParseFile` 无语法错误（329 tokens）、DevShell 去重后加载成功且能找到 `link.exe`；工具链前置后 `cargo build -p meeting-copilot-desktop --features llm-https` 35.08s 完成，`cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live --no-run` 13.05s rc=0（确认 `search_live.rs` 改动可编译）。**改动尚未提交**（含另一会话的 14 个文件与本节 4 个文件），等使用者指示再 commit。
+
+**仍 open**：U-05 第 7 项 1/4、第 8 项 0/2（见 §49）；`rustup` 代理待重装。
