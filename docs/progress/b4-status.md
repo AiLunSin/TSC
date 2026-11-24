@@ -1603,3 +1603,31 @@ U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，�
 - 不宣称临时凭据已长期有效；本次使用的一次性凭据在验收后作废。
 
 记录目录（3 个 run）仍属 Q-03，归档完成后按 `open-items.md §8.4` 扫描无命中再删除。
+
+## §35 采集状态与实时转写失败可见性修复（2026-11-24）
+
+现象（真机）：左侧"字幕文本通道"恒为未启用；检测到腾讯会议并点"开始实时转写"后没有任何识别文本，也不报错，卡片始终为空。
+
+根因：
+
+| # | 位置 | 问题 |
+|---|---|---|
+| 1 | `ipc/capture.rs` + `ipc/asr.rs` | 字幕行取 `AsrPipeline::subtitle_status()`，而 UIA 订阅只在 `start()` 里启动；会议检测不驱动字幕通道，因此没点转写时恒为 `off` |
+| 2 | `ipc/asr.rs::spawn_recognizer` | 按 `python`/`py -3`/`python3` 取第一个"能启动"的解释器。PATH 首位常是未安装 vosk 的解释器（微软商店存根或工具自带 Python），子进程 `ImportError` 立即退出；stderr 被丢弃、`running` 回落 false，前端无任何提示 |
+
+修复：
+
+- 会议检测驱动字幕通道：`meeting_status` 命中会议时 `ensure_subtitle()`（幂等），无会议时 `stop_subtitle()`；`start()` 复用同一入口，避免两处互相 `subscribe` 打断。
+- 解释器先探测 `import vosk` 再选用；三个候选都不带 vosk 时返回 `asr_python_missing` 并提示 `pip install vosk`。
+- `asr_status` 增加第三项失败原因（`识别进程已退出` / `系统音频采集不可用` / 资源缺失），前端在提示位以错误样式展示；未开始转写时提示改为"点「开始实时转写」后按系统音频出卡"。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**49 passed / 0 failed**（含新增 `missing_program_is_not_reported_as_vosk_ready`、`error_slot_starts_empty`）。
+- `cargo check -p meeting-copilot-desktop --bins`、`tsc --noEmit`、`eslint .` 均通过；前端 `npm run build` 重新产出 `dist`。
+- 手工验证识别脚本可用：`py -3 app/src-tauri/asr/stream_asr.py .tmp/asr/vosk-model-small-cn-0.22 < .tmp/asr/test.wav` 产出 `{"partial": ...}` 文本；本机 `python`（工具自带）无 vosk，旧逻辑必然失败。
+
+未验证：
+
+- 真实会议音频 → 出卡的端到端（需真实会议与可用输出设备），仍需真机复核。
+- 腾讯会议窗口 UIA 可读文本为 0，字幕通道预计显示"降级"而非"就绪"；该结论不变。

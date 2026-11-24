@@ -74,6 +74,7 @@ pub struct AsrPipeline {
     running: AtomicBool,
     generation: AtomicU64,
     last_text: Mutex<String>,
+    last_error: Mutex<String>,
     child: Mutex<Option<Child>>,
     cards: Arc<CardStore>,
     paths: AsrPaths,
@@ -86,6 +87,7 @@ impl AsrPipeline {
             running: AtomicBool::new(false),
             generation: AtomicU64::new(0),
             last_text: Mutex::new(String::new()),
+            last_error: Mutex::new(String::new()),
             child: Mutex::new(None),
             cards,
             paths,
@@ -99,7 +101,31 @@ impl AsrPipeline {
         }
     }
 
-    fn start_subtitle(self: &Arc<Self>) {
+    fn set_error(&self, error: &str) {
+        if let Ok(mut last) = self.last_error.lock() {
+            *last = error.to_owned();
+        }
+    }
+
+    fn clear_error(&self) {
+        self.set_error("");
+    }
+
+    pub fn last_error(&self) -> String {
+        self.last_error
+            .lock()
+            .map(|error| error.clone())
+            .unwrap_or_default()
+    }
+
+    /// 启动 UIA 字幕通道；重复调用无副作用。
+    ///
+    /// 字幕通道与 ASR 独立：会议被检测到时由 `meeting_status` 驱动启动，
+    /// 手动开始实时转写时也会确保其运行，两者共用同一次订阅。
+    pub fn ensure_subtitle(self: &Arc<Self>) {
+        if self.subtitle.is_running() {
+            return;
+        }
         let cards = Arc::clone(&self.cards);
         let pipeline = Arc::downgrade(self);
         let sink = Box::new(move |event: SubtitleEvent| {
@@ -110,6 +136,12 @@ impl AsrPipeline {
             let _ = cards.ingest(text);
         });
         let _ = self.subtitle.subscribe(sink);
+    }
+
+    pub fn stop_subtitle(&self) {
+        if self.subtitle.is_running() {
+            self.subtitle.stop();
+        }
     }
 
     pub fn subtitle_status(&self) -> &'static str {
@@ -135,17 +167,25 @@ impl AsrPipeline {
 
     /// 启动实时转写；重复调用无副作用。
     pub fn start(self: &Arc<Self>) -> Result<(), IpcErrorDto> {
-        self.paths.validate()?;
+        if self.running.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        if let Err(error) = self.paths.validate() {
+            self.set_error(&error.message);
+            return Err(error);
+        }
+        self.clear_error();
         if self.running.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        self.start_subtitle();
+        self.ensure_subtitle();
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let spawned = spawn_recognizer(&self.paths);
         let (child, stdin, stdout) = match spawned {
             Ok(parts) => parts,
             Err(error) => {
                 self.running.store(false, Ordering::SeqCst);
+                self.set_error(&error.message);
                 return Err(error);
             }
         };
@@ -156,6 +196,7 @@ impl AsrPipeline {
                 let _ = child.kill();
                 let _ = child.wait();
                 self.running.store(false, Ordering::SeqCst);
+                self.set_error("识别进程状态不可用。");
                 return Err(IpcErrorDto::new(
                     "asr_state_unavailable",
                     "识别进程状态不可用。",
@@ -189,6 +230,12 @@ impl AsrPipeline {
                 let _ = recognizer.cards.ingest(text);
             }
             if let Some(recognizer) = recognizer.upgrade() {
+                if recognizer.is_current(generation) {
+                    // 用户没点停止却读到 EOF，说明识别进程自己退出了（缺 vosk、模型损坏等）。
+                    recognizer.set_error(
+                        "识别进程已退出：请确认 Python 3 已安装 vosk，且 ASR 模型可读。",
+                    );
+                }
                 recognizer.stop_generation(generation);
             }
         });
@@ -198,6 +245,9 @@ impl AsrPipeline {
             let source = WasapiLoopbackSource::new(Platform::TencentMeeting);
             if source.open(None).is_err() {
                 if let Some(capture) = capture.upgrade() {
+                    if capture.is_current(generation) {
+                        capture.set_error("系统音频采集不可用：请确认存在可用的默认输出设备。");
+                    }
                     capture.stop_generation(generation);
                 }
                 return;
@@ -270,30 +320,54 @@ impl Drop for AsrPipeline {
     }
 }
 
+fn quiet_command(program: &str, prefix_args: &[&str]) -> Command {
+    let mut command = Command::new(program);
+    command.args(prefix_args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+/// 候选解释器是否装了 vosk。
+///
+/// PATH 里第一个 `python` 未必是装了 vosk 的那个（例如 IDE/工具自带的嵌入式 Python），
+/// 直接用它会让识别进程启动后立刻 ImportError 退出，表现为"开始转写但一直没有文本"。
+fn python_has_vosk(program: &str, prefix_args: &[&str]) -> bool {
+    quiet_command(program, prefix_args)
+        .arg("-c")
+        .arg("import vosk")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 fn spawn_recognizer(
     paths: &AsrPaths,
 ) -> Result<(Child, std::process::ChildStdin, std::process::ChildStdout), IpcErrorDto> {
     paths.validate()?;
     let candidates: [(&str, &[&str]); 3] = [("python", &[]), ("py", &["-3"]), ("python3", &[])];
-    let mut last_missing = None;
+    let mut checked: Vec<&str> = Vec::new();
     for (program, prefix_args) in candidates {
-        let mut command = Command::new(program);
-        command.args(prefix_args);
+        if !python_has_vosk(program, prefix_args) {
+            checked.push(program);
+            continue;
+        }
+        let mut command = quiet_command(program, prefix_args);
         command
             .arg(&paths.script)
             .arg(&paths.model)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(CREATE_NO_WINDOW);
-        }
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                last_missing = Some(error);
+                checked.push(program);
                 continue;
             }
             Err(error) => {
@@ -324,12 +398,10 @@ fn spawn_recognizer(
         };
         return Ok((child, stdin, stdout));
     }
-    let detail = last_missing
-        .map(|error| error.to_string())
-        .unwrap_or_else(|| "未找到 Python 3".to_owned());
+    let detail = checked.join(" / ");
     Err(IpcErrorDto::new(
         "asr_python_missing",
-        &format!("未找到可用的 Python 3：{detail}"),
+        &format!("未找到已安装 vosk 的 Python 3（已检查 {detail}），请先 pip install vosk。"),
         false,
     ))
 }
@@ -376,8 +448,8 @@ pub fn stop_asr(state: tauri::State<'_, Arc<AsrPipeline>>) -> Result<(), IpcErro
 #[tauri::command]
 pub fn asr_status(
     state: tauri::State<'_, Arc<AsrPipeline>>,
-) -> Result<(bool, String), IpcErrorDto> {
-    Ok((state.is_running(), state.last_text()))
+) -> Result<(bool, String, String), IpcErrorDto> {
+    Ok((state.is_running(), state.last_text(), state.last_error()))
 }
 
 #[cfg(test)]
@@ -421,6 +493,16 @@ mod tests {
         let pcm = resample_to_16k(&samples, 16_000);
         assert_eq!(pcm.len(), 3);
         assert_eq!(pcm[1], 0);
+    }
+
+    #[test]
+    fn missing_program_is_not_reported_as_vosk_ready() {
+        assert!(!python_has_vosk("definitely-not-a-python-under-test", &[]));
+    }
+
+    #[test]
+    fn error_slot_starts_empty() {
+        assert_eq!(pipeline().last_error(), "");
     }
 
     #[test]

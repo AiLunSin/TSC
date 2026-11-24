@@ -33,6 +33,15 @@ function toChannelState(value: string): ChannelState {
   return "off";
 }
 
+function asrHintText(running: boolean, text: string): string {
+  if (text !== "") {
+    return text;
+  }
+  return running
+    ? "系统音频实时识别，等待说话…"
+    : "点「开始实时转写」后按系统音频出卡；也可直接粘贴会议文本。";
+}
+
 function formatElapsed(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -60,6 +69,7 @@ export default function App() {
   const [ingestNotice, setIngestNotice] = useState<string | null>(null);
   const [asrRunning, setAsrRunning] = useState(false);
   const [asrText, setAsrText] = useState("");
+  const [asrError, setAsrError] = useState("");
 
   const loadCards = useCallback(async () => {
     try {
@@ -161,10 +171,11 @@ export default function App() {
     let cancelled = false;
     async function refreshAsr(): Promise<void> {
       try {
-        const [running, text] = await invokeCommand<[boolean, string]>("asr_status");
+        const [running, text, error] = await invokeCommand<[boolean, string, string]>("asr_status");
         if (!cancelled) {
           setAsrRunning(running);
           setAsrText(text);
+          setAsrError(error);
         }
       } catch {
         // 保留上一次状态
@@ -183,6 +194,9 @@ export default function App() {
   async function toggleAsr(): Promise<void> {
     try {
       await invokeCommand(asrRunning ? "stop_asr" : "start_asr");
+      if (!asrRunning) {
+        setAsrError("");
+      }
       setAsrRunning(!asrRunning);
     } catch {
       setCardError("实时转写启动失败，请稍后重试。");
@@ -302,9 +316,13 @@ export default function App() {
                 >
                   {asrRunning ? "停止实时转写" : "开始实时转写"}
                 </button>
-                <span className="hint">
-                  {asrText === "" ? "系统音频实时识别，等待说话…" : asrText}
-                </span>
+                {asrError === "" ? (
+                  <span className="hint">{asrHintText(asrRunning, asrText)}</span>
+                ) : (
+                  <span className="settings-error" role="alert">
+                    {asrError}
+                  </span>
+                )}
               </div>
             </div>
             <div className="settings-section">
