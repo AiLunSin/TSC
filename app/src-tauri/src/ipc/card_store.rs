@@ -19,8 +19,7 @@ use meeting_copilot_domain::model::gate_keyword::{
 };
 use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::vo::{
-    CardRef, ConclusionText, Confidence, KeywordRef, NormalizedTerm, ReferenceRef, SessionId,
-    TitleText,
+    CardRef, ConclusionText, Confidence, KeywordRef, NormalizedTerm, ReferenceRef, TitleText,
 };
 
 use crate::ipc::card_gate::{self, LocalGate};
