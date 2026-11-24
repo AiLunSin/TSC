@@ -2111,3 +2111,34 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 **复测**：工具链前置修复后跑 `cargo test --workspace`，64 个 `test result` 行汇总为 **1049 passed / 0 failed / 12 ignored**，rc=0，与 README 原有数字一致，本轮脚本改动未改变用例数；`check-g2-claims`、`scan-secrets-docs --all-md`、`check-b4-gates --rule=zero-transcript`、`check-mac-scope --rule=claims`、`check-ui-integration` 五道门禁 rc=0。
 
 **状态不变**：U-05 第 7 项 1/4、第 8 项 0/2；U-07-43 关闭；U-07 整体 open；`rustup` 坏代理待重装。
+
+## §53 U-05 第 7/8 项真机取证完成（2026-11-25 00:30）
+
+用户以管理员身份运行 `target/debug/meeting-copilot-desktop.exe`，三张真机截图补齐第 7/8 项，**U-05 关闭**。此前 22:00–00:20 的所有失败均在非提权会话：WebView2 报 `0x800700AA` / `0x8000FFFF`、白屏、进程十余秒自杀、前台被抢；提权后窗口、渲染、前台全部正常，与代码无关。
+
+**第 7 项（卡片渲染）4/4**
+
+| 检查点 | 实测 | 结论 |
+|---|---|---|
+| 卡片正文与结论 | 7 张卡，标题/正文/类型/引用/置信度齐全（`u05-A-cards.png`） | 通过 |
+| 点击展开详情 | 内联展开 `引用一致性：passed`、`local-1`，无模态、不抢输入焦点（`u05-C-detail-visible.png`） | 通过 |
+| 数量与清空 | 清空后列表为空、显示"暂无卡片"、`清空` 灰化（`u05-D-cleared.png`） | 通过 |
+| 禁用卡不可点 | 真机不可达，按代码判定：`resolve_click_state` 六因优先级单测 + `KeywordCard.tsx:46` 渲染分支（`gate_keyword` 与 `ipc::card_store` 已有断言） | 通过（代码判定） |
+
+禁用卡真机不可达的三条原因：① `stale_reference` 判据是 `reference_stale \|\| !session_matches`，桌面单会话 `session_matches` 恒 `true`（`main.rs:55`），手动粘贴与卡片视图同用 `gate.session_id`（`card_store.rs:341`），造不出"引用已过期"；② 授权撤回 / 未允许 / 未核实三因在手动允许路径下不触发；③ 唯一真正 `Disabled` 的遮蔽与投屏态 `body_visible=false`，`KeywordCard.tsx:46` 直接返回只有角标的 `<li>`，**不渲染按钮与 `card-reason`**——实现上比"显示不可点击 + 原因"更严。故不以截图冒充，改由代码事实与单测固定。
+
+**第 8 项（投屏/紧急遮蔽）3/3**
+
+| 状态 | 实测 | 结论 |
+|---|---|---|
+| 投屏 `PRIVACY_SCREEN_SHARE=1` | 粘贴同一句并点"生成卡片"：卡片区仍"暂无卡片"，提示「已生成 0 张卡片。」；右上角"按需生成，不随转写自动出卡"、`清空` 灰化（`u05-EVIDENCE-screen-deny.png`） | 通过 |
+| 紧急遮蔽 `PRIVACY_EMERGENCY_MASKED=1` | 7 张卡全部只剩「有 1 条」角标；卡片区像素统计 `dark_text=0`、`blue_badge=259`（`u05-EVIDENCE-emergency-20261125.png`） | 通过 |
+| 紧急遮蔽（点击态） | `body_visible=false` 走角标分支，无"查看详情"可点元素、无详情面板 | 通过 |
+
+**口径修正**：`open-items.md §8.3` 原写投屏态应提示"这条内容未通过卡片生成条件"，该文案只在 `App.tsx:321` 的 explain（选中文字→查意思）路径；手动粘贴「生成卡片」走 `App.tsx:503-505`，提示恒为 `已生成 ${added} 张卡片。`，投屏态即"已生成 0 张卡片。"。两条路径均属"0 卡"合法表现，判定表已按路径分别写明。
+
+**证据**：`.tmp/u05-EVIDENCE-emergency-20261125.png`、`u05-EVIDENCE-screen-boot.png`、`u05-EVIDENCE-screen-deny.png`，以及既有 `u05-A-cards.png`、`u05-C-detail-visible.png`、`u05-D-cleared.png`；均为本机临时产物，未入库。可复跑入口 `scripts/u05-evidence/Run-U05-AsAdmin.ps1`（自带 UAC 提权，`-Mode all\|emergency\|screen`、`-NoAuto`、`-NoSandbox`）。
+
+**关闭口径核对**：① 联网 E2E 有记录（§32 第 9 项 passed，设置页"测试连接"返回"连接成功。"）；② 真机 WebView2 有记录（本节三张截图）；③ 窗口/焦点/投屏：窗口标题与尺寸符合、详情内联展开不抢输入焦点、投屏与紧急遮蔽各有结论。三项齐备，U-05 由 `open` 改 `closed`。
+
+**仍 open**：U-07 整体（AUD-03/04/06）、U-08 其余子项、U-09 H-34-G 真实端点、platform-win UIA 字幕真实会议文本、OCR 真实字幕验证、12 个 `#[ignore]`、`tests/replay/`、`rustup` 坏代理重装。
