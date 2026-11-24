@@ -165,6 +165,13 @@ pub fn ingest_explanation(
     let mut sources = input.sources.clone();
     let config = search.config();
     if sources.is_empty() && config.auto && config.ready {
+        let (network, latency_ms) = search.network_snapshot();
+        tracing::debug!(
+            target: "search",
+            state = network.as_str(),
+            latency_ms = latency_ms.unwrap_or(-1),
+            "出卡自动补来源：准备出网"
+        );
         if let Ok(response) = search.query(&input.word) {
             sources = response
                 .hits

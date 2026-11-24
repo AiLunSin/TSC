@@ -66,21 +66,11 @@ rule_na() {
 }
 
 rule_matrix() {
+  # 2026-11-25: platform-mac 已删除（用户决定），仅保留 Windows 能力矩阵检查。
   local win="crates/platform-win/resources/capability_matrix.toml"
-  local mac="crates/platform-mac/resources/capability_matrix.toml"
   need_file "${win}" || return
-  need_file "${mac}" || return
-  local win_keys mac_keys
-  win_keys="$(grep -E '^key = ' "${win}" | sort)"
-  mac_keys="$(grep -E '^key = ' "${mac}" | sort)"
-  if [[ "${win_keys}" != "${mac_keys}" ]]; then
-    fail "capability_matrix: 键集合不相等"
-  fi
   if [[ "$(grep -c '^\[\[capability\]\]' "${win}")" -ne 6 ]]; then
     fail "${win}:0 能力条目应恰为 6"
-  fi
-  if [[ "$(grep -c 'status = "not_applicable"' "${mac}")" -ne 6 ]]; then
-    fail "${mac}:0 mac 能力条目应全部 not_applicable"
   fi
 }
 
@@ -124,10 +114,8 @@ rule_claims() {
 
 rule_contracts() {
   local checks=(
-    "Cargo.toml|crates/platform-mac"
     "deny.toml|x86_64-apple-darwin"
     "deny.toml|aarch64-apple-darwin"
-    "crates/platform-mac/src/lib.rs|PLATFORM_NAME"
     "crates/application/src/capture/merge_gate.rs|validate_merged_set"
     "crates/domain/src/model/utterance.rs|dual_channel"
     "crates/domain/src/model/channel.rs|ChannelKind"

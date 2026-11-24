@@ -1,9 +1,0 @@
-[package]
-name = "meeting-copilot-platform-mac"
-version.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
-description = "macOS 平台：ScreenCaptureKit 音频、AX 无障碍字幕、Vision OCR。"
-
-[dependencies]

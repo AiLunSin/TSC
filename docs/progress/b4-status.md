@@ -1331,20 +1331,20 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 
 | 编号 | 事项 | 状态 | 关闭条件 | 所需用户条件 | 取证命令/定位 | 冲突 | 来源 |
 |---|---|---|---|---|---|---|---|
-| AUD-01 | U-05 整体 | `open` | 真实联网 E2E 记录 + 真机 WebView2 验收记录 + 窗口/焦点/投屏结论 | 端点凭据、真机、投屏/会议样本 | `docs/progress/b4-status.md §29.5-1`；`ui_integration/tasks.md §19-10` | 无 | §29.5、§19 |
-| AUD-02 | U-07 整体 | `open` | AUD-03~06 四项全部关闭 | 见 AUD-03~06 合并条件 | `docs/progress/b4-status.md §25.3` | 无 | §25.3 |
-| AUD-03 | U-07-41.5 负反馈加权 | `未完成`（规格层明确不做） | 补齐 b4 级增量需求规格（字段/枚举/AC/零转录） | 需求规格立项授权 | `grep -n "U-07-41.5" docs/progress/b4-status.md` | 无 | §25.3 |
-| AUD-04 | U-07-42 缓存/outbox | `未完成` | 持久化介质确定 + "重启不丢"口径定义 + 用例通过 | 确认介质与口径 | `grep -n "U-07-42" docs/progress/b4-status.md` | 无 | §25.3 |
-| AUD-05 | U-07-43 按需补全实体 | `未完成` | 真实检索源接入 + 8s p95 样本达标 | 真实检索源 + 性能样本 | `grep -n "U-07-43" docs/progress/b4-status.md` | 无 | §25.3 |
-| AUD-06 | U-07-52 审计哈希链存储 | `未完成` | 落库介质确定 + 180 天保留策略确认 + 哈希链用例通过 | 介质与保留策略裁决 | `grep -n "U-07-52" docs/progress/b4-status.md` | 无 | §25.3 |
+| AUD-01 | U-05 整体 | `closed`（2026-11-25，§53） | 真机第 1~6/9/10 项、第 7 项 4/4、第 8 项 3/3 已取证；联网 E2E 见 §32 第 9 项 passed | 已满足 | `docs/progress/b4-status.md §53` | 无 | §29.5、§19、§53 |
+| AUD-02 | U-07 整体 | `open`（仅剩真实断网取证） | AUD-04 的真实断网演练记录（网络恢复 ≤3 秒识别、恢复后 30 秒补齐率 ≥98%） | 断网环境或管理员授权执行演练 | `docs/progress/b4-status.md §56` | 无 | §25.3、§56 |
+| AUD-03 | U-07-41.5 负反馈加权 | `closed`（2026-11-25 台账对齐） | 规格见 `docs/sdd/spec.md` §7.1；实现 `c96f381`；加权/硬抑制/三维统计用例全绿 | 已满足 | `docs/sdd/spec.md` §7.1；`b4-status.md §56` | 无 | §25.3、§33、§56 |
+| AUD-04 | U-07-42 缓存/outbox | `未完成`（规格/实现/用例已齐备，仅缺真实断网取证） | 真实断网演练：网络恢复 ≤3 秒识别、30 秒补齐率 ≥98% | 断网环境或管理员授权执行演练 | `docs/sdd/spec.md` §7.2；`b4-status.md §56` | 无 | §25.3、§33、§56 |
+| AUD-05 | U-07-43 按需补全实体 | `closed`（2026-11-24） | 三轮独立 200/200 样本、p95 4461/4538/4759 ms，见 §50 | 已满足 | `b4-status.md §50` | 无 | §25.3、§50、§56 |
+| AUD-06 | U-07-52 审计哈希链存储 | `closed`（2026-11-24，方案 B 5 年） | 同库只追加表 + 180 天在线 + 5 年归档；哈希链/篡改/归档用例全绿 | 已满足 | `docs/sdd/spec.md` §7.4；`b4-status.md §56` | 无 | §25.3、§33、§56 |
 | AUD-07 | U-08 真实端点/真机 | `未判定`（9 个 `#[ignore]` 保持） | 端点凭据可用 + 真机验证 + 误触发率与性能记录 | 凭据、真机、样本；`#[ignore]` 不解锁 | `bash scripts/run-llm-live.sh --print-record-roots`（只打印根，不联网） | 无 | §25.3、§29.5-4 |
 | AUD-08 | AC-B4-109 远端 CI | `passed`（仅本地）/ 远端未取证 | 远端 run 结论文本或截图 + 步骤全绿 | push 授权后的远端只读查看权限 | 文档定位 `b4-status.md §25.3`；远端结论需用户提供 | 无 | §25.3 |
-| AUD-09 | C-UI-02 macOS CI 编译观察项 | `已裁决保留` | 无（保持 `ci.yml`/`deny.toml`/`platform-mac` 零 diff） | 无 | `git diff --quiet HEAD -- .github/workflows/ci.yml deny.toml` | 见 AUD-16 | §29.6 |
+| AUD-09 | C-UI-02 macOS CI 编译观察项 | `closed`（2026-11-25 用户决定删除 platform-mac） | 已删除 `crates/platform-mac` 并从 workspace 移除；`ci.yml` 保留 darwin 编译观察、`deny.toml` 保留两 target | 已满足 | `git diff --quiet HEAD -- .github/workflows/ci.yml deny.toml`；`ls crates/platform-mac` 应不存在 | 见 AUD-16 | §29.6、§57 |
 | AUD-10 | C-UI-03 生产探针 | `已裁决保留`（默认关闭） | 无（仅 `--features llm-https` 显式开启） | 无 | `grep -n "C-UI-03" docs/progress/b4-status.md` | 无 | §29.6 |
 | AUD-11 | 9 个 `#[ignore]` 纪律项 | `未判定`（不解锁） | 不改数量、不改名称；解锁需另行立项 | 明确解锁授权 | `grep -rIn "#\[ignore\]" crates app --include=*.rs \| wc -l` 期望 9 | 无 | §29.5-4、§19-11 |
 | AUD-12 | `tests/replay/` 不存在 | `未判定`（纪律项） | 保持不存在；创建需另行立项 | 明确创建授权 | `find . -type d -name replay -not -path './target/*' \| wc -l` 期望 0 | 无 | §29.5-4 |
 | AUD-13 | platform-win WASAPI/UIA/OCR 占位 | `未完成` | 三个能力各有真实实现 + 用例 | 真机音频/UI 自动化/OCR 样本 | 文档定位 `b4-status.md §29.5`；`ls crates/platform-win/src` | 无 | 需求侧 §1.3-2 |
-| AUD-14 | platform-mac 整体占位 | `未完成` | macOS 目标实现 + 交叉编译验证 | macOS 环境（本轮不提供） | `git ls-files crates/platform-mac \| wc -l`；`check-mac-scope.sh --rule=...` | 无 | §29.6 |
+| AUD-14 | platform-mac 整体占位 | `closed`（2026-11-25，不适用） | 占位已删除，不再需要 macOS 目标实现 | 已满足 | `ls crates/platform-mac` 应不存在；`grep -c "platform-mac" Cargo.toml` 期望 0 | 无 | §57 |
 | AUD-15 | `.codeartsdoer/` 未入库（治理缺口） | `open` | 解除忽略并入库，或明确"永久不入库"并登记理由 | 忽略面变更裁决（Q-07） | `git check-ignore -v .codeartsdoer`；`git ls-files .codeartsdoer \| wc -l` 期望 0 | 无 | `.gitignore:11` |
 | AUD-16 | 文档口径漂移：C-UI-02 | `未完成` | 三处表述统一到"已裁决保留"或明确时点差异 | 无（按 §29.6 裁决口径收口） | `grep -n "C-UI-02"` 三处文档 | `§29.5-2`"未裁决" / `§29.6`"保留" / `handoff-pui §4-2`"未裁决" | §29.5、§29.6、handoff |
 | AUD-17 | 本地专属门禁未纳入 CI | `open` | 四个本地门禁进 CI 或明确"仅本地执行"并登记理由 | CI 变更裁决（本轮不做） | `grep -cE "check-b4-gates\|check-ui-integration\|check-mac-scope\|check-b3-gates" .github/workflows/ci.yml` 期望 0 | 无 | `ci.yml:28-265` |
@@ -2243,3 +2243,95 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - 结论：**§55.2 的测试脚手架修复在 macOS runner 上生效**，该 flaky 用例已转绿；远端 CI 恢复 8/8。最新 CI 口径以本小节与门面文档为准，§55.4 的「待复跑」是当时的时间线记录，按纪律保留不改写。
 - 边界：远端日志未取到失败断言的**具体数值**（GitHub Actions job logs API 匿名访问 403），§55.1 的根因仍标注为推断；已验证的是「修复有效」，不是「根因已证实」。不把复跑成功写成 macOS 平台行为已定性。
 - 门面同步：README 仓库状态与发布行、ABOUT CI 行、`open-items.md` §0 与 §3 的待办行统一改为「已复跑 8/8 全绿」。
+## §56 U-07 台账对齐与取证复核（2026-11-25）
+
+> 本轮只做文档口径对齐与本地取证复核，不改源码、不改门禁语义、不新增能力宣称。依据：本文件 §33（四项实现落地）、§50（U-07-43 关闭）、§53（U-05 关闭）、`open-items.md §8.5`（规格落点与实现提交）、`docs/sdd/spec.md §7`、`docs/sdd/design.md §2.10`、`docs/sdd/tasks.md 附录 G`。
+
+### §56.1 口径漂移与修正
+
+§30.1 台账在 2026-11-23 登记，而 U-07 四项实现落地（§33）同日稍后完成，导致 AUD-03/05/06 仍停留在 `未完成`。本轮按上游事实修正：
+
+| 台账项 | 原状态 | 现状态 | 依据 |
+|---|---|---|---|
+| AUD-01 | `open` | `closed` | U-05 于 2026-11-25 关闭（§53） |
+| AUD-02 | `open` | `open`（仅剩真实断网取证） | 关闭条件收敛为 AUD-04 一项 |
+| AUD-03 | `未完成`（规格层明确不做） | `closed` | 规格 `spec.md §7.1`；实现 `c96f381`；用例全绿 |
+| AUD-04 | `未完成` | `未完成`（仅缺真实断网取证） | 规格/实现/用例齐备；「网络恢复 ≤3 秒识别、恢复后 30 秒补齐率 ≥98%」需真实断网 |
+| AUD-05 | `未完成` | `closed` | U-07-43 于 2026-11-24 关闭（§50） |
+| AUD-06 | `未完成` | `closed` | U-07-52 于 2026-11-24 关闭，方案 B（在线 180 天 + 归档 5 年） |
+
+> 时间线说明：§25.3（2026-11-22 P10）与 §50（2026-11-24）中「U-07 整体仍待 AUD-03/AUD-04/AUD-06 三项」是当时快照，按不改写纪律保留；最新口径以本节与 §56.1 为准。
+
+### §56.2 AUD-03 规格与取证（U-07-41.5 负反馈加权）
+
+- 规格：`docs/sdd/spec.md §7.1`（枚举沿用 `None/Adopted/Dismissed/Reported`，不新增；按 `topic_cluster_id` 与 `(topic_cluster_id, source_ref_id)` 两级聚合；不存 URL 与原文；不改变任何 `Deny`）。
+- 设计：`docs/sdd/design.md §2.10.1`；任务：`docs/sdd/tasks.md 附录 G`。
+- 实现：`c96f381`（`domain/model/feedback.rs`、`application/proactive/feedback.rs`、`store/repo/feedback.rs`、`metrics/feedback.rs`）。
+- 本地取证（2026-11-25）：`cargo test -p meeting-copilot-infrastructure feedback -- --test-threads=1` 通过；`cargo test -p meeting-copilot-infrastructure --test store_proactive -- --test-threads=1` → **8 passed / 0 failed**（含 `feedback_events_are_append_only_and_weights_roundtrip`）。
+
+### §56.3 AUD-04 介质与「重启不丢」口径（U-07-42 缓存/outbox）
+
+- **持久化介质（规格既有，本轮仅登记）**：复用现有 SQLCipher/SQLite 单库（`meeting.db`），新增 `query_cache`、`proactive_outbox` 两表（v2 迁移），不新建独立缓存文件或明文副本。见 `spec.md §7.2`、`design.md §2.10.2`。
+- **保留与上限**：查询缓存 TTL 24 小时、≤2,000 条、≤20 MiB（LRU）；outbox 待处理 ≤500 条、单任务最长 7 天。
+- **「重启不丢」判定口径**：关闭并重开同一库后，`proactive_outbox` 中 `pending` 与 `failed` 的集合与重启前一致（`done` 不进入可恢复集）。
+- 本地取证（2026-11-25）：`--test store_proactive` **8 passed / 0 failed**；`outbox_survives_restart_with_same_active_set` 断言重启后 `recoverable` 为 `task-1`/`task-2`、`active_count=2`；`cache_roundtrips_and_expires`、`cache_evicts_beyond_twenty_mib`、`cache_evicts_oldest_beyond_two_thousand_entries`、`deleting_a_session_cascades_cache_and_outbox` 均通过。
+- **仍缺**：「网络恢复 ≤3 秒识别、30 秒补齐率 ≥98%」需真实断网演练。演练要素：断开物理/虚拟网卡或阻断出网 → 记录识别时延 → 恢复网络 → 统计 30 秒内补齐比例。本机当前会话无管理员权限，未执行。
+
+### §56.4 AUD-06 介质与 180 天保留（U-07-52 审计哈希链）
+
+- **落库介质**：同一 SQLCipher/SQLite 库，只追加表 `audit_record`、`audit_anchor`，以触发器拒绝 UPDATE/DELETE（`store/migrations/v2_audit.sql`）。
+- **180 天起算点**：自 `occurred_at` 起 180×24 小时，固定不可配（`ONLINE_RETENTION_DAYS = 180`）；到期按自然月封存归档，不物理销毁。
+- **归档保留期**：5 年（2026-11-24 选定方案 B，个人自用简化确认）。
+- 本地取证（2026-11-25）：`cargo test -p meeting-copilot-infrastructure audit -- --test-threads=1` → **14 passed / 0 failed**（含 `chain_verifies_after_appends`、`tampering_is_localized`、`appends_build_a_verifiable_chain`、`concurrent_appends_keep_chain_continuous`、`tampered_anchor_is_detected`、`update_and_unarchived_delete_are_rejected`、`old_months_are_sealed_then_removed`、`write_failure_keeps_online_rows`）。
+
+### §56.5 不宣称
+
+- 不宣称 U-07 整体已关闭：AUD-04 的真实断网演练仍未取证。
+- 不宣称「网络恢复 ≤3 秒识别、30 秒补齐率 ≥98%」已实测。
+- 本轮不新增 AC、不新增 target、不改 `#[ignore]` 数量、不改门禁语义。
+### §56.6 运行时接线缺口（2026-11-25 复核，AUD-04 的真实前置）
+
+复核发现：AUD-04 不只是「缺一次断网演练」，**「断网 → 降级 → 恢复 → 补齐」的运行时编排尚未接入应用层**：
+
+| 组件 | 状态 | 证据 |
+|---|---|---|
+| `query_cache` / `proactive_outbox` 表与仓储 | 已实现 | `store/repo/{cache,outbox}.rs`、`migrations/v2_cache_outbox.sql`；`--test store_proactive` 8 passed |
+| `DegradeQueue`（20 秒单次重试） | 已接线（2026-11-25） | 由 `RecoveryCoordinator::on_sources_unavailable` / `due_retries` 统一驱动；见 §56.7 |
+| `plan_backfill`（并发 ≤3、30 分钟去重） | 已接线（2026-11-25） | 同上；并发上限由 `RecoveryCoordinator::on_backfill_started` 强制 |
+| `OutboxStore::recoverable` + `OutboxService::recover` | 已实现（启动恢复） | 仍未被 app 调用；需在检索落库改造后接入 |
+| `NetProbe`（真实请求成功为准、≤3 秒识别网络恢复） | **已实现（2026-11-25）** | `application/src/proactive/net_probe.rs`；默认 1 秒探测、间隔夹到 ≤3 秒；5 个用例 |
+| 应用层接线（IPC / 采集链路 / 「已离线」状态） | **部分接线（2026-11-25）** | `SearchState` 持 `NetProbe`，`web_search` 与出卡自动补来源均上报真实结果；离线时失败文案改为「当前已离线；网络恢复后可重试」；状态与时延写 `search` 日志；未新增 IPC/DTO（契约不变） |
+| outbox 落库与自动补齐（断网期任务持久化、恢复后回放出卡） | **未接线** | `ingest_explanation` 缺少 session/dedupe 上下文，改造属独立立项；AUD-04 维持未关闭 |
+
+**结论（2026-11-25 更新）**：`NetProbe` 与降级/补齐协调器已实现，并接入真实检索结果，网络恢复识别时延可测、离线文案可观测；但「断网任务落库 + 恢复后自动回放出卡」仍未接线，因此 AUD-04 仍**不关闭**。关闭路径：① 检索路径接入 outbox 落库与回放 → ② 真实断网演练取证 → ③ 关闭。
+
+**不影响已有结论**：U-07-43 的 200 条真实样本由 `tests/search_live.rs` 直接驱动 `OnDemandRunner`，不依赖上述应用层接线；U-07-52 的审计哈希链已接入存储层。
+
+### §56.7 本轮修补记录（2026-11-25）
+
+| 文件 | 变更 | 验证 |
+|---|---|---|
+| `crates/application/src/proactive/net_probe.rs`（新增） | 真实请求结果驱动 `NetworkState`；默认 1 秒探测、间隔夹到 ≤3 秒；提供 `should_probe` / `recovery_latency_ms` / `recognized_within_budget` | 5 个单测通过 |
+| `crates/application/src/proactive/recovery.rs`（新增） | `RecoveryCoordinator` 串联降级队列与补齐窗口；`BackfillOutcome` 判定「补齐率 ≥98% + 30 秒内 + 并发 ≤3」 | 5 个单测通过（含 97% 不达标、并发第 4 条被拒、空窗口记 1.0） |
+| `app/src-tauri/src/ipc/search.rs` | `SearchState` 持 `Mutex<NetProbe>`；`query` 用真实结果上报（仅 `search_unreachable` 计断网）；`web_search` 离线文案；`network_snapshot` 供出卡路径取证 | `cargo check` / `clippy -D warnings` 通过 |
+| `app/src-tauri/src/ipc/explain.rs` | 出卡自动补来源前记录网络状态与恢复时延（`tracing`，不改行为） | 同上 |
+
+**验证汇总**：`cargo fmt --all -- --check` rc=0；`cargo test --workspace` **1059 passed / 0 failed / 12 ignored**（新增 10 例）；clippy `-D warnings` 对 domain/application/infrastructure/desktop 均 rc=0；门禁 10 项 rc=0（含 `zero-transcript`、`doc-plan`、`layering`、`ui-integration`、`g2-claims`）。
+
+**边界**：本轮不改 `crates/domain/src/model`（闭面测试 `existing_closed_faces_are_unchanged` 约束），新增常量下沉到 application 层；不新增 IPC/DTO，避免破坏 20 DTO 契约。
+## §57 platform-mac 占位删除（2026-11-25）
+
+用户 2026-11-25 明确要求删除多余的 `platform-mac` 占位 crate（无 macOS 设备，占位无实现价值）。本轮执行：
+
+| 动作 | 结果 |
+|---|---|
+| 删除 `crates/platform-mac/`（`Cargo.toml`、`src/lib.rs`、`resources/capability_matrix.toml`） | 已删除 |
+| 从 `Cargo.toml` workspace `members` 移除 | 已移除；`Cargo.lock` 同步（`grep -c platform-mac Cargo.lock` = 0） |
+| `scripts/check-mac-scope.sh` | `rule_matrix` 只保留 Windows 能力矩阵；`rule_contracts` 移除 2 条 platform-mac 条目 |
+| `ci.yml` | **不改**：darwin 两 target 编译观察保留（验证其余 crate 跨平台可编译），`--rule=claims` 不受影响 |
+| `deny.toml` | **不改**：保留 `aarch64-apple-darwin` / `x86_64-apple-darwin` |
+| `scripts/check-layering.sh` | **不改**：`FORBIDDEN` 仍列 `meeting-copilot-platform-mac`（禁止再引入，无害） |
+
+**裁决变更登记**：§29.6 的 C-UI-02「保留、零 diff」及 AUD-09/AUD-14 由用户 2026-11-25 变更——`platform-mac` 由「保留占位」改为「删除」；`ci.yml`/`deny.toml` 维持零 diff，故 C-UI-02 的编译观察仍然成立。§29.5-2 / §29.6 / ERR-01 中的「保留」是 2026-11-22 的当时裁决，按不改写纪律保留，最新口径以本节为准。
+
+**验证**：`cargo check --workspace` rc=0；`cargo test --workspace` rc=0；`scripts/check-mac-scope.sh` 八条规则 rc=0；`check-b4-gates`、`layering`、`claims` 门禁 rc=0。

@@ -6,9 +6,10 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use meeting_copilot_application::proactive::net_probe::{NetProbe, NetworkState};
 use meeting_copilot_application::settings::{PortError, SecureStore};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -135,6 +136,13 @@ fn unix_now() -> u64 {
         .unwrap_or(0)
 }
 
+fn unix_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
 impl SearchFileV1 {
     fn provider(&self) -> SearchProvider {
         SearchProvider::parse(&self.provider).unwrap_or(SearchProvider::Bocha)
@@ -206,10 +214,12 @@ impl SearchStore {
     }
 }
 
-/// 检索运行态：配置 + 独立凭据。由 Tauri 管理，不放进 `AppState`。
+/// 检索运行态：配置 + 独立凭据 + 网络状态。由 Tauri 管理，不放进 `AppState`。
 pub struct SearchState {
     pub store: SearchStore,
     pub secure: Arc<dyn SecureStore>,
+    /// 由真实检索结果驱动的网络状态机（SPEC 7.2.1-7、DESIGN 2.10.2）。
+    probe: Mutex<NetProbe>,
 }
 
 impl SearchState {
@@ -217,6 +227,40 @@ impl SearchState {
         Self {
             store: SearchStore::new(dir),
             secure,
+            probe: Mutex::new(NetProbe::new()),
+        }
+    }
+
+    /// 最近一次真实检索驱动的网络状态与「离线 → 在线」识别延迟（毫秒）。
+    pub fn network_snapshot(&self) -> (NetworkState, Option<i64>) {
+        self.probe
+            .lock()
+            .map_or((NetworkState::Unknown, None), |probe| {
+                (probe.state(), probe.recovery_latency_ms())
+            })
+    }
+
+    /// 用真实检索结果驱动网络状态；只有「连不上」才算断网，鉴权/限流/空结果不算。
+    fn observe_network(&self, outcome: &Result<Vec<SearchHitDto>, IpcErrorDto>) {
+        let reachable = match outcome {
+            Ok(_) => true,
+            Err(error) => error.code != "search_unreachable",
+        };
+        let Ok(mut probe) = self.probe.lock() else {
+            return;
+        };
+        let changed = probe.on_result(reachable, unix_now_ms());
+        if !changed {
+            return;
+        }
+        match probe.state() {
+            NetworkState::Online => tracing::info!(
+                target: "search",
+                latency_ms = probe.recovery_latency_ms().unwrap_or(-1),
+                "检索网络已恢复"
+            ),
+            NetworkState::Offline => tracing::warn!(target: "search", "检索网络不可用"),
+            NetworkState::Unknown => {}
         }
     }
 
@@ -332,7 +376,9 @@ impl SearchState {
         };
         // 先扣额度再出网：请求一发出，服务商那边就已经计费了。
         self.consume_quota(file.hourly_limit)?;
-        let hits = run_search(provider, &key, &query)?;
+        let outcome = run_search(provider, &key, &query);
+        self.observe_network(&outcome);
+        let hits = outcome?;
         Ok(SearchResponseDto {
             provider: provider.display_name().to_owned(),
             hits,
@@ -537,7 +583,18 @@ pub fn web_search(
     state: State<'_, Arc<SearchState>>,
     input: SearchInputDto,
 ) -> Result<SearchResponseDto, IpcErrorDto> {
-    state.query(&input.query)
+    state.query(&input.query).map_err(|error| {
+        if error.code == "search_unreachable" && state.network_snapshot().0 == NetworkState::Offline
+        {
+            IpcErrorDto::new(
+                "search_unreachable",
+                "连不上检索服务，当前已离线；网络恢复后可重试。",
+                true,
+            )
+        } else {
+            error
+        }
+    })
 }
 
 #[cfg(test)]

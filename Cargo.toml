@@ -6,7 +6,6 @@ members = [
   "crates/application",
   "crates/infrastructure",
   "crates/platform-win",
-  "crates/platform-mac",
   "crates/ui-bridge",
 ]
 
