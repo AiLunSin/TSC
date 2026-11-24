@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { invokeCommand } from "./bridge/tauri";
-import type { CardDetailDto, KeywordCardViewDto } from "./bridge/types";
+import type {
+  CardDetailDto,
+  ExplainResultDto,
+  KeywordCardViewDto,
+  TranscriptLineDto,
+} from "./bridge/types";
 import { CardDetail } from "./cards/CardDetail";
 import { KeywordCard } from "./cards/KeywordCard";
 import { SettingsPage } from "./settings/SettingsPage";
@@ -71,6 +76,11 @@ export default function App() {
   const [asrText, setAsrText] = useState("");
   const [asrError, setAsrError] = useState("");
   const [asrStats, setAsrStats] = useState("");
+  const [lines, setLines] = useState<TranscriptLineDto[]>([]);
+  const [selection, setSelection] = useState("");
+  const [explainBusy, setExplainBusy] = useState(false);
+  const [explainResult, setExplainResult] = useState<ExplainResultDto | null>(null);
+  const [explainNotice, setExplainNotice] = useState<string | null>(null);
 
   const loadCards = useCallback(async () => {
     try {
@@ -91,6 +101,25 @@ export default function App() {
       window.clearInterval(id);
     };
   }, [loadCards]);
+
+  const loadTranscript = useCallback(async () => {
+    try {
+      const next = await invokeCommand<TranscriptLineDto[]>("transcript_snapshot");
+      setLines(next);
+    } catch {
+      // 保留上一次内容
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTranscript();
+    const id = window.setInterval(() => {
+      void loadTranscript();
+    }, 1200);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [loadTranscript]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +194,66 @@ export default function App() {
       setDetail(next);
     } catch {
       setCardError("详情暂不可用。");
+    }
+  }
+
+  // 只接受转写区内部的选区，避免把整页文字误当成选中。
+  function captureSelection(container: HTMLElement): void {
+    const active = window.getSelection();
+    if (active === null || active.rangeCount === 0) {
+      return;
+    }
+    if (!container.contains(active.getRangeAt(0).commonAncestorContainer)) {
+      return;
+    }
+    const text = active.toString().trim().replace(/\s+/g, " ");
+    if (text === "") {
+      return;
+    }
+    setSelection(text.slice(0, 200));
+    setExplainResult(null);
+    setExplainNotice(null);
+  }
+
+  async function explainSelection(): Promise<void> {
+    const text = selection.trim();
+    if (text === "") {
+      return;
+    }
+    setExplainBusy(true);
+    setExplainNotice(null);
+    try {
+      const result = await invokeCommand<ExplainResultDto>("explain_selection", {
+        input: { text, context: "" },
+      });
+      setExplainResult(result);
+    } catch (error) {
+      setExplainResult(null);
+      const message =
+        typeof error === "object" && error !== null && "message" in error
+          ? String(error.message)
+          : "";
+      setExplainNotice(message === "" ? "查询失败，请稍后重试。" : message);
+    } finally {
+      setExplainBusy(false);
+    }
+  }
+
+  async function cardFromExplanation(): Promise<void> {
+    if (explainResult === null) {
+      return;
+    }
+    try {
+      const added = await invokeCommand<number>("ingest_explanation", {
+        input: {
+          word: explainResult.text,
+          explanation: explainResult.explanation,
+        },
+      });
+      setExplainNotice(added > 0 ? "已生成卡片。" : "这条内容未通过卡片生成条件。");
+      await loadCards();
+    } catch {
+      setExplainNotice("生成卡片失败，请稍后重试。");
     }
   }
 
@@ -336,6 +425,83 @@ export default function App() {
                   </span>
                 )}
               </div>
+            </div>
+            <div className="settings-section transcript-section">
+              <div className="panel-head">
+                <h2>完整转写</h2>
+                <span className="hint">选中任意文字可查意思，并生成卡片</span>
+              </div>
+              <div
+                className="transcript-body"
+                role="textbox"
+                aria-readonly="true"
+                aria-label="实时转写全文"
+                onMouseUp={(event) => {
+                  captureSelection(event.currentTarget);
+                }}
+              >
+                {lines.length === 0 ? (
+                  <p className="hint">
+                    还没有转写内容。开始实时转写后，识别到的句子会逐条出现在这里。
+                  </p>
+                ) : (
+                  lines.map((line) => (
+                    <p key={line.index} className="transcript-line">
+                      {line.text}
+                    </p>
+                  ))
+                )}
+              </div>
+              {selection === "" ? null : (
+                <div className="settings-actions">
+                  <span className="hint">已选中：{selection}</span>
+                  <button
+                    className="btn btn-start"
+                    type="button"
+                    disabled={explainBusy}
+                    onClick={() => {
+                      void explainSelection();
+                    }}
+                  >
+                    {explainBusy ? "查询中…" : "查意思"}
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => {
+                      setSelection("");
+                      setExplainResult(null);
+                      setExplainNotice(null);
+                    }}
+                  >
+                    取消选中
+                  </button>
+                </div>
+              )}
+              {explainResult === null ? null : (
+                <div className="explain-panel">
+                  <p className="explain-source">
+                    {explainResult.source === "llm" ? "模型释义" : "本机上下文"}
+                  </p>
+                  <p className="explain-text">{explainResult.explanation}</p>
+                  <div className="settings-actions">
+                    <button
+                      className="btn btn-start"
+                      type="button"
+                      onClick={() => {
+                        void cardFromExplanation();
+                      }}
+                    >
+                      生成卡片
+                    </button>
+                  </div>
+                </div>
+              )}
+              {explainNotice === null ? null : (
+                <p className="settings-notice" role="status">
+                  {explainNotice}
+                </p>
+              )}
             </div>
             <div className="settings-section">
               <label className="field">

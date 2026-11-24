@@ -28,6 +28,18 @@ export interface IpcErrorDto {
   retryable: boolean;
 }
 
+export interface TranscriptLineDto {
+  index: number;
+  text: string;
+  atMs: number;
+}
+
+export interface ExplainResultDto {
+  text: string;
+  explanation: string;
+  source: string;
+}
+
 export type ModelChoiceDto =
   | { preset: { displayName: string } }
   | { custom: { name: string } };
@@ -140,6 +152,9 @@ export const IPC_COMMANDS = [
   "start_asr",
   "stop_asr",
   "asr_status",
+  "transcript_snapshot",
+  "explain_selection",
+  "ingest_explanation",
 ] as const;
 
 export type IpcCommand = (typeof IPC_COMMANDS)[number];

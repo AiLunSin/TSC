@@ -1725,3 +1725,34 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 未验证：
 
 - 用户真机环境是否存在声音进入环回；若日志出现 `capture.idle=10s` 循环且无 `capture.chunks`，即为"系统输出无声/非默认设备"。
+
+## §39 完整转写 → 选中查义 → 释义出卡（2026-11-24）
+
+需求（真机反馈）：要的不是只有关键词卡片，而是"完整语音识别成文字 → 可以选中文字 → 查询这段文字的意思 → 生成卡片"。
+
+原实现的三个缺口：
+
+| # | 缺口 | 影响 |
+|---|---|---|
+| 1 | 稳定句只用于抽关键词，不保留全文 | 界面看不到完整转写，无从选中 |
+| 2 | 卡片只能由关键词派生 | 用户想为某个词单独建卡时没有入口 |
+| 3 | `llm-https` 为非默认特性 | 直接构建的桌面壳没有任何外发能力 |
+
+本轮实现：
+
+- **转写全文**（`ipc/transcript.rs`）：稳定句入内存缓冲（上限 600 句，不落库、退出即清空，紧邻重复句去重）；`transcript_snapshot` 返回 `{index,text,atMs}` 列表；界面在卡片区上方逐条展示，文本可选。
+- **选中查义**（`ipc/explain.rs` + `explain_selection`）：只接受转写区内部的选区（≤200 字），携带前后各一句作为上下文；已配置 Key 且启用 `llm-https` 时发 `chat/completions`（20s 超时，max_tokens 320），返回 ≤120 字释义；无 Key / 未启用传输 / 可重试的网络失败时自动回退"本机上下文"（出现次数 + 相关句子），面板标注来源为"模型释义"或"本机上下文"。
+- **释义出卡**（`CardStore::ingest_explanation` + `ingest_explanation`）：标题取选中文字、结论取释义摘要，复用 `build_draft` 与 `card_gate::evaluate`；投屏态照旧 0 卡。
+- **隐私边界**：外发仅由用户点击触发，不发送整场转写；`asr.log` 仍只记状态与计数，不记转写文本。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**58 passed / 0 failed**（新增 transcript 3 例：索引追加、去重与空行、上下文取值）。
+- `cargo check --features llm-https` 通过；`clippy -D warnings`、`fmt --check`、B4 源码/零转录、分层、UI 集成、`check-bindings`（13 个 DTO）全部 rc=0。
+- `tsc --noEmit`、`eslint .` 通过；`npm run build` 产出新 dist。
+- 构建产物：`target/debug/meeting-copilot-desktop.exe`（`--features llm-https`，16:14）。
+
+未验证：
+
+- 真实 Key 下的释义质量与端到端时延（需真机配 Key 后手测）。
+- 选中跨多句时的语义完整性：目前按原样把整段选中文本发出，未做断句。

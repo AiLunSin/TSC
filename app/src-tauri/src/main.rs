@@ -135,9 +135,12 @@ fn main() {
                 .unwrap_or_else(|| vec![DEFAULT_MODEL_PRESET.to_owned()]);
             let cards = Arc::new(ipc::card_store::CardStore::new());
             app.manage(Arc::clone(&cards));
+            let transcripts = Arc::new(ipc::transcript::TranscriptLog::new());
+            app.manage(Arc::clone(&transcripts));
             let asr_paths = ipc::asr::AsrPaths::resolve(app.path().resource_dir().ok().as_deref());
             app.manage(Arc::new(ipc::asr::AsrPipeline::new(
                 Arc::clone(&cards),
+                Arc::clone(&transcripts),
                 asr_paths,
             )));
             app.manage(build_state(config_dir, presets, cards.clone()));
@@ -161,7 +164,10 @@ fn main() {
             ipc::settings_save,
             ipc::settings_clear,
             ipc::keyword_cards_snapshot,
-            ipc::keyword_card_open
+            ipc::keyword_card_open,
+            ipc::transcript::transcript_snapshot,
+            ipc::explain::explain_selection,
+            ipc::explain::ingest_explanation
         ])
         .run(tauri::generate_context!())
         .expect("failed to run meeting-copilot desktop");

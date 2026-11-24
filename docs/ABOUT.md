@@ -19,7 +19,7 @@ Meeting Copilot 是一个 Windows 桌面 AI 助手：监听会议对话，识别
 - B2 离线闭环与双通道合并：状态机、仲裁、缺口、43 项 AC。
 - B3 理解层离线内核：片段准入、滚动摘要、要点抽取、去重。
 - B4 门控与关键词卡片：G1~G5 门控、38/39/51 契约与视图模型，AC-B4-01~104 离线通过。
-- P-UI 设置向导与关键词卡片前端：14 个 IPC 命令（含打开日志、会议检测、采集状态、文本出卡、实时转写）、Windows 凭据存储、原子 4 键配置、卡片组件，AC-B4-111~130 离线通过；设置页真机第 1~6、9、10 项通过。
+- P-UI 设置向导与关键词卡片前端：17 个 IPC 命令（含打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡）、Windows 凭据存储、原子 4 键配置、卡片组件，AC-B4-111~130 离线通过；设置页真机第 1~6、9、10 项通过。
 - U-06 回放契约与驱动用例（AC-B4-95~104）。
 - 实时转写链路：WASAPI 共享模式环回 → 16 kHz 单声道 → vosk 流式识别 → `jieba-rs` 关键词 → 关键词卡片；另保留“粘贴会议文本 → 生成卡片”手动入口。
 - UIA 字幕通道与 OCR 兜底：窗口文字探测、500ms 差量泵、`SubtitleSource` 适配；OCR 仅前台会议窗口客户区底带，默认关闭（`OCR_FALLBACK=1` 时作为回退）。
@@ -35,7 +35,7 @@ Meeting Copilot 是一个 Windows 桌面 AI 助手：监听会议对话，识别
 
 ## 技术栈
 
-- 桌面：Rust + Tauri 2（`app/src-tauri`，14 个 IPC 命令）
+- 桌面：Rust + Tauri 2（`app/src-tauri`，17 个 IPC 命令）
 - 前端：React 19 + TypeScript + Vite（`app/`）
 - 核心分层：`crates/domain`、`crates/application`、`crates/infrastructure`、`crates/platform-win`（含 WASAPI 环回）、`crates/ui-bridge`
 - 存储：默认 SQLite + 业务载荷字段级 AES-256-GCM；可选 `sqlcipher` 页级加密（FTS 索引需该模式才能覆盖），凭据写入 Windows 凭据管理器
@@ -45,7 +45,7 @@ Meeting Copilot 是一个 Windows 桌面 AI 助手：监听会议对话，识别
 - 凭据不入库、不进日志、不进审计、不进回放。
 - 日志仅允许白名单字段；原文、完整地址、查询全文不落日志。
 - 数据库打开前必须提供 OS 密钥库引用与实际派生密钥，禁止明文口令，也不再允许无密钥打开文件库。
-- 投屏与紧急遮蔽的真机取证只经开发期环境变量注入（`PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`，只认 `"1"`、默认关、启动时读取一次），不新增 IPC 命令，发布版不得开启。
+- 投屏与紧急遮蔽的真机取证只经开发期环境变量注入（`PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`，只认 `"1"`、默认关、启动时读取一次），该入口本身不新增 IPC 命令，发布版不得开启。
 - 不内置 AGPL/GPL 组件；检索源仅通过开放 SPI 接入。
 
 ## 更多信息

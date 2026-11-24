@@ -155,6 +155,40 @@ pub struct OpenInputDto {
     pub card_id: String,
 }
 
+/// 转写全文的一行；仅本次会话保留在内存。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TranscriptLineDto {
+    pub index: u64,
+    pub text: String,
+    pub at_ms: i64,
+}
+
+/// 选中文字的释义请求；`context` 只带选中处前后各一句。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExplainInputDto {
+    pub text: String,
+    pub context: String,
+}
+
+/// 释义结果；`source` 为 `llm` 或 `local`。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ExplainResultDto {
+    pub text: String,
+    pub explanation: String,
+    pub source: String,
+}
+
+/// 把释义落成卡片的请求。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct IngestExplanationInputDto {
+    pub word: String,
+    pub explanation: String,
+}
+
 /// IPC 错误：与前端既有 3 项一致。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

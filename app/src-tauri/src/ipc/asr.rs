@@ -18,6 +18,7 @@ use meeting_copilot_platform_win::wasapi::WasapiLoopbackSource;
 
 use crate::ipc::card_store::CardStore;
 use crate::ipc::dto::IpcErrorDto;
+use crate::ipc::transcript::TranscriptLog;
 
 const DEV_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const MODEL_DIR_NAME: &str = "vosk-model-small-cn-0.22";
@@ -86,6 +87,8 @@ pub struct AsrPipeline {
     last_error: Mutex<String>,
     child: Mutex<Option<Child>>,
     cards: Arc<CardStore>,
+    /// 本次会话的转写全文；稳定句入栈，供用户回看与选中查询。
+    transcripts: Arc<TranscriptLog>,
     paths: AsrPaths,
     subtitle: UiaSubtitleSource,
     /// 诊断计数：用来区分"没采到音频"和"采到了但没识别"。
@@ -97,7 +100,11 @@ pub struct AsrPipeline {
 }
 
 impl AsrPipeline {
-    pub(crate) fn new(cards: Arc<CardStore>, paths: AsrPaths) -> Self {
+    pub(crate) fn new(
+        cards: Arc<CardStore>,
+        transcripts: Arc<TranscriptLog>,
+        paths: AsrPaths,
+    ) -> Self {
         Self {
             running: AtomicBool::new(false),
             generation: AtomicU64::new(0),
@@ -106,6 +113,7 @@ impl AsrPipeline {
             last_error: Mutex::new(String::new()),
             child: Mutex::new(None),
             cards,
+            transcripts,
             paths,
             subtitle: UiaSubtitleSource::new(Platform::TencentMeeting),
             audio_chunks: AtomicU64::new(0),
@@ -278,6 +286,8 @@ impl AsrPipeline {
                     Recognized::Stable(text) => {
                         recognizer.set_last_text(&text);
                         recognizer.stable_lines.fetch_add(1, Ordering::Relaxed);
+                        // 稳定句进全文缓冲：用户回看与选中查询都以这里为准。
+                        recognizer.transcripts.push(&text);
                         if recognizer.take_stable_if_new(&text) {
                             let _ = recognizer.cards.ingest(&text);
                         }
@@ -647,7 +657,11 @@ mod tests {
     use meeting_copilot_application::settings::CardSnapshotSource;
 
     fn pipeline() -> AsrPipeline {
-        AsrPipeline::new(Arc::new(CardStore::new()), AsrPaths::resolve(None))
+        AsrPipeline::new(
+            Arc::new(CardStore::new()),
+            Arc::new(TranscriptLog::new()),
+            AsrPaths::resolve(None),
+        )
     }
 
     #[test]

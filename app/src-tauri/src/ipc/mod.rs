@@ -7,12 +7,14 @@ pub mod card_store;
 pub mod cards;
 pub mod catalog;
 pub mod dto;
+pub mod explain;
 pub mod log;
 pub mod meeting;
 pub mod probe;
 pub mod settings;
 pub mod settings_store;
 pub mod state;
+pub mod transcript;
 
 use tauri::State;
 

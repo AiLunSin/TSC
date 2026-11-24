@@ -24,7 +24,7 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时出卡**：AC-B4-111~130 离线通过；14 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时出卡 + 选中查义**：AC-B4-111~130 离线通过；17 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
@@ -52,7 +52,7 @@ crates/
   platform-mac/      macOS 适配（不适用，保留占位）
   ui-bridge/         IPC DTO、关键词卡片视图、设置向导视图
 app/                 React 19 + TypeScript + Vite 前端
-app/src-tauri/       Tauri 2 桌面壳（14 个 IPC 命令与装配）
+app/src-tauri/       Tauri 2 桌面壳（17 个 IPC 命令与装配）
 docs/sdd/            需求规格、技术方案、任务清单
 docs/progress/       各批次状态与验收记录
 docs/baseline/       LLM 与 ASR 基线
@@ -161,7 +161,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（14 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`/`stop_asr`/`asr_status`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（17 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`/`stop_asr`/`asr_status`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
 - 采集状态栏由 `capture_status` 驱动：系统音频通道读取 WASAPI 环回健康度（可用即"就绪"）；字幕文本通道由 UIA 轮询驱动，检测到会议即自动启动（窗口无可读文本时"降级"、无会议窗口时"未启用"）；本地 ASR 读取实时管线运行状态（运行中即"就绪"）。识别进程异常退出时，`asr_status` 第三项回传可见原因（缺 vosk、模型不可读、无音频设备），不再静默失败。
 - UIA 字幕通道只接受"像一句话"的元素（长度、中英文标识符占比、固定控件标签词表三重过滤）；腾讯会议窗口里那些 `DanmuContainer`／`pageContainer`／`最小化` 之类的控件名会被全部丢弃，该通道因此常态为"降级"而不是假装就绪。字幕文本与 ASR 文本**分开存放**：文本位优先展示 ASR，ASR 为空才回退字幕，避免两条通道互相覆盖。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 2 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。
@@ -191,6 +191,10 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 - 识别协议：`stream_asr.py` 输出两种行——`{"partial": "..."}` 为中间结果，`{"text": "..."}` 为稳定句。vosk 只在静音端点给 final，连续说话时会长期只有 partial，因此脚本对 partial 做**稳定判定（约 0.8s 无变化）与 4s 超时强制收句**，主动产出稳定句。界面文本位跟随 partial 实时刷新，**稳定句才抽关键词出卡**（半句不出卡，连续重复句去重）。
 - 诊断：`asr_status` 第四项回传"音频 X s / N 片 / 写入 KB / 稳定句 M"，显示在按钮旁。**未采到音频时不再留空**，而是明确显示 `音频 0.0s（0 片）：未采到系统声音`——这种情况下问题在系统输出（未播放、音量静音、会议用的是非默认设备），与识别无关。
 - 运行日志：转写启动、解释器选择、子进程 stderr、采集片数与稳定句计数写入 `%LOCALAPPDATA%\meeting-copilot\asr.log`（**只记状态与计数，不记任何识别文本或会议内容**）。真机排查"没有文本"时先看这个文件。
+- 完整转写：稳定句同时进入内存全文缓冲（`transcript_snapshot`，单次会话最多 600 句，**不落库、退出即清空**），界面在卡片区上方逐条展示；停止转写不清空，便于回看。
+- 选中查义：在转写区选中一段文字（≤200 字）后点"查意思"→ `explain_selection`。已配置 API Key 且构建启用 `llm-https` 时，只把**选中的文字 + 前后各一句**发给模型（20s 超时），返回不超过 120 字的释义；未配置 Key、未启用传输或网络失败时自动回退"本机上下文"（该内容出现次数与相关句子），面板上如实标注来源是"模型释义"还是"本机上下文"。
+- 释义出卡：解释面板的"生成卡片"→ `ingest_explanation`，标题为选中文字、结论为释义摘要，沿用同一套 B4 门控与隐私判定（投屏态照旧拒绝生成）。
+- 构建差异：`llm-https` 是**非默认特性**，只有带该特性构建的桌面壳才能真正出网（`cargo build -p meeting-copilot-desktop --features llm-https`）；不带特性的构建里"查意思"只会给出本机上下文。
 - 打包：`asr/stream_asr.py` 随仓库入库并默认打包；vosk 模型（约 52MB）不入库——发布前复制到 `app/src-tauri/asr/vosk-model-small-cn-0.22/`，再叠加 `app/src-tauri/tauri.asr.conf.json`（Tauri CLI 参数 `--config tauri.asr.conf.json`）打包。基础配置不含模型，因此 CI 与 `cargo clippy`/`cargo test` 无需模型即可编译。
 - 手动入口："粘贴会议文本 → 生成卡片"，复用同一 `ingest_text` 链路。
 - 卡片列表每 1 秒自动刷新；来源为 `UserGenerated`（本地片段），因此可点击，不伪造外部检索来源。
@@ -208,8 +212,9 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 - 桌面日志写入 `%LOCALAPPDATA%\com.meetingcopilot.desktop\logs\desktop.log`（超过 5 MiB 自动重置），设置页"打开日志"在资源管理器中定位；日志不发往网络。
 - 数据库打开前必须提供 OS 密钥库引用与实际派生密钥，禁止明文口令，也不再允许无密钥打开文件库。
 - 默认后端对 `sessions`/`utterances`/`insights`/`summaries`/`cards` 的业务载荷执行字段级 AES-256-GCM；FTS5 原文索引需 `sqlcipher` 页级加密才能覆盖，`query_cache`/`proactive_outbox` 的 JSON 字段尚未接入字段级加密。
+- 外发只有一条路径且由人触发：**用户主动选中文字并点"查意思"**时，仅发送选中片段（≤200 字）与前后各一句到已配置的模型服务，不发送整场转写；未配置 Key 或未启用 `llm-https` 时完全不出网。"自动外发""查询脱敏""审计"三项在界面上仍显示未接入——自动外发确实未做，不要把这理解成"全程不外发"。
 - 审计只追加，不随会话删除；在线保留 180 天，归档保留 5 年（项目自用设置），保留期内不自动销毁。
-- 投屏与紧急遮蔽的开发期注入入口：设置 `PRIVACY_SCREEN_SHARE=1` 后 G1 `ScreenShareProtection` 直接拒卡（0 卡）；`PRIVACY_EMERGENCY_MASKED=1` 时照常出卡，但卡片为禁用态、正文隐藏且不可点。两处只在进程启动时读取、只认严格 `"1"`，默认全关；仅为真机取证准备，不新增 IPC 命令（仍为 14 个），生产发布不得开启。
+- 投屏与紧急遮蔽的开发期注入入口：设置 `PRIVACY_SCREEN_SHARE=1` 后 G1 `ScreenShareProtection` 直接拒卡（0 卡）；`PRIVACY_EMERGENCY_MASKED=1` 时照常出卡，但卡片为禁用态、正文隐藏且不可点。两处只在进程启动时读取、只认严格 `"1"`，默认全关；仅为真机取证准备，本身不新增 IPC 命令，生产发布不得开启。
 - 许可证：不内置 AGPL/GPL 组件；检索源仅通过开放 SPI 接入。
 
 ## 文档索引

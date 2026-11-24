@@ -107,6 +107,51 @@ impl CardStore {
         Ok(added)
     }
 
+    /// 用"选中的词 + 模型释义"直接生成一张卡片，供"查意思 → 生成卡片"使用。
+    ///
+    /// 与 `ingest` 的区别：不抽关键词，标题固定为用户选中的文字，
+    /// 结论用释义摘要；门控与隐私判定照旧走 `card_gate::evaluate`。
+    pub fn ingest_explanation(&self, word: &str, explanation: &str) -> Result<usize, IpcErrorDto> {
+        let word = word.trim();
+        let explanation = explanation.trim();
+        if word.is_empty() || explanation.is_empty() {
+            return Err(IpcErrorDto::new(
+                "empty_explanation",
+                "释义内容为空。",
+                false,
+            ));
+        }
+        let title: String = word.chars().take(TitleText::LIMIT).collect();
+        let text = format!("{title} {explanation}");
+        let Some(gate) = card_gate::evaluate(
+            &text,
+            self.sequence.load(Ordering::Relaxed),
+            now_ms(),
+            self.privacy,
+        ) else {
+            return Ok(0);
+        };
+        if matches!(&gate.decision, GateDecision::Deny { .. }) {
+            return Ok(0);
+        }
+        let excerpt: String = explanation.chars().take(80).collect();
+        let mut store = self
+            .cards
+            .lock()
+            .map_err(|_| IpcErrorDto::new("card_store_unavailable", "卡片存储不可用。", true))?;
+        if store.len() >= MAX_CARDS {
+            store.remove(0);
+        }
+        let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        match build_draft(sequence, &title, &excerpt, &gate, self.privacy) {
+            Some(draft) => {
+                store.push(CardSnapshotEntry::Draft(draft));
+                Ok(1)
+            }
+            None => Ok(0),
+        }
+    }
+
     /// 从会议文本中提取关键词：jieba TF-IDF 排序，过滤停用词与单字。
     fn extract_keywords(&self, text: &str) -> Vec<String> {
         let mut result: Vec<String> = Vec::new();

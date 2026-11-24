@@ -11,6 +11,8 @@
     "shownAtMs"
   ],
   "IpcErrorDto": ["code", "message", "retryable"],
+  "TranscriptLineDto": ["index", "text", "atMs"],
+  "ExplainResultDto": ["text", "explanation", "source"],
   "SettingsSnapshotDto": [
     "formState",
     "hasKey",

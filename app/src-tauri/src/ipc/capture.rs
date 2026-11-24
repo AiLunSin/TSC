@@ -33,6 +33,7 @@ mod tests {
     fn reports_audio_status_from_platform_layer() {
         let asr = AsrPipeline::new(
             Arc::new(crate::ipc::card_store::CardStore::new()),
+            Arc::new(crate::ipc::transcript::TranscriptLog::new()),
             crate::ipc::asr::AsrPaths::resolve(None),
         );
         let rows = capture_status_impl(&asr);
@@ -50,6 +51,7 @@ mod tests {
     fn reports_running_asr_as_ready() {
         let asr = AsrPipeline::new(
             Arc::new(crate::ipc::card_store::CardStore::new()),
+            Arc::new(crate::ipc::transcript::TranscriptLog::new()),
             crate::ipc::asr::AsrPaths::resolve(None),
         );
         asr.set_running_for_test(true);
