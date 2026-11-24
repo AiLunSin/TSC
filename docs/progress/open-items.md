@@ -8,7 +8,7 @@
 ## 0. 状态速览
 
 - **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）、本地门禁 34/34 复核（2026-11-23）、Q-01/Q-06 清理与重建回归（2026-11-23）、Q-07 入库、AUD-17 门禁进 CI、X-AUD-15 OnceLock 改造（2026-11-23）、U-07-52 归档保留期（2026-11-24，方案 B：5 年，个人自用简化确认）、**U-07-43 真实 200 样本达标关闭（2026-11-24，`b4-status.md §50`）**、**U-05 设置向导 + 卡片前端关闭（2026-11-25，第 7 项 4/4、第 8 项 3/3，见 `b4-status.md §53`）**。
-- **仍 open**：U-08（真实 LLM 采样子项已于 2026-11-23 与 2026-11-24 两次取证，AC-20/AC-22 基线 120 样本 success=1.0；其余未判定）、U-09（A~F 已实现并推送 `f3d66a4`，H-34-G 手工验收入口已就绪，待真实端点验收）、`platform-win` 的 UIA 字幕适配器已实现并与采集状态接线（2026-11-24；腾讯会议/飞书窗口 UIA 元素数为 0，真实字幕文本未取得，保持 open）、OCR 已实现（前台会议窗口底部区域，2026-11-24；未在真实会议字幕上验证）、12 个 `#[ignore]`（含 H-34-G 的两个真实源入口）、`tests/replay/`。
+- **仍 open**：U-08（真实 LLM 采样子项已于 2026-11-23 与 2026-11-24 两次取证，AC-20/AC-22 基线 120 样本 success=1.0；其余未判定）、U-09（A~F 已实现并推送 `f3d66a4`，H-34-G 手工验收入口已就绪，待真实端点验收）、`platform-win` 的 UIA 字幕适配器已实现并与采集状态接线（2026-11-24；腾讯会议/飞书窗口 UIA 元素数为 0，真实字幕文本未取得，保持 open）、OCR 已实现（前台会议窗口底部区域，2026-11-24；未在真实会议字幕上验证）、11 个 `#[ignore]` 待真实端点（原 12 个中的 WASAPI 本机冒烟已于 2026-11-25 跑通，含 H-34-G 的两个真实源入口仍未跑）。
 - **待裁决**：Q-01、Q-06 已于 2026-11-23 执行关闭；Q-02~Q-05 已于 2026-11-23 删除；治理项 Q-07、AUD-17、X-AUD-15 已于 2026-11-23 执行。
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
 - **本轮闭环（2026-11-24）**：平台层新增 UIA 字幕与 OCR 兜底（提交 `9c6ca08`）；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复 Toolhelp 快照漏掉 64 位主进程；OCR 默认关闭（`OCR_FALLBACK=1` 开启），ASR 仍为主链路；新增开发期隐私注入入口 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（`app/src-tauri/src/privacy.rs`，默认关、只认 `"1"`、不加 IPC 命令），为设置页第 8 项备好取证手段；用一次性临时凭据跑通 `llm_live` 9 例与 120 样本基线（`b4-status.md §34`）；全量基线 **1000 passed / 0 failed / 12 ignored**，改动包 47（desktop）+ 27（platform-win，串行）通过，clippy/fmt 与四条门禁 rc=0。真实会议字幕文本未取得，U-05/U-08 保持 open。
@@ -19,6 +19,7 @@
 - **辅助回复上下文分层（2026-11-24 17:30）**：提醒窗口收到最近 5 句，回应仍看最近 12 句（≤900 字），两段在同一次请求里分标注（「更早的对话（只作背景，不要据此写提醒）」/「最近 5 句（提醒只依据这几句）」），不额外多花一次调用；不足 5 句时只给一段。面板小字同步为"提醒看最近 5 句，回应参考最近 12 句"。desktop bins **91 passed**（新增 1 例覆盖窗口切分），两套 clippy、fmt、门禁、`check-bindings`、tsc/eslint 全绿。**未决**：5/12 这组数在真实会议里是否够用，仍需手测。
 - **主栏版式减密（2026-11-24 18:00）**：用户反馈"太密集"。中栏由 1 个 `panel` + `.settings-section` 分隔线拆成 4 张卡片（关键词卡片／联网查资料／完整转写／会议文本），联网查改为默认收起的折叠块（标题行显示状态），选中操作栏提到转写框正下方；面板与卡片内边距、转写行距整体加大；响应式断点 1080→1180px（窄窗口隐藏长期空白的"要点时间轴"，宽度让给主栏）。只动版式，未动 IPC/业务；前端 tsc/eslint/build、六门禁、`check-bindings` 全绿；无头 Edge 截图复核 1082/1440 两档宽度。产物 18:01。**未决**：真机 125%/150% 缩放下的手感。
 - **检索限额与窗口可调（2026-11-24 18:40）**：用户要求"额度不用管、加限额""辅助回复让用户自己调"。① `search.json` 增 `hourlyLimit`（默认 20，0=不限，上限 200），计数落 `search-quota.json`（整小时窗口），先扣后出网，超限返回 `search_quota_exceeded`；② 新命令 `search_clear_key`（`SecureStore::delete`，配置保留），界面加"清除 Key"；③ 新 `assist.json` + `assist_config`/`assist_config_save`，提醒 3~10（默认 5）、上下文 5~20（默认 12），越界夹取且提醒不长于上下文；设置页新增"辅助回复"一节。IPC 23→**26**，DTO 17→**20**；desktop bins **93 passed**；两套 clippy、fmt、六门禁、`check-bindings`、tsc/eslint/build 全绿；产物 18:42。**未决**：真实 Key 下限额的计费口径（本地按次数，非 token）与真实召回质量仍待手测。
+- **本轮闭环（2026-11-25）**：① 本机 WASAPI 音频冒烟 `wasapi::tests::loopback_opens_and_captures_when_audio_is_active` 显式 `--ignored` 跑通，1 passed / 0 failed，rc=0（播放 30 秒双声道正弦波，0.05s 即返回，低于 200×10ms 空转上限，证明首帧即捕获真实环回包，`sample_rate>0`、`sequence>0` 断言通过）；② 12 个 `#[ignore]` 全量盘点，源码字面 13 处，差异来自 `llm_live_baseline.rs` 的 `#![cfg(feature = "llm-https")]` 整文件门控（默认特性 12、开 `llm-https` 13）；③ 仓库根 `tests/replay/` 经授权创建（只放语料与取证登记，`crates/application/tests/replay/` 仍不存在，AC-B4-49/57/63 口径不变）；④ X-AUD-08 口径由 13 更正为 **26**；⑤ 清理 U-05 临时脚本与配置备份（证据截图保留）。详见 `b4-status.md §54`。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；P2 已完成（2026-11-23）；P3 规格与实现已完成（2026-11-23；U-07-43 真实 200 样本已于 2026-11-24 达标关闭，见 `b4-status.md §50`）；P4 治理已完成（2026-11-23，见 §8.6）；P5 检索源接入 A~F 已实现并推送（2026-11-24，`f3d66a4`），H-34-G 手工入口已就绪，待真实端点。
 - **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；当时保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据（`target/` 后于 Q-01 清理）。
@@ -35,7 +36,7 @@
 | U-07-52 | 审计哈希链存储 | **已实现并提交（`c96f381`）**：只追加表、触发器、哈希链、月度归档；G-52-D 运行时摘要扫描已接入；**已关闭（2026-11-24）** | 无（方案 B：在线 180 天 + 归档 5 年；个人自用简化确认） | 已满足 | — |
 | U-08 | 真实端点 / 真机判定 | 部分取证：真实 LLM 采样 9/9 通过（2026-11-23，见 `b4-status.md §31`）；**2026-11-24 复测 9/9 + 基线 120 样本、4 任务 success_rate=1.0、0 degraded、`leak_hits=0`**（见 `§34`）；`ac23` 窗口内未触发限流 | 真实检索源、真实冷却、真机性能与误触发率均无结论 | 凭据可用 + 真机记录 + 指标达标 | 端点凭据、真机、样本 |
 | U-09 | 检索源接入（任务 34 最小闭环） | **A~F 已实现（2026-11-24）**：`providers.json` 校验、注册表、健康分类、`http_json`、零源模式与按需 runner；H-34-G 手工入口 `search_live.rs` 已就绪并编译通过 | 真实端点与凭据；3 次手工检索；200 条真实样本 | 自动化用例已过；需真实端点验收 | 真实端点与凭据 |
-| 平台层 | `platform-win` 的 WASAPI/UIA/OCR | WASAPI 环回已实现（`AudioSource` 端口，含混音/单声道解码单测）；**UIA 字幕已实现（2026-11-24）**：窗口探测、`SubtitleSource` 适配器、500ms 差量泵、文本直连 `CardStore` 出卡、采集状态投影；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复快照漏掉 64 位主进程；**OCR 已实现（2026-11-24）**：屏幕 DC 截取前台会议窗口底部 40% → `Windows.Media.Ocr` → 中文空格合并，作为 UIA 无文本时的回退；实测可识别窗口文字（腾讯会议首页 10 行、底带 20 行），未在真实会议字幕上验证 | 腾讯会议按自绘渲染，UIA 树为空；OCR 默认关闭（`OCR_FALLBACK=1` 开启），只在会议窗口位于前台时生效，底带可能混入按钮/菜单文字 | UIA 需真实会议且开启字幕取得文本；OCR 需真实会议字幕样本与 ROI 校准 | 真实腾讯会议窗口 + 会议截图 |
+| 平台层 | `platform-win` 的 WASAPI/UIA/OCR | WASAPI 环回已实现（`AudioSource` 端口，含混音/单声道解码单测），**本机环回冒烟 2026-11-25 显式 `--ignored` 跑通：1 passed / 0 failed，rc=0，首帧即捕获真实环回包**（§8.9-D）；**UIA 字幕已实现（2026-11-24）**：窗口探测、`SubtitleSource` 适配器、500ms 差量泵、文本直连 `CardStore` 出卡、采集状态投影；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复快照漏掉 64 位主进程；**OCR 已实现（2026-11-24）**：屏幕 DC 截取前台会议窗口底部 40% → `Windows.Media.Ocr` → 中文空格合并，作为 UIA 无文本时的回退；实测可识别窗口文字（腾讯会议首页 10 行、底带 20 行），未在真实会议字幕上验证 | 腾讯会议按自绘渲染，UIA 树为空；OCR 默认关闭（`OCR_FALLBACK=1` 开启），只在会议窗口位于前台时生效，底带可能混入按钮/菜单文字 | UIA 需真实会议且开启字幕取得文本；OCR 需真实会议字幕样本与 ROI 校准 | 真实腾讯会议窗口 + 会议截图 |
 | 平台层 | `platform-mac` | 占位，不适用 | 无 macOS 设备与目标实现 | 保留占位即可；实现需另行立项 | macOS 环境（本轮不提供） |
 | 口径 | 38/39/51 | 仅契约与视图模型 | 不宣称产品级可点击卡片或真机可用 | 真机验收后重述口径 | 同 U-05 |
 
@@ -63,12 +64,12 @@
 |---|---|---|---|
 | AC-B4-109 远端 CI | **已关闭（远端 `success`）** | 无；run #56 的 `compliance` job 为 `success` | 已完成；如需留档，补存 Actions 运行页截图 |
 | AC 汇总 130 | 本地一致 | — | 无 |
-| `#[ignore]` 12 个（2026-11-24 实测） | 保持不解锁 | 真实端点/真机缺位 | 明确解锁授权 + 真实环境（逐类跑法见 §8.9） |
-| `tests/replay/` | 保持不存在 | 纪律项 | 明确创建授权 |
+| `#[ignore]` 默认特性 12 个（2026-11-25 复测）；其中 WASAPI 本机冒烟 1 个已跑通，余 11 个待真实端点 | 保持不解锁（不解锁 ≠ 不能显式 `--ignored` 运行） | 真实端点缺位 | 明确解锁授权 + 真实环境（逐类跑法见 §8.9） |
+| `tests/replay/` | **仓库根目录已创建（2026-11-25，用户授权）**：仅语料与取证登记，见 `tests/replay/README.md`；`crates/application/tests/replay/` 仍不存在 | 无（AC-B4-49/57/63 针对后者，口径不变） | 已满足 |
 | U-05 真机设置页 | 第 1~6、9、10 项通过（2026-11-23）；第 7 项 4/4、第 8 项 3/3（2026-11-25，`§53`） | 无 | 见 `b4-status.md §32`、`§49`、`§53` |
 | U-08 真实 LLM 采样 | 两次通过：9 passed / 0 failed，`leak_hits=0`，rc=0（2026-11-23）；复测 9 passed + 基线 120 样本 / 4 任务 success=1.0 / 0 degraded（2026-11-24，`§34`） | 真实检索源、冷却、性能、误触发率 | 见 §1 U-08（`b4-status.md §31`、`§34`） |
 
-> 说明：`#[ignore]` 数量以全量测试实测为准（2026-11-24 为 12 个）；启用 `--features llm-https` 会让 LLM 采样用例参与编译，数量可能变化。逐类跑法见 §8.9。
+> 说明：`#[ignore]` 数量以全量测试实测为准（`cargo test --workspace -- --list --ignored`，2026-11-25 复测默认特性 **12** 个）；源码字面 `#[ignore]` 共 **13** 处，差值来自 `llm_live_baseline.rs` 顶部的 `#![cfg(feature = "llm-https")]` 整文件门控——启用 `--features llm-https` 后 `baseline_30_samples_per_task` 才参与编译，此时为 **13** 个。逐类跑法见 §8.9。
 
 ## 4. 文档与治理偏差
 
@@ -84,7 +85,7 @@
 | X-AUD-05 | 否证句命中 | 三条宣称组合词在既有"不宣称"句命中（§21:921、§20:1254、§25.4:1052） | 属否定语境，按纪律不改写 |
 | X-AUD-06 | AC 看板状态快照过期 | `.tmp/ui-integration/ac-board.md` 状态节登记"2 完成 / 18 待办"，与 §29.3 最终"20/20 passed"不同 | **已补登**：按 `b4-status.md §30.9` 以 §29.3/§29.6 为准归档 |
 | X-AUD-07 | 全量基线漂移 | 本轮累计新增 14 个 passed 与 1 个 ignored 用例（设置页显名、枚举 JSON、清除反馈、reset 删除、会议窗口过滤、WASAPI 解码与冒烟、采集状态、关键词/卡片链路、重采样），全量由 859 变为 **877 passed / 0 failed / 10 ignored** | 以 877 为当前对照；`b4-status.md §30.5` E-15 保留历史 859 |
-| X-AUD-08 | IPC 命令面由 6 变 13 | 新增 `open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`、`stop_asr`、`asr_status`（第 7~13 个）；`D-B4-P147` 与 AC-B4-120 的"6 命令封闭"口径随之失效 | **待评审**：`CommandCounters` 仍为 6 组计数（新命令不计数）；AC-120 口径需在下次评审更新为 13 |
+| X-AUD-08 | IPC 命令面由 6 变 **26**（2026-11-25 复核 `main.rs:170-197`） | 首次增补 `open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`、`stop_asr`、`asr_status`（第 7~13 个）；其后又增 `set_auto_cards`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`、`search_config`、`search_config_save`、`search_clear_key`、`web_search`、`assist_reply`、`assist_config`、`assist_config_save` 与 `clear_cards`、`ipc_version`，现注册 26 个入口；`D-B4-P147` 与 AC-B4-120 的"6 命令封闭"口径随之失效 | **待评审**：`CommandCounters` 仍为 6 组 12 项计数（`state.rs:17-30`，仅覆盖 `settings_snapshot/probe/save/clear` 与 `keyword_cards_snapshot/card_open`，其余 20 个命令不计数）；AC-120 口径需在下次评审更新为 26，并裁决计数面是否同步扩大。本条此前写"13"，2026-11-25 更正 |
 | X-AUD-09 | 平台层新增第三方依赖 | 引入 `windows` 0.58.0（特征：`Win32_Media_Audio`/`Win32_System_Com`/`Win32_Foundation`/`Win32_System_Com_StructuredStorage`）用于 WASAPI 环回；`platform-win` 增加对 `meeting-copilot-domain` 的直接依赖 | **已登记**：许可证为 MIT/Apache-2.0（与 `deny.toml` 允许清单一致）；UIA/OCR 后续复用同一依赖 |
 | X-AUD-10 | 关键词提取新增依赖 | 引入 `jieba-rs` 0.7.4（features: `tfidf`）做中文关键词提取；词典内嵌，exe 体积约 +8 MB | **已登记**：MIT 许可证；替代此前手写分词规则（长句切不出词、百分比被截断） |
 | X-AUD-11 | 本地 ASR 运行时依赖 | 运行期依赖 Python 3.13 + `vosk` 0.3（wheel 内含 libvosk）与 `.tmp/asr/` 下的 vosk 中文小模型（约 42 MB）；模型与依赖 **不入库**，Rust 侧以 `CREATE_NO_WINDOW` 启动子进程 | **已登记**：Apache-2.0 许可证；发布版需另行提供模型与 Python 环境（README 已注明） |
@@ -92,7 +93,7 @@
 | X-AUD-13 | 非 Windows 平台占位 | macOS CI 因桌面壳无条件引用 Windows-only `wasapi` 而失败（E0432/E0433） | **已修复**：新增 `wasapi_stub.rs`（同接口、`open` 返回不支持），run 45152256989 两个 darwin 任务 success |
 | X-AUD-14 | 本地门禁口径滞后（UI） | `check-ui-integration --rule=settings-ux` 仍匹配 `disabled={!snapshot.canTest/canSave}`，实际页面已改为可计算的 `canTestNow`/`canSaveNow` | **已修复（2026-11-23）**：门禁改用正则，兼容 `snapshot.*` 与可计算变量两种写法 |
 | X-AUD-15 | 装配层全局态（B4 source） | **已修复（2026-11-23）**：`AsrPipeline`/`CardStore` 改为 Tauri managed State（`Arc`），移除 `OnceLock`；门禁豁免同步删除 | 已关闭；`b4-source` 对其他禁用面仍生效 |
-| X-AUD-16 | 开发期隐私注入入口 | 为关闭 U-05 第 8 项，新增 `app/src-tauri/src/privacy.rs`，读 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（只认 `"1"`，默认关）。读取点放在 `src/` 根而非 `ipc/`，避免命中装配层"禁环境变量"规则（`check-b4-gates --rule=source` 已复核 rc=0）；注入未改变当时命令面（14，现为 19，均与此开关无关） | **已登记**：属开发期验收开关，不投影给前端、不落库；真机结论出来后可移除以消除入口 |
+| X-AUD-16 | 开发期隐私注入入口 | 为关闭 U-05 第 8 项，新增 `app/src-tauri/src/privacy.rs`，读 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（只认 `"1"`，默认关）。读取点放在 `src/` 根而非 `ipc/`，避免命中装配层"禁环境变量"规则（`check-b4-gates --rule=source` 已复核 rc=0）；注入未改变当时命令面（14，2026-11-25 复核为 26，均与此开关无关） | **已登记**：属开发期验收开关，不投影给前端、不落库；真机结论出来后可移除以消除入口 |
 
 ## 5. 工程环境阻塞（非代码问题）
 
@@ -562,7 +563,9 @@ Get-Process WeMeetApp -ErrorAction SilentlyContinue | Select-Object Id,MainWindo
 - 只识别到客户端首页按钮文字**不算**通过（只能证明截图与 OCR 链路可用）；
 - 未通过前，平台层 UIA/OCR 行保持 `open`。
 
-### 8.9 跑 12 个 `#[ignore]`（逐类，手把手）
+### 8.9 跑 `#[ignore]`（默认特性 12 个，逐类，手把手）
+
+> 2026-11-25 盘点：默认特性 12 个 = `llm_live.rs` 9 + `search_live.rs` 2 + `wasapi.rs` 1；`llm_live_baseline.rs` 的 1 个受 `#![cfg(feature = "llm-https")]` 门控，开特性后共 13 个。**D 类（本机音频）已跑通**，A/B/C 三类仍待真实端点与凭据。
 
 **A. LLM 真实采样**（`llm_live.rs` / `llm_live_baseline.rs`）
 
@@ -640,6 +643,8 @@ cargo test -p meeting-copilot-platform-win --lib wasapi -- --ignored --nocapture
 ```
 
 前置：默认输出设备可用且有音频播放。
+
+> 实测（2026-11-25）：**1 passed / 0 failed，rc=0**。播放 30 秒 440 Hz 双声道正弦波（`.tmp/wasapi_smoke_tone.wav`，本机临时产物）后运行，0.05s 返回——低于 200×10ms 的空转上限，说明首个 `next_chunk()` 即取得真实环回包，`sample_rate>0`、`sequence>0` 断言通过，不是无音频空转退出。该用例保持 `#[ignore]` 不解锁（CI 无音频设备），需要时按本节显式重跑。
 
 **收尾**：每类跑完，在 §1 对应行记录"日期 + 通过/失败 + 退出码"，不写端点、Key、模型名。
 

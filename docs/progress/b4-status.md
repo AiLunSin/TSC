@@ -2142,3 +2142,62 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 **关闭口径核对**：① 联网 E2E 有记录（§32 第 9 项 passed，设置页"测试连接"返回"连接成功。"）；② 真机 WebView2 有记录（本节三张截图）；③ 窗口/焦点/投屏：窗口标题与尺寸符合、详情内联展开不抢输入焦点、投屏与紧急遮蔽各有结论。三项齐备，U-05 由 `open` 改 `closed`。
 
 **仍 open**：U-07 整体（AUD-03/04/06）、U-08 其余子项、U-09 H-34-G 真实端点、platform-win UIA 字幕真实会议文本、OCR 真实字幕验证、12 个 `#[ignore]`、`tests/replay/`、`rustup` 坏代理重装。
+
+## §54 本机冒烟、ignore 盘点、replay 目录授权与临时产物清理（2026-11-25 00:55）
+
+用户明确授权本轮五项：本机 WASAPI 音频冒烟、全部 `#[ignore]` 盘点、清理 U-05 临时备份与脚本、X-AUD-08 口径更新、创建 `tests/replay/`。**不改任何 Rust/前端代码、不改门禁语义、不新增 AC 与 NEW_TARGETS、不解锁任何 `#[ignore]`。**
+
+### §54.1 WASAPI 本机环回冒烟：通过
+
+- 入口：`cargo test -p meeting-copilot-platform-win --lib wasapi -- --ignored --nocapture`。
+- 前置：本机默认输出设备播放 30 秒 440 Hz 双声道正弦波（`System.Media.SoundPlayer.PlaySync`，临时 wav 用后已删）。
+- 结果：**1 passed / 0 failed，rc=0，finished in 0.05s**。
+- 真实性判据：`wasapi.rs:418-426` 在取不到分片时会空转 200×10ms≈2s 后放行；本次 0.05s 即返回，说明首个 `next_chunk()` 就拿到 `Some(chunk)`，`sample_rate>0` 与 `sequence>0` 断言真实通过，**不是无音频空转退出**。
+- 边界：证明本机默认输出设备的 WASAPI 共享模式环回可打开并采到包，**不等于真实会议音频识别效果验收**；用例保持 `#[ignore]`（CI 无音频设备）。
+
+### §54.2 `#[ignore]` 全量盘点：默认特性 12，开 llm-https 为 13
+
+实测命令：`cargo test --workspace -- --list --ignored`（2026-11-25，rc=0）→ **12** 个；源码字面 `#[ignore = ...]` 共 **13** 处。差值根因：`llm_live_baseline.rs:7` 的 `#![cfg(feature = "llm-https")]` 整文件门控，默认特性下 `baseline_30_samples_per_task` 不参与编译。
+
+| # | 用例 | 位置 | 阻塞原因 | 状态 |
+|---|---|---|---|---|
+| 1~9 | `run_gate_skips_without_live`、`first_token_latency_p50_p95`、`total_latency_four_tasks`、`schema_conformance_rate`、`rate_limit_observation`、`deadline_forced_timeout`、`schema_violation_probe_once`、`record_is_recomputable`、`ac25_control_request_skipped_construction_conflict` | `crates/infrastructure/tests/llm_live.rs` | 需 `LLM_*` 真实端点凭据 | 已于 2026-11-23 / 11-24 两次跑通（§31、§34），仍需凭据才能复跑 |
+| 10 | `smoke_three_rounds`（H-34-G 手工验收） | `search_live.rs:149` | 真实检索源 + `SEARCH_*` | **仍未跑**（D 路径采样走过该入口，但 H-34-G 的 3 次手工验收未做） |
+| 11 | `collect_200_real_samples` | `search_live.rs:209` | 同上 + 200 条查询 | 已由 U-07-43 脚本跑通，三轮 200/200（§50） |
+| 12 | `wasapi::tests::loopback_opens_and_captures_when_audio_is_active` | `platform-win/src/wasapi.rs:413` | 本机音频设备 | **本轮跑通（§54.1）** |
+| 13 | `baseline_30_samples_per_task`（仅 `llm-https`） | `llm_live_baseline.rs:30` | 需 `LLM_*`；120 次串行调用 | 已于 2026-11-24 跑通（§34） |
+
+结论：默认 12 个里**只剩 H-34-G 的 3 次手工验收没有真实结论**，其余均有历史取证；全部保持 `#[ignore]` 不解锁。
+
+### §54.3 `tests/replay/`：根目录已建，历史 AC 口径不变
+
+- 新建 `tests/replay/README.md`（唯一新增跟踪文件）：语料与取证登记根，附内容纪律（无真实会议内容、无凭据、单文件 <256 KB、逐文件登记）。
+- **边界**：AC-B4-49 / 57 / 63、S-05 禁止的是 `crates/application/tests/replay/`，该目录**仍不存在**；application 层回放继续集中在 `tests/gate_replay.rs` 与 `gate_replay_driver.rs`。根级新目录不参与 target 枚举，`NEW_TARGETS`=25 不变。
+- `open-items.md` 中「`tests/replay/` 保持不存在」的简写已改为区分两个路径，避免误读成可建 application 子目录。
+
+### §54.4 X-AUD-08：命令面 6 → 26（此前文档写 13，已更正）
+
+`app/src-tauri/src/main.rs:170-197` 的 `generate_handler!` 现注册 **26** 个入口：`ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`clear_cards`、`start_asr`、`stop_asr`、`asr_status`、`set_auto_cards`、`settings_snapshot`、`settings_probe`、`settings_save`、`settings_clear`、`keyword_cards_snapshot`、`keyword_card_open`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`、`search_config`、`search_config_save`、`search_clear_key`、`web_search`、`assist_reply`、`assist_config`、`assist_config_save`。
+
+`CommandCounters`（`ipc/state.rs:17-30`）**仍是 6 组 12 项**，只覆盖 `settings_snapshot/probe/save/clear` 与 `keyword_cards_snapshot/card_open`，其余 20 个命令无计数。AC-B4-120 的「6 命令封闭」与 `D-B4-P147` 的「IPC 面固定 6 个命令」均为历史口径，**待下次评审更新为 26 并裁决计数面是否扩大**；本轮只登记，不改代码。X-AUD-16 中「现为 19」的旧数字同步更正。
+
+### §54.5 临时产物清理（用户二次确认直接删除、不进回收站）
+
+分 4 批执行，每批 ≤10 项并逐一验证：
+
+| 批 | 内容 | 结果 |
+|---|---|---|
+| 1~2 | `.tmp/u05_*.py` / `.ps1` 共 19 个一次性真机脚本 | 已删，剩余 0 |
+| 3 | `.tmp` 下 7 个 u05 日志/转储（`u05-bt.txt`、`u05-emergency-dump.txt`、`u05-emergency.log`、`u05-none.log`、`u05-uia-after.txt`、`u05-uia-dump.txt`、`u05_text.txt`） | 已删 |
+| 4 | `.tmp/u05-webview/`（8.4 MB WebView2 用户数据）、`.tmp/wasapi_smoke_tone.wav`（5.3 MB）、`%LOCALAPPDATA%\com.meetingcopilot.desktop.bak-u05e-20261124`（7.3 MB）与 `.empty-u05f` | 已删 |
+
+**保留**：28 张 `.tmp/u05*.png` 证据截图（§53 验收依据）、`scripts/u05-evidence/Run-U05-AsAdmin.ps1`（可复跑入口）、现役配置目录 `%LOCALAPPDATA%\com.meetingcopilot.desktop`。证据截图仍是本机临时产物、未入库，如需长期留档应另行归档。
+
+### §54.6 顺带修正与门禁
+
+- `docs/ABOUT.md`「口径限制」仍写「第 7 项 1/4、完整验收未收口」，与 U-05 `closed` 矛盾——上一轮收口漏改的第 5 处，本轮统一到 §53；「平台层」与 README 的 U-08 行补 WASAPI 冒烟结论。
+- `open-items.md`：§0 增本轮闭环、§1 平台层补冒烟结论、§3 两行与说明改实测口径、§4 X-AUD-08/16 更正、§8.9 标题与 D 段补实测记录。
+- 门禁 8 项全 rc=0：`check-g2-claims`、`check-b4-gates --rule=zero-transcript`、`--rule=source`、`check-mac-scope --rule=claims`、`check-ui-integration`、`check-layering`、`scan-secrets-docs --all-md`、`test-name-inventory`。
+- **环境坑（复跑必读）**：`test-name-inventory` 在未前置工具链 PATH 时会报 `cargo_unavailable` 但仍退 0（假绿）；只前置 PATH 不设 `TEMP/TMP` 与 `CARGO_PROFILE_DEV_DEBUG=0` 时，`libsqlite3-sys` 的 `cl.exe` 失败导致 infrastructure lib 面 rc=101、tni 退 2。正确跑法是三件套齐备后再执行，与 §8.11 一致。
+
+**状态不变**：U-05 `closed`；U-07 整体 open（AUD-03/04/06）；U-08 其余子项、U-09 H-34-G 真实端点、UIA/OCR 真实字幕、真实 Key 下桌面联网查与辅助回复效果、真机缩放手感、`rustup` 坏代理重装均保持原状。本轮不宣称任何新能力交付。
