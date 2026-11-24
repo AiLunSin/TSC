@@ -189,7 +189,8 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 - 实时入口：卡片区"开始实时转写"——WASAPI 环回 → 16 kHz 单声道 → vosk 流式识别 → `jieba-rs` 关键词 → B4 门控 → 卡片；端到端延迟约 1~2 秒。运行期从 `resource_dir/asr` 读取脚本与模型，缺失时回退到 `app/src-tauri/asr/`、再回退 `.tmp/asr/`。
 - Python 解释器依次探测 `python` / `py -3` / `python3`，**只选能 `import vosk` 的那个**：PATH 里第一个 `python` 常常没装 vosk（微软商店存根或工具自带解释器），旧逻辑会选中它、子进程立刻退出，表现为"点了开始转写却一直没有文本"。三个候选都不带 vosk 时报 `asr_python_missing` 并提示 `pip install vosk`。
 - 识别协议：`stream_asr.py` 输出两种行——`{"partial": "..."}` 为中间结果，`{"text": "..."}` 为稳定句。vosk 只在静音端点给 final，连续说话时会长期只有 partial，因此脚本对 partial 做**稳定判定（约 0.8s 无变化）与 4s 超时强制收句**，主动产出稳定句。界面文本位跟随 partial 实时刷新，**稳定句才抽关键词出卡**（半句不出卡，连续重复句去重）。
-- 诊断：`asr_status` 第四项回传"音频 X s / N 片 / 写入 KB / 稳定句 M"，显示在按钮旁。若为 `0.0s / 0 片`，说明默认输出设备没有声音进入环回（未播放或会议用的是非默认设备），而非识别失败。
+- 诊断：`asr_status` 第四项回传"音频 X s / N 片 / 写入 KB / 稳定句 M"，显示在按钮旁。**未采到音频时不再留空**，而是明确显示 `音频 0.0s（0 片）：未采到系统声音`——这种情况下问题在系统输出（未播放、音量静音、会议用的是非默认设备），与识别无关。
+- 运行日志：转写启动、解释器选择、子进程 stderr、采集片数与稳定句计数写入 `%LOCALAPPDATA%\meeting-copilot\asr.log`（**只记状态与计数，不记任何识别文本或会议内容**）。真机排查"没有文本"时先看这个文件。
 - 打包：`asr/stream_asr.py` 随仓库入库并默认打包；vosk 模型（约 52MB）不入库——发布前复制到 `app/src-tauri/asr/vosk-model-small-cn-0.22/`，再叠加 `app/src-tauri/tauri.asr.conf.json`（Tauri CLI 参数 `--config tauri.asr.conf.json`）打包。基础配置不含模型，因此 CI 与 `cargo clippy`/`cargo test` 无需模型即可编译。
 - 手动入口："粘贴会议文本 → 生成卡片"，复用同一 `ingest_text` 链路。
 - 卡片列表每 1 秒自动刷新；来源为 `UserGenerated`（本地片段），因此可点击，不伪造外部检索来源。

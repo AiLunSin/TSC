@@ -210,12 +210,21 @@ impl AsrPipeline {
         self.ensure_subtitle();
         self.reset_counters();
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        crate::diag::log(&format!(
+            "start script={} model={}",
+            self.paths.script.display(),
+            self.paths.model.display()
+        ));
         let spawned = spawn_recognizer(&self.paths);
         let (child, stdin, stdout) = match spawned {
             Ok(parts) => parts,
             Err(error) => {
                 self.running.store(false, Ordering::SeqCst);
                 self.set_error(&error.message);
+                crate::diag::log(&format!(
+                    "start.failed code={} msg={}",
+                    error.code, error.message
+                ));
                 return Err(error);
             }
         };
@@ -240,12 +249,17 @@ impl AsrPipeline {
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
             let mut raw = Vec::new();
+            let mut lines = 0usize;
             loop {
                 raw.clear();
                 match reader.read_until(b'\n', &mut raw) {
                     Ok(0) => break,
                     Ok(_) => {}
                     Err(_) => break,
+                }
+                lines += 1;
+                if lines.is_multiple_of(200) {
+                    crate::diag::log(&format!("recognizer.lines={lines}"));
                 }
                 let Some(recognizer) = recognizer.upgrade() else {
                     return;
@@ -276,6 +290,11 @@ impl AsrPipeline {
                     recognizer.set_error(
                         "识别进程已退出：请确认 Python 3 已安装 vosk，且 ASR 模型可读。",
                     );
+                    crate::diag::log(&format!(
+                        "recognizer.eof lines={lines} chunks={} stable={}",
+                        recognizer.audio_chunks.load(Ordering::Relaxed),
+                        recognizer.stable_lines.load(Ordering::Relaxed)
+                    ));
                 }
                 recognizer.stop_generation(generation);
             }
@@ -284,7 +303,8 @@ impl AsrPipeline {
         let capture = Arc::downgrade(self);
         std::thread::spawn(move || {
             let source = WasapiLoopbackSource::new(Platform::TencentMeeting);
-            if source.open(None).is_err() {
+            if let Err(error) = source.open(None) {
+                crate::diag::log(&format!("capture.open_failed {error:?}"));
                 if let Some(capture) = capture.upgrade() {
                     if capture.is_current(generation) {
                         capture.set_error("系统音频采集不可用：请确认存在可用的默认输出设备。");
@@ -293,7 +313,9 @@ impl AsrPipeline {
                 }
                 return;
             }
+            crate::diag::log(&format!("capture.opened health={:?}", source.health()));
             let mut writer = stdin;
+            let mut idle = 0u64;
             while capture
                 .upgrade()
                 .is_some_and(|capture| capture.is_current(generation))
@@ -310,19 +332,38 @@ impl AsrPipeline {
                         }
                         let pcm_ms = u64::try_from(bytes.len()).unwrap_or(0) / 32;
                         if writer.write_all(&bytes).is_err() {
+                            crate::diag::log("capture.write_failed");
                             break;
                         }
                         let _ = writer.flush();
+                        idle = 0;
                         if let Some(capture) = capture.upgrade() {
-                            capture.audio_chunks.fetch_add(1, Ordering::Relaxed);
+                            let chunks = capture.audio_chunks.fetch_add(1, Ordering::Relaxed) + 1;
                             capture
                                 .audio_bytes
                                 .fetch_add(bytes.len() as u64, Ordering::Relaxed);
                             capture.audio_ms.fetch_add(pcm_ms, Ordering::Relaxed);
+                            if chunks.is_multiple_of(200) {
+                                crate::diag::log(&format!(
+                                    "capture.chunks={chunks} audio={:.1}s stable={}",
+                                    capture.audio_ms.load(Ordering::Relaxed) as f64 / 1000.0,
+                                    capture.stable_lines.load(Ordering::Relaxed)
+                                ));
+                            }
                         }
                     }
-                    Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-                    Err(_) => std::thread::sleep(Duration::from_millis(50)),
+                    Ok(None) => {
+                        idle += 1;
+                        if idle.is_multiple_of(500) {
+                            // 每 10 秒记一次空转，用于区分"没有声音"与"识别不出"。
+                            crate::diag::log(&format!("capture.idle={}s", idle / 50));
+                        }
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                    Err(error) => {
+                        crate::diag::log(&format!("capture.next_chunk_failed {error:?}"));
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
                 }
             }
             if let Some(capture) = capture.upgrade() {
@@ -380,8 +421,9 @@ impl AsrPipeline {
         let bytes = self.audio_bytes.load(Ordering::Relaxed);
         let ms = self.audio_ms.load(Ordering::Relaxed);
         let stable = self.stable_lines.load(Ordering::Relaxed);
-        if chunks == 0 && stable == 0 {
-            return String::new();
+        if chunks == 0 {
+            // 0 片必须显式说出来：否则界面只剩"等待说话"，无法区分"没声音"与"识别不出"。
+            return "音频 0.0s（0 片）：未采到系统声音".to_owned();
         }
         format!(
             "音频 {:.1}s（{chunks} 片）/ 写入 {:.0}KB / 稳定句 {stable}",
@@ -475,8 +517,10 @@ fn spawn_recognizer(
     for (program, prefix_args) in candidates {
         if !python_has_vosk(program, prefix_args) {
             checked.push(program);
+            crate::diag::log(&format!("python.no_vosk {program}"));
             continue;
         }
+        crate::diag::log(&format!("python.vosk_ok {program} {prefix_args:?}"));
         let mut command = quiet_command(program, prefix_args);
         // -X utf8 与 PYTHONUTF8 双保险：部分发行版忽略环境变量。
         command
@@ -486,7 +530,7 @@ fn spawn_recognizer(
             .arg(&paths.model)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -519,6 +563,23 @@ fn spawn_recognizer(
                 true,
             ));
         };
+        crate::diag::log(&format!("spawn.ok pid={}", child.id()));
+        // stderr 保留并转存诊断日志：缺模型、缺依赖、内存不足都会先在这里留下痕迹。
+        if let Some(stderr) = child.stderr.take() {
+            std::thread::spawn(move || {
+                let mut lines = 0usize;
+                for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    lines += 1;
+                    if lines <= 20 {
+                        let text: String = line.chars().take(200).collect();
+                        crate::diag::log(&format!("py.stderr {text}"));
+                    }
+                }
+                if lines > 20 {
+                    crate::diag::log(&format!("py.stderr.total={lines}"));
+                }
+            });
+        }
         return Ok((child, stdin, stdout));
     }
     let detail = checked.join(" / ");
@@ -675,9 +736,12 @@ mod tests {
     }
 
     #[test]
-    fn diagnostics_empty_until_audio_arrives() {
+    fn diagnostics_report_zero_chunks_explicitly() {
         let pipeline = pipeline();
-        assert_eq!(pipeline.diagnostics(), "");
+        let text = pipeline.diagnostics();
+        // 0 片时不能返回空串：界面需要能区分"没采到声音"与"识别不出"。
+        assert!(text.contains("0 片"), "{text}");
+        assert!(text.contains("未采到系统声音"), "{text}");
         pipeline.audio_chunks.store(3, Ordering::Relaxed);
         pipeline.audio_bytes.store(3200, Ordering::Relaxed);
         pipeline.audio_ms.store(500, Ordering::Relaxed);

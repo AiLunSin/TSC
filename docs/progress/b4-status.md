@@ -1697,3 +1697,31 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 - 腾讯会议当前版本窗口内是否真存在字幕元素——本仓真机上一直为 0，过滤后该通道预期稳定显示"降级"，这是如实状态，不宣称字幕实时可用。
 - 过滤词表是按真机抓到的样本归纳的，换版本/换应用可能需要补词。
+
+## §38 转写链路实测与"没有文本"的分层诊断（2026-11-24）
+
+现象：真机反馈"仍然没有文本"；而旧诊断在 0 片时返回空串，界面只剩"等待说话…"，无法区分是资源、采集还是识别层的问题。
+
+实测（本机临时 example，跑完即删，不入库）：
+
+| 环节 | 结果 |
+|---|---|
+| WASAPI 环回 | 5 秒读到 186 片 / 89280 采样 / 48 kHz / peak 0.066 / rms 0.0074，`open=ok health=Ready` |
+| 环回 → `resample_to_16k` → `stream_asr.py`（按 128 ms / 4 KB 实时喂） | 1.1s 起出 partial，3.8s 出稳定句 `灰度 范围 限定 华中 俩 站点` |
+
+结论：**代码链路可用**。"没有文本"只可能落在三类——资源/解释器不可用、采集不到系统声音、音频过轻模型认不出。
+
+修复（可见性，不改变识别行为）：
+
+- `diagnostics()` 在 0 片时不再返回空串，改为 `音频 0.0s（0 片）：未采到系统声音`；界面按钮旁必然有数字，可作为"是否运行新版"的探针。
+- 新增 `app/src-tauri/src/diag.rs`：向 `%LOCALAPPDATA%\meeting-copilot\asr.log` 追加启动参数、解释器探测结果、`spawn.ok pid`、python stderr 前 20 行、每 200 片进度、每 10 秒空转、EOF 统计。**只记状态与计数，不记任何识别文本、会议内容或凭据。**
+- 子进程 stderr 由 `Stdio::null()` 改为管道转存日志：此前 python 的 ImportError/模型加载失败完全不可见。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**55 passed / 0 failed**（原 `diagnostics_empty_until_audio_arrives` 改为 `diagnostics_report_zero_chunks_explicitly`，断言必须出现"0 片 / 未采到系统声音"）。
+- `clippy -D warnings`、`fmt --check`、B4 源码/零转录、分层、UI、密钥扫描全部 rc=0。
+
+未验证：
+
+- 用户真机环境是否存在声音进入环回；若日志出现 `capture.idle=10s` 循环且无 `capture.chunks`，即为"系统输出无声/非默认设备"。
