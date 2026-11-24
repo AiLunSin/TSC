@@ -8,9 +8,10 @@
 ## 0. 状态速览
 
 - **已关闭**：仓库公开、双许可（MIT OR Apache-2.0）、历史提交本机路径清理、Actions 恢复（run #56 8/8）、AC-B4-109 远端取证、CI 8/8 全绿（`c98aa83`）、本地门禁 34/34 复核（2026-11-23）、Q-01/Q-06 清理与重建回归（2026-11-23）、Q-07 入库、AUD-17 门禁进 CI、X-AUD-15 OnceLock 改造（2026-11-23）、U-07-52 归档保留期（2026-11-24，方案 B：5 年，个人自用简化确认）。
-- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07-43（实现完成，真实样本 0/200）、U-08（真实 LLM 采样子项已于 2026-11-23 取证，其余未判定）、U-09（A~F 已实现并推送 `f3d66a4`，H-34-G 手工验收入口已就绪，待真实端点验收）、`platform-win` 的 UIA 字幕适配器已实现并与采集状态接线（2026-11-24；腾讯会议/飞书窗口 UIA 元素数为 0，真实字幕文本未取得，保持 open）、OCR 已实现（前台会议窗口底部区域，2026-11-24；未在真实会议字幕上验证）、12 个 `#[ignore]`（含 H-34-G 的两个真实源入口）、`tests/replay/`。
+- **仍 open**：U-05（仅差卡片渲染与投屏遮蔽真机结论）、U-07-43（实现完成，真实样本 0/200）、U-08（真实 LLM 采样子项已于 2026-11-23 与 2026-11-24 两次取证，AC-20/AC-22 基线 120 样本 success=1.0；其余未判定）、U-09（A~F 已实现并推送 `f3d66a4`，H-34-G 手工验收入口已就绪，待真实端点验收）、`platform-win` 的 UIA 字幕适配器已实现并与采集状态接线（2026-11-24；腾讯会议/飞书窗口 UIA 元素数为 0，真实字幕文本未取得，保持 open）、OCR 已实现（前台会议窗口底部区域，2026-11-24；未在真实会议字幕上验证）、12 个 `#[ignore]`（含 H-34-G 的两个真实源入口）、`tests/replay/`。
 - **待裁决**：Q-01、Q-06 已于 2026-11-23 执行关闭；Q-02~Q-05 已于 2026-11-23 删除；治理项 Q-07、AUD-17、X-AUD-15 已于 2026-11-23 执行。
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
+- **本轮闭环（2026-11-24）**：平台层新增 UIA 字幕与 OCR 兜底（提交 `9c6ca08`）；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复 Toolhelp 快照漏掉 64 位主进程；OCR 默认关闭（`OCR_FALLBACK=1` 开启），ASR 仍为主链路；新增开发期隐私注入入口 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（`app/src-tauri/src/privacy.rs`，默认关、只认 `"1"`、不加 IPC 命令），为设置页第 8 项备好取证手段；用一次性临时凭据跑通 `llm_live` 9 例与 120 样本基线（`b4-status.md §34`）；全量基线 **1000 passed / 0 failed / 12 ignored**，改动包 47（desktop）+ 27（platform-win，串行）通过，clippy/fmt 与四条门禁 rc=0。真实会议字幕文本未取得，U-05/U-08 保持 open。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；P2 已完成（2026-11-23）；P3 规格与实现已完成（2026-11-23，U-07-43 真实样本仍 open）；P4 治理已完成（2026-11-23，见 §8.6）；P5 检索源接入 A~F 已实现并推送（2026-11-24，`f3d66a4`），H-34-G 手工入口已就绪，待真实端点。
 - **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；当时保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据（`target/` 后于 Q-01 清理）。
@@ -20,12 +21,12 @@
 
 | 编号 | 事项 | 当前状态 | 缺口 | 关闭条件 | 所需输入 |
 |---|---|---|---|---|---|
-| U-05 | 设置向导 + 卡片前端产品化接入 | 部分取证：第 1~6、9、10 项真机通过；第 7 卡片渲染与第 8 投屏遮蔽未判定（2026-11-23，见 `b4-status.md §32`） | 卡片渲染与投屏/紧急遮蔽的真机结论 | 有可复现的联网与真机记录 | 投屏 / 会议样本 |
+| U-05 | 设置向导 + 卡片前端产品化接入 | 部分取证：第 1~6、9、10 项真机通过；第 7 卡片渲染与第 8 投屏遮蔽未判定（2026-11-23，见 `b4-status.md §32`）；**第 8 项开发期注入入口已于 2026-11-24 就绪**（`app/src-tauri/src/privacy.rs`，见 §8.3） | 卡片渲染与投屏/紧急遮蔽的真机结论 | 有可复现的联网与真机记录 | 投屏 / 会议样本 |
 | U-07-41.5 | 负反馈加权 | **已实现并提交（`c96f381`）**：事件/权重表、加权与硬抑制、三维统计、门禁扫描面 | 无（真实使用数据由后续会议累积） | 已满足 | — |
 | U-07-42 | 缓存 / outbox | **已实现并提交（`c96f381`）**：TTL/LRU、重启恢复、3 次退避、500 上限 | “≤3 秒识别断网、30 秒补齐率 ≥98%”需真实断网取证 | 真实断网演练记录 | 断网环境 |
 | U-07-43 | 按需补全实体 | **机制已实现并提交（`c96f381`）**；G-43-D 五类异常已覆盖；真实样本 0/200 | 阻塞项 U-09 的 A~F 已实现，待真实端点 H-34-G 验收后启动采样 | U-09 真实端点验收 + 用户配置真实源 + 样本达标 | 检索源、性能样本 |
 | U-07-52 | 审计哈希链存储 | **已实现并提交（`c96f381`）**：只追加表、触发器、哈希链、月度归档；G-52-D 运行时摘要扫描已接入；**已关闭（2026-11-24）** | 无（方案 B：在线 180 天 + 归档 5 年；个人自用简化确认） | 已满足 | — |
-| U-08 | 真实端点 / 真机判定 | 部分取证：真实 LLM 采样 9/9 通过（2026-11-23，见 `b4-status.md §31`）；其余未判定 | 真实检索源、真实冷却、性能与误触发率均无结论 | 凭据可用 + 真机记录 + 指标达标 | 端点凭据、真机、样本 |
+| U-08 | 真实端点 / 真机判定 | 部分取证：真实 LLM 采样 9/9 通过（2026-11-23，见 `b4-status.md §31`）；**2026-11-24 复测 9/9 + 基线 120 样本、4 任务 success_rate=1.0、0 degraded、`leak_hits=0`**（见 `§34`）；`ac23` 窗口内未触发限流 | 真实检索源、真实冷却、真机性能与误触发率均无结论 | 凭据可用 + 真机记录 + 指标达标 | 端点凭据、真机、样本 |
 | U-09 | 检索源接入（任务 34 最小闭环） | **A~F 已实现（2026-11-24）**：`providers.json` 校验、注册表、健康分类、`http_json`、零源模式与按需 runner；H-34-G 手工入口 `search_live.rs` 已就绪并编译通过 | 真实端点与凭据；3 次手工检索；200 条真实样本 | 自动化用例已过；需真实端点验收 | 真实端点与凭据 |
 | 平台层 | `platform-win` 的 WASAPI/UIA/OCR | WASAPI 环回已实现（`AudioSource` 端口，含混音/单声道解码单测）；**UIA 字幕已实现（2026-11-24）**：窗口探测、`SubtitleSource` 适配器、500ms 差量泵、文本直连 `CardStore` 出卡、采集状态投影；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复快照漏掉 64 位主进程；**OCR 已实现（2026-11-24）**：屏幕 DC 截取前台会议窗口底部 40% → `Windows.Media.Ocr` → 中文空格合并，作为 UIA 无文本时的回退；实测可识别窗口文字（腾讯会议首页 10 行、底带 20 行），未在真实会议字幕上验证 | 腾讯会议按自绘渲染，UIA 树为空；OCR 默认关闭（`OCR_FALLBACK=1` 开启），只在会议窗口位于前台时生效，底带可能混入按钮/菜单文字 | UIA 需真实会议且开启字幕取得文本；OCR 需真实会议字幕样本与 ROI 校准 | 真实腾讯会议窗口 + 会议截图 |
 | 平台层 | `platform-mac` | 占位，不适用 | 无 macOS 设备与目标实现 | 保留占位即可；实现需另行立项 | macOS 环境（本轮不提供） |
@@ -55,12 +56,12 @@
 |---|---|---|---|
 | AC-B4-109 远端 CI | **已关闭（远端 `success`）** | 无；run #56 的 `compliance` job 为 `success` | 已完成；如需留档，补存 Actions 运行页截图 |
 | AC 汇总 130 | 本地一致 | — | 无 |
-| `#[ignore]` 9 个 | 保持不解锁 | 真实端点/真机缺位 | 明确解锁授权 + 真实环境 |
+| `#[ignore]` 12 个（2026-11-24 实测） | 保持不解锁 | 真实端点/真机缺位 | 明确解锁授权 + 真实环境（逐类跑法见 §8.9） |
 | `tests/replay/` | 保持不存在 | 纪律项 | 明确创建授权 |
 | U-05 真机设置页 | 第 1~6、9、10 项通过（2026-11-23） | 卡片渲染、投屏遮蔽 | 真实会议 / 投屏样本（见 `b4-status.md §32`） |
-| U-08 真实 LLM 采样 | 9 passed / 0 failed，`leak_hits=0`，rc=0（2026-11-23） | 真实检索源、冷却、性能、误触发率 | 见 §1 U-08（`b4-status.md §31`） |
+| U-08 真实 LLM 采样 | 两次通过：9 passed / 0 failed，`leak_hits=0`，rc=0（2026-11-23）；复测 9 passed + 基线 120 样本 / 4 任务 success=1.0 / 0 degraded（2026-11-24，`§34`） | 真实检索源、冷却、性能、误触发率 | 见 §1 U-08（`b4-status.md §31`、`§34`） |
 
-> 说明：默认构建下 `#[ignore]` 为 9 个；启用 `--features llm-https` 后 `llm_live_baseline.rs` 参与编译，会额外出现 1 个 ignored（共 10）。这是预期差异，不是新增纪律项。
+> 说明：`#[ignore]` 数量以全量测试实测为准（2026-11-24 为 12 个）；启用 `--features llm-https` 会让 LLM 采样用例参与编译，数量可能变化。逐类跑法见 §8.9。
 
 ## 4. 文档与治理偏差
 
@@ -84,6 +85,7 @@
 | X-AUD-13 | 非 Windows 平台占位 | macOS CI 因桌面壳无条件引用 Windows-only `wasapi` 而失败（E0432/E0433） | **已修复**：新增 `wasapi_stub.rs`（同接口、`open` 返回不支持），run 45152256989 两个 darwin 任务 success |
 | X-AUD-14 | 本地门禁口径滞后（UI） | `check-ui-integration --rule=settings-ux` 仍匹配 `disabled={!snapshot.canTest/canSave}`，实际页面已改为可计算的 `canTestNow`/`canSaveNow` | **已修复（2026-11-23）**：门禁改用正则，兼容 `snapshot.*` 与可计算变量两种写法 |
 | X-AUD-15 | 装配层全局态（B4 source） | **已修复（2026-11-23）**：`AsrPipeline`/`CardStore` 改为 Tauri managed State（`Arc`），移除 `OnceLock`；门禁豁免同步删除 | 已关闭；`b4-source` 对其他禁用面仍生效 |
+| X-AUD-16 | 开发期隐私注入入口 | 为关闭 U-05 第 8 项，新增 `app/src-tauri/src/privacy.rs`，读 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（只认 `"1"`，默认关）。读取点放在 `src/` 根而非 `ipc/`，避免命中装配层"禁环境变量"规则（`check-b4-gates --rule=source` 已复核 rc=0）；IPC 命令面仍为 14 | **已登记**：属开发期验收开关，不投影给前端、不落库；真机结论出来后可移除以消除入口 |
 
 ## 5. 工程环境阻塞（非代码问题）
 
@@ -112,6 +114,7 @@
 - Q-01/Q-06 执行日志与指纹：`.tmp/archive/`（本地，未入库）。
 - 未关闭项原文：`docs/progress/b4-status.md` §25.3、§29.5。
 - 交接说明：`docs/progress/handoff-2026-11-22-pui.md`。
+- 平台层实现：`crates/platform-win/src/subtitle.rs`（UIA 字幕）、`crates/platform-win/src/ocr.rs`（OCR 兜底）；提交 `9c6ca08`（2026-11-24）。
 - 本次规格与任务：`.codeartsdoer/specs/repo_audit_cleanup/{spec.md,design.md,tasks.md}`。
 - 本地证据：`.tmp/audit/`（manifest、ledger、record、evidence）。
 
@@ -126,6 +129,8 @@
 cd "<仓库根>"
 export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
 export TEMP="$PWD/.tmp/test-temp"; export TMP="$TEMP"; mkdir -p "$TEMP"
+# 若 cargo 输出 fsmonitor_ipc__send_query 错误，用环境变量临时关闭（不改 git 配置）
+export GIT_CONFIG_COUNT=1; export GIT_CONFIG_KEY_0=core.fsmonitor; export GIT_CONFIG_VALUE_0=false
 
 cargo test --workspace
 cargo fmt --all -- --check
@@ -134,9 +139,15 @@ bash scripts/check-g2-claims.sh
 bash scripts/scan-secrets-docs.sh --all-md
 bash scripts/check-b4-gates.sh --rule=zero-transcript
 bash scripts/check-mac-scope.sh --rule=claims
+bash scripts/check-b3-gates.sh --rule=zero-transcript
+bash scripts/check-ui-integration.sh
+bash scripts/check-layering.sh
+bash scripts/test-name-inventory.sh
 ```
 
-验收：测试为 `996 passed / 0 failed / 12 ignored`（2026-11-24 实测；此前 970/0/12，新增 UIA 字幕、OCR 与窗口驱动检测用例），四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
+> 并发注意：`platform-win` 的 3 个 `secure_store` 用例并行写同一凭据目标会互踩（`test-key-idempotent` vs `test-key-roundtrip`）。若随机失败，先按串行复核：`cargo test -p meeting-copilot-platform-win -p meeting-copilot-desktop -- --test-threads=1`。这是既存的测试隔离缺陷，不是本轮改动引入。
+
+验收：测试为 `1000 passed / 0 failed / 12 ignored`（2026-11-24 实测；此前 996/0/12，桌面层由 43 增至 47 例，新增隐私开关解析与投屏/紧急遮蔽用例），四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
 
 ### 8.2 关闭 U-08 的"真实 LLM 采样"子项
 
@@ -151,10 +162,12 @@ export LLM_API_KEY="<your-key>"
 export LLM_MODEL="<your-model>"
 export LLM_MODEL_CONFIRMED="<与上一行完全相同>"
 export LLM_ALLOWLIST="<your-host>"
-export LLM_LIVE_CALL_CAP=10
+export LLM_LIVE_CALL_CAP=24
 ```
 
-2. 先做不联网的预检，确认记录目录可写：
+> cap 取值按实际要跑的用例数定，不要沿用固定的 10：`llm_live` 的 9 个用例合计 **14 次**调用（`total_latency_four_tasks` 与 `schema_conformance_rate` 各 4 次，其余各 1 次，`ac25` 为 0），cap=10 会在中途 `budget_exhausted`；`llm_live_baseline` 每任务 30 次 × 4 任务 = **120 次**，cap 需 ≥120（代码内理论上限为 `samples*3*4`，30 样本即 360）。
+
+2. 先做不联网的预检，确认记录目录可写（两个根目录必须事先存在，否则最后会以 `record_dir_missing` 退出 2）：
 
 ```bash
 bash scripts/run-llm-live.sh --print-record-roots
@@ -177,6 +190,14 @@ bash scripts/run-llm-live.sh; echo "rc=$?"
 6. 记录目录属于 Q-03，归档完成并按 §8.4 扫描无命中后再删除。
 
 > 说明：设置页的"一键测试"走 `GatewayProbeExecutor`；默认桌面构建未启用 `llm-https` 时探针返回 Unsupported。若要用界面按钮完成联网验证，需用 `cargo run -p meeting-copilot-desktop --features llm-https` 构建；否则以本节的脚本结果为准。
+
+**执行记录（2026-11-24）**
+
+- 结果：`llm_live` **9 passed / 0 failed**（16.93s）；`llm_live_baseline` **1 passed**（190.95s，`SAMPLES=120`、`CALLS=121`）；`leak_hits=0`；脚本退出码 0。逐任务 p50/p95 与子项状态见 `b4-status.md §34`。
+- 本机编译前置：`export TEMP="$PWD/.tmp/msvc-temp"; export TMP="$TEMP"; export CARGO_PROFILE_DEV_DEBUG=0`，否则 MSVC 报 `D8050`（见 §8.11-2）；`cargo` 仍需 rustup toolchain 的真实二进制。
+- 记录根必须先建：`mkdir -p .tmp/llm-live crates/infrastructure/.tmp/llm-live`，否则脚本在最后一步以 `record_dir_missing` 退出 2（用例其实已经跑完）。
+- 凭据不落文件：`scripts/scan-secrets.sh` 会对工作区做 `sk-[A-Za-z0-9]{20,}` 全量匹配，把 Key 写进 `.tmp/*.sh` 之类脚本会让该项门禁失败；只在当前终端 `export`。
+- `ac23` 本次 `window_no_429`（未触发限流），不作限流结论；`ac24` 按 100 ms 截止降级、`ac25` 零调用，均符合设计。
 
 ### 8.3 关闭 U-05 的真机 WebView2 验收
 
@@ -221,6 +242,43 @@ cargo run -p meeting-copilot-desktop --features llm-https
 5. 关闭口径：只有"联网 E2E + 真机 WebView2 + 窗口/焦点/投屏结论"三项都有记录，才可把 U-05 改为 `closed`；否则保持 `open`。
 
 > 执行记录（2026-11-23）：1~6、9、10 通过；7 卡片渲染与 8 投屏遮蔽未判定（无真实会议/投屏样本）。构建命令为 `cargo build -p meeting-copilot-desktop --features llm-https`；交互式启动须双击 `target/debug/meeting-copilot-desktop.exe`，agent 进程无法创建 WebView2 窗口。前端改动后必须 `cargo clean -p meeting-copilot-desktop` 再构建，否则会嵌入旧 `dist`。证据见 `b4-status.md §32`。
+
+**第 7 项：卡片渲染（真机，手把手）**
+
+1. 重新构建（避免嵌入旧 `dist`）：
+
+```powershell
+cd "<仓库根>"
+cargo clean -p meeting-copilot-desktop
+cargo build -p meeting-copilot-desktop
+```
+
+2. 双击 `target\debug\meeting-copilot-desktop.exe`（不要用 agent 启动）。
+3. 点"开始"，进入一个真实会议；等第一张卡片出现。
+4. 逐项看并记录：
+   - 卡片正文可见；点击可展开详情；不抢焦点；
+   - 禁用卡（`clickState=disabled`）不可点，并显示原因文案（"引用已过期/授权已撤回/当前卡片不可点击/紧急遮蔽中/投屏保护中/引用未经核实"）。
+5. 记录：日期、会议类型、卡片编号、每项通过/失败、截图路径（截图只留本机）。
+
+**第 8 项：投屏/紧急遮蔽（开发期注入入口已就绪，真机结论待补）**
+
+- 代码事实：`crates/application/src/gate/prefilter.rs:76` 在 `screen_share` 且策略 `screen_share_protection_default` 为真时按 G1 `ScreenShareProtection` 拒绝；`crates/application/src/gate/keyword.rs:233` 为 `body_visible = !env.screen_share && !env.emergency_masked`，同文件 `:186` 对紧急遮蔽给出 `ClickState::Disabled(EmergencyMasked)`；`app/src/cards/KeywordCard.tsx:33` 在 `bodyVisible=false` 时只渲染"有 N 条"角标。
+- 注入入口（2026-11-24 就绪）：`app/src-tauri/src/privacy.rs` 读两个开发期开关，**只认严格的 `"1"`**，默认关闭；不落库、不进日志、不投影给前端，IPC 命令面仍为 14。
+- 两种状态的实际表现**并不相同**（由单测固定，见下）：
+  - `PRIVACY_SCREEN_SHARE=1` → G1 直接拒绝，本地入口**不出卡**（比"隐藏正文"更严格）；
+  - `PRIVACY_EMERGENCY_MASKED=1` → 照常出卡，但 `click_state=Disabled(EmergencyMasked)`、正文隐藏。
+- 真机操作（PowerShell，两选一）：
+
+```powershell
+$env:PRIVACY_SCREEN_SHARE = "1"      # 投屏态
+# 或 $env:PRIVACY_EMERGENCY_MASKED = "1"
+cargo run -p meeting-copilot-desktop
+```
+
+  触发一次出卡后确认：投屏态无新卡片；紧急态有卡片但不可点、正文隐藏、只留条数角标。
+
+- 已有覆盖：契约层 `cargo test -p meeting-copilot-application --test gate_keyword`（断言 `!admission.body_visible`）；桌面层 `cargo test -p meeting-copilot-desktop --bins ipc::card_store`（`screen_share_blocks_card_creation_at_g1`、`emergency_mask_keeps_card_but_disables_click`）。
+- 关闭口径不变：第 8 项要有真机截图与结论才可标 `closed`；本轮只补入口与单测，**不宣称"遮蔽已真机可用"**。
 
 ### 8.4 裁决并执行 Q-01 ~ Q-06
 
@@ -408,3 +466,132 @@ git commit -m "docs: 更新未完成事项并补充关闭步骤"
 4. 推送：先尝试 `git push origin main`。若仍出现 `github.com:443` 连接重置，不要反复重试；改用 GitHub HTTPS API 写入（blob → tree → commit → 更新 ref），随后 `git update-ref refs/remotes/origin/main <sha>`，再在 Actions 页面确认新 run 的 8 个 job 是否全绿。
 
 5. 推送后复核：`git rev-parse HEAD` 与 `git rev-parse origin/main` 相同；Actions 最新 run 为 `success`；本表 §5 的推送阻塞行按实际结果更新。
+### 8.8 验证 UIA / OCR 字幕通道（2026-11-24 新增）
+
+**默认行为（推荐）**：只跑开源 ASR，OCR 不参与。
+
+```bash
+cargo run -p meeting-copilot-desktop
+```
+
+点"开始"即可；字幕通道未监听窗口时为 `off`。
+
+**开启 OCR 实验性兜底**（仅当 UIA 读不到文本时才截图识别）：
+
+PowerShell：
+
+```powershell
+$env:OCR_FALLBACK = "1"
+cargo run -p meeting-copilot-desktop
+```
+
+Git Bash：
+
+```bash
+export OCR_FALLBACK=1
+cargo run -p meeting-copilot-desktop
+```
+
+**前提与限制**：
+
+- 会议窗口必须在**前台且未被遮挡**；`ocr.rs` 会检查 `GetForegroundWindow`，不满足直接跳过（避免读其它窗口内容）。
+- 只截客户区**底部 40%**（`bottom_band`）；按钮/菜单文字可能混入，真实会议需按字幕实际位置校准 ROI。
+- 只处理内存位图，不落盘原图；识别文本经 `compact_cjk` 合并汉字间空格。
+
+**观察点**：
+
+1. 前端"字幕文本通道"状态：`off`（未启动/未找到窗口）、`degraded`（窗口有但无文本，健康原因会带已遍历元素数）、`ready`（读到文本）。
+2. 命令行确认会议窗口是否存在：
+
+```powershell
+Get-Process WeMeetApp -ErrorAction SilentlyContinue | Select-Object Id,MainWindowHandle,MainWindowTitle
+```
+
+`MainWindowHandle=0` 表示最小化到托盘，需先还原窗口再测。
+
+**评级口径**：
+
+- 只有"真实会议进行中 + 会议窗口前台 + 读到字幕文本并出卡"才算通过；
+- 只识别到客户端首页按钮文字**不算**通过（只能证明截图与 OCR 链路可用）；
+- 未通过前，平台层 UIA/OCR 行保持 `open`。
+
+### 8.9 跑 12 个 `#[ignore]`（逐类，手把手）
+
+**A. LLM 真实采样**（`llm_live.rs` / `llm_live_baseline.rs`）
+
+变量模板见 §8.2；只在当前终端设置。
+
+```bash
+export LLM_LIVE=1
+export LLM_BASE_URL="<含已确认路径段的端点地址>"
+export LLM_API_KEY="<your-key>"
+export LLM_MODEL="<your-model>"
+export LLM_MODEL_CONFIRMED="<与上一行完全相同>"
+export LLM_ALLOWLIST="<your-host>"
+export LLM_LIVE_CALL_CAP=360   # llm_live 需 14 次；llm_live_baseline 每任务 30×4=120 次
+
+cargo test -p meeting-copilot-infrastructure --features llm-https --test llm_live -- --ignored --test-threads=1
+cargo test -p meeting-copilot-infrastructure --features llm-https --test llm_live_baseline -- --ignored --test-threads=1
+```
+
+> 实测（2026-11-24）：`llm_live` 9 用例共 14 次调用、`llm_live_baseline` 120 次；cap 小于实际调用数会在中途 `budget_exhausted` 并让 `run.json` 标 `budget_hit=true`。记录根须先 `mkdir -p .tmp/llm-live crates/infrastructure/.tmp/llm-live`。
+
+**B. 检索源冒烟**（`search_live.rs::smoke_three_rounds`，H-34-G）
+
+```bash
+export SEARCH_PROVIDERS_FILE="<providers.json 绝对路径>"
+export SEARCH_QUERIES_FILE="<查询文件绝对路径，至少 3 条>"
+export <authRef>="<Bearer 凭据>"
+export SEARCH_REPORT_PATH=".tmp/search-report.json"   # 可选，只含计数与时延
+
+cargo test -p meeting-copilot-infrastructure --test search_live smoke_three_rounds -- --ignored --test-threads=1
+```
+
+把 `<authRef>` 替换成 `providers.json` 里登记的真实变量名；不要把凭据写进仓库或提交信息。
+
+**C. 200 条真实样本**（`search_live.rs::collect_200_real_samples`，U-07-43）
+
+```bash
+export SEARCH_QUERIES_FILE="<至少 200 条纯文本路径>"
+cargo test -p meeting-copilot-infrastructure --test search_live collect_200_real_samples -- --ignored --test-threads=1
+```
+
+判定：真实成功样本必须 `=200`；缓存命中、失败、超时都不计。报告只含 `real_samples`、`p50_ms`、`p95_ms`、`status`，不含查询原文。
+
+**D. 本机音频冒烟**（`wasapi::tests::loopback_opens_and_captures_when_audio_is_active`）
+
+```bash
+cargo test -p meeting-copilot-platform-win --lib wasapi -- --ignored --nocapture
+```
+
+前置：默认输出设备可用且有音频播放。
+
+**收尾**：每类跑完，在 §1 对应行记录"日期 + 通过/失败 + 退出码"，不写端点、Key、模型名。
+
+### 8.10 新增检索源 5 项核对
+
+1. HTTPS 绝对端点，不含账号密码。
+2. 显示名 ≤50 字。
+3. `authRef`：环境变量名；值只在终端设置。
+4. 限流 `perMinute` / `perDay`（缺省 10 / 1000）。
+5. 200 条查询纯文本文件路径（每行一条）。
+
+核对后先做敏感扫描，再按 §8.9-B 跑 3 次冒烟；冒烟未通不要直接跑 200 条。
+
+```bash
+bash scripts/scan-secrets-docs.sh --all-md
+```
+
+### 8.11 本机常见坑（照抄即可）
+
+1. `cargo` 报 `rustc_driver-*.dll` 缺失 → 用 rustup toolchain 的 cargo：
+
+```bash
+export PATH="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin:$PATH"
+```
+
+2. MSVC `D8050` / `LNK1104` → 设 `TEMP/TMP` 与 `CARGO_PROFILE_DEV_DEBUG=0`（见 §8.1）。
+3. `fsmonitor_ipc__send_query` → 用 `GIT_CONFIG_*` 环境变量临时关闭（见 §8.1），不要改 git 配置。
+4. `secure_store` 用例偶发互踩 → 加 `--test-threads=1`。
+5. 前端改动后启动仍是旧界面 → `cargo clean -p meeting-copilot-desktop` 再 `cargo build`。
+6. agent 进程无法创建 WebView2 → 真机必须双击 `target\debug\meeting-copilot-desktop.exe`。

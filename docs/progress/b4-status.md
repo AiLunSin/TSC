@@ -1518,7 +1518,7 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | 5 | 凭据落点 | passed | `cmdkey /list:meeting-copilot/llm-api-key` 存在（类型 普通，本地机器持久） |
 | 6 | 配置文件 | passed | 恰 4 键 `schemaVersion/modelIndex/endpointIndex/timeoutMs`；无 Key、无地址、无模型名 |
 | 7 | 卡片渲染 | **未判定** | 无真实会议流样本；界面"暂无卡片"，无法触发禁用卡/详情内联/焦点检查 |
-| 8 | 投屏/紧急遮蔽 | **未判定** | 无投屏或紧急态模拟入口 |
+| 8 | 投屏/紧急遮蔽 | **未判定（注入入口已就绪）** | 2026-11-24 新增开发期开关 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（`app/src-tauri/src/privacy.rs`，默认关、只认 `"1"`）；单测已固定两种表现：投屏走 G1 `ScreenShareProtection` 不出卡、紧急遮蔽照常出卡但 `Disabled(EmergencyMasked)`；真机截图与结论仍待补 |
 | 9 | 联网 E2E | passed | 设置页点"测试连接"返回"连接成功。"（`--features llm-https` 构建） |
 | 10 | 稳定性 | passed | 验收全程无崩溃、无白屏 |
 
@@ -1558,3 +1558,48 @@ U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，�
 - 不宣称 U-07-43 的 8s p95 已达标；真实检索源样本仍为 0/200，报表固定输出“样本不足”。
 - 不宣称“断网 ≤3 秒识别、30 秒补齐率 ≥98%”已实测。
 - 不宣称审计摘要运行时零转录扫描已接入门禁；当前仅源码扫描面通过。
+
+## §34 U-08 真实 LLM 采样复测与 AC-20/AC-22 基线（2026-11-24）
+
+用一次性临时凭据在端点锁定与白名单齐备的条件下复测 §31，并首次跑通每任务 30 次串行流式采样的完整基线。
+
+| 项 | 值 |
+|---|---|
+| 日期 | 2026-11-24 |
+| 入口 | `bash scripts/run-llm-live.sh`（串行执行） |
+| 采样 run 数 | 3（1 次单用例预跑 + 1 次九用例脚本 + 1 次基线） |
+| 用例结果（`llm_live`） | 9 passed / 0 failed / 0 ignored（16.93s） |
+| 用例结果（`llm_live_baseline`） | 1 passed / 0 failed（190.95s） |
+| 基线样本 | 120（4 任务 × 30），`CALLS=121` |
+| 授权与锁定 | `path_confirmed=true`、`host_locked=true`、`model_confirmed=true`、`budget_hit=false` |
+| leak_hits | 0（两个记录根均 `scan_face` 覆盖；`scan-secrets-docs --artifacts` rc=0；`scan-secrets` 0 命中） |
+| 退出码 | 0 |
+
+基线统计（`stats_rule` 为仓库内置口径）：
+
+| 任务 | n | valid | p50 | p95 | 成功率 | degraded |
+|---|---|---|---|---|---|---|
+| `insight_extract` | 30 | 30 | 1331 ms | 1885 ms | 1.0 | 0 |
+| `summary` | 30 | 30 | 1066 ms | 2282 ms | 1.0 | 0 |
+| `card_conclusion` | 30 | 30 | 1348 ms | 4876 ms | 1.0 | 0 |
+| `minutes_draft` | 30 | 30 | 1593 ms | 2875 ms | 1.0 | 0 |
+
+子项状态（来自 `run.json` 的 `sub_status`）：
+
+- `ac24`（deadline 强制超时）：`measured`，`reason_code=deadline_forced_timeout` —— 100 ms 截止按预期降级，未中断后续用例。
+- `ac25`（对照请求）：`not_measured`，`reason_code=construction_conflict` —— 对照请求零调用，符合"跳过构造"设计。
+- `ac23`（429 观察）：`not_triggered`，`reason_code=window_no_429` —— 本次窗口未触达限流，不作限流结论。
+- `ac35`：`measured`。
+
+关闭口径：
+
+- 本次只关闭 U-08 的"真实 LLM 采样"子项并补齐 AC-20/AC-22 的真实基线数据；U-08 仍含真实检索源、真实冷却、真机性能与误触发率，整体保持 `open`（见 `docs/progress/open-items.md §8.2-5`）。
+- `ac23` 未触发，不据此宣称限流行为已验证。
+
+不宣称：
+
+- 不宣称端点地址、模型名、请求标识或原文样例已入库；本节只记结论、时延与日期。
+- 不宣称 p95 已满足产品 SLA；本节只陈述 30 样本的实测分布，样本量与任务语义见 §31 与 `docs/sdd/spec.md`。
+- 不宣称临时凭据已长期有效；本次使用的一次性凭据在验收后作废。
+
+记录目录（3 个 run）仍属 Q-03，归档完成后按 `open-items.md §8.4` 扫描无命中再删除。
