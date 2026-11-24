@@ -11,7 +11,7 @@
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB)
 ![React 19](https://img.shields.io/badge/React-19-61DAFB)
 
-当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路已接通；检索源接入（U-09 A~F）已实现，真实端点验收待进行；设置页真机第 1~6、9、10 项已通过，UIA 字幕适配器已接线但腾讯会议窗口无可读文本、OCR 已实现（仅前台会议窗口底部区域），卡片渲染/投屏遮蔽真机结论仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
+当前定位：**离线契约、门控与设置/卡片前端已闭环；系统音频实时转写已接通，真机可出完整转写文本并支持选中查义、按需出卡；检索源接入（U-09 A~F）已实现，真实端点验收待进行；设置页真机第 1~6、9、10 项已通过，UIA 字幕适配器已接线但腾讯会议窗口无可读文本、OCR 已实现（仅前台会议窗口底部区域），卡片渲染/投屏遮蔽真机结论仍未交付**。请以“当前进度”一节为准，不要把规划能力当作已实现能力。
 
 仓库状态（2026-11-24）：**已公开**；双许可 MIT OR Apache-2.0；CI 8/8 全绿（2026-11-23：web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）；历史提交中的本机绝对路径已清理。2026-11-23 完成工作区整理：移除过期 per-crate SBOM 中间产物、CI 瞬时 SBOM、空日志与重复模型压缩包；`target/`、`models/`、`node_modules/` 与 ASR 模型按保守策略保留。2026-11-24 完成检索源接入 A~F 与归档保留期确认（方案 B，在线 180 天 + 归档 5 年，U-07-52 关闭）；同日用一次性临时凭据复测真实 LLM 采样——9 个 live 用例通过、120 样本基线落表（见 `docs/progress/b4-status.md §34`），临时凭据在验收后作废。
 
@@ -24,7 +24,7 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **契约闭环**：AC-B4-01~104 离线通过（AC-B4-45 为 macOS 不适用）；38/39/51 只交付契约与视图模型 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时出卡 + 选中查义**：AC-B4-111~130 离线通过；17 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义**：AC-B4-111~130 离线通过；19 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片）、3+3 端口、Windows 凭据存储、原子 4 键配置、卡片组件已接入；设置页真机 1~6/9/10 通过，卡片渲染与投屏遮蔽未判定（U-05 `open`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
@@ -161,7 +161,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（17 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`/`stop_asr`/`asr_status`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（19 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`clear_cards`、`start_asr`/`stop_asr`/`asr_status`/`set_auto_cards`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
 - 采集状态栏由 `capture_status` 驱动：系统音频通道读取 WASAPI 环回健康度（可用即"就绪"）；字幕文本通道由 UIA 轮询驱动，检测到会议即自动启动（窗口无可读文本时"降级"、无会议窗口时"未启用"）；本地 ASR 读取实时管线运行状态（运行中即"就绪"）。识别进程异常退出时，`asr_status` 第三项回传可见原因（缺 vosk、模型不可读、无音频设备），不再静默失败。
 - UIA 字幕通道只接受"像一句话"的元素（长度、中英文标识符占比、固定控件标签词表三重过滤）；腾讯会议窗口里那些 `DanmuContainer`／`pageContainer`／`最小化` 之类的控件名会被全部丢弃，该通道因此常态为"降级"而不是假装就绪。字幕文本与 ASR 文本**分开存放**：文本位优先展示 ASR，ASR 为空才回退字幕，避免两条通道互相覆盖。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 2 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。
@@ -186,9 +186,10 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 
 链路：`B3 片段/要点 → B4 门控（G1~G5）→ 候选派生 → 38 卡片数据 → 39 引用对齐 → 51 视图/点击`。
 
-- 实时入口：卡片区"开始实时转写"——WASAPI 环回 → 16 kHz 单声道 → vosk 流式识别 → `jieba-rs` 关键词 → B4 门控 → 卡片；端到端延迟约 1~2 秒。运行期从 `resource_dir/asr` 读取脚本与模型，缺失时回退到 `app/src-tauri/asr/`、再回退 `.tmp/asr/`。
+- 实时入口：卡片区"开始实时转写"——WASAPI 环回 → 16 kHz 单声道 → vosk 流式识别 → 转写文字（**默认只进转写区，不出卡**）；只有在勾选"转写时自动出卡"后才继续 `jieba-rs` 关键词 → B4 门控 → 卡片。运行期从 `resource_dir/asr` 读取脚本与模型，缺失时回退到 `app/src-tauri/asr/`、再回退 `.tmp/asr/`。
+- 出卡方式：**默认按需生成**。开会时每句稳定文本都抽关键词会产出大量碎片卡、把卡片区刷成噪音，因此自动出卡默认关闭（ASR 稳定句与 UIA 字幕两条自动入口都受同一个开关控制，`set_auto_cards`，开关态由 `asr_status` 第 5 位回传）；主路径是"转写 → 选中文字 → 查意思 → 生成卡片"。卡片区显示当前张数并提供"清空"（`clear_cards`），清空幂等。
 - Python 解释器依次探测 `python` / `py -3` / `python3`，**只选能 `import vosk` 的那个**：PATH 里第一个 `python` 常常没装 vosk（微软商店存根或工具自带解释器），旧逻辑会选中它、子进程立刻退出，表现为"点了开始转写却一直没有文本"。三个候选都不带 vosk 时报 `asr_python_missing` 并提示 `pip install vosk`。
-- 识别协议：`stream_asr.py` 输出两种行——`{"partial": "..."}` 为中间结果，`{"text": "..."}` 为稳定句。vosk 只在静音端点给 final，连续说话时会长期只有 partial，因此脚本对 partial 做**稳定判定（约 0.8s 无变化）与 4s 超时强制收句**，主动产出稳定句。界面文本位跟随 partial 实时刷新，**稳定句才抽关键词出卡**（半句不出卡，连续重复句去重）。
+- 识别协议：`stream_asr.py` 输出两种行——`{"partial": "..."}` 为中间结果，`{"text": "..."}` 为稳定句。vosk 只在静音端点给 final，连续说话时会长期只有 partial，因此脚本对 partial 做**稳定判定（约 0.8s 无变化）与 4s 超时强制收句**，主动产出稳定句。界面文本位跟随 partial 实时刷新，**稳定句进全文缓冲**（开启自动出卡时才抽关键词；半句不出卡，连续重复句去重）。
 - 诊断：`asr_status` 第四项回传"音频 X s / N 片 / 写入 KB / 稳定句 M"，显示在按钮旁。**未采到音频时不再留空**，而是明确显示 `音频 0.0s（0 片）：未采到系统声音`——这种情况下问题在系统输出（未播放、音量静音、会议用的是非默认设备），与识别无关。
 - 运行日志：转写启动、解释器选择、子进程 stderr、采集片数与稳定句计数写入 `%LOCALAPPDATA%\meeting-copilot\asr.log`（**只记状态与计数，不记任何识别文本或会议内容**）。真机排查"没有文本"时先看这个文件。
 - 完整转写：稳定句同时进入内存全文缓冲（`transcript_snapshot`，单次会话最多 600 句，**不落库、退出即清空**），界面在卡片区上方逐条展示；停止转写不清空，便于回看。

@@ -1781,6 +1781,7 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - `cargo test -p meeting-copilot-desktop --bins`：**60 passed / 0 failed**（新增 2 例：自动出卡默认关且可切换、清空返回数量且幂等）。
 - `clippy --all-targets --features llm-https -- -D warnings`、`rustfmt --check`、B4 零转录、分层、UI 集成、G2 宣称、`check-bindings`（13 个 DTO）全部 rc=0。
 - `tsc --noEmit`、`eslint .`、`npm run build` 通过。
+- CI：run #81（`3596a37`）**success，3m29s，8 个 job**。
 - 构建产物：`target/debug/meeting-copilot-desktop.exe`（`--features llm-https`，16:26，21.0 MB）。
 
 未验证：
