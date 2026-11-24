@@ -115,6 +115,7 @@ export default function App() {
   const [assistBusy, setAssistBusy] = useState(false);
   const [assist, setAssist] = useState<AssistResultDto | null>(null);
   const [assistNotice, setAssistNotice] = useState<string | null>(null);
+  const [showSearchConfig, setShowSearchConfig] = useState(false);
 
   const loadCards = useCallback(async () => {
     try {
@@ -550,29 +551,29 @@ export default function App() {
         {showSettings ? (
           <SettingsPage />
         ) : (
-          <section className="panel cards">
-            <div className="panel-head">
-              <h2>关键词卡片</h2>
-              <div className="settings-actions">
-                <span className="hint">
-                  {cards.length === 0
-                    ? "按需生成，不随转写自动刷卡片"
-                    : `共 ${String(cards.length)} 张`}
-                </span>
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={cards.length === 0}
-                  onClick={() => {
-                    void clearCards();
-                  }}
-                >
-                  清空
-                </button>
+          <div className="main-col">
+            <section className="panel">
+              <div className="panel-head">
+                <h2>关键词卡片</h2>
+                <div className="settings-actions">
+                  <span className="hint">
+                    {cards.length === 0
+                      ? "按需生成，不随转写自动刷卡片"
+                      : `共 ${String(cards.length)} 张`}
+                  </span>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={cards.length === 0}
+                    onClick={() => {
+                      void clearCards();
+                    }}
+                  >
+                    清空
+                  </button>
+                </div>
               </div>
-            </div>
-            <div className="settings-section">
-              <div className="settings-actions">
+              <div className="asr-row">
                 <button
                   className="btn btn-start"
                   type="button"
@@ -603,74 +604,106 @@ export default function App() {
                 />
                 <span>转写时自动出卡（默认关；开启后同一词 90 秒内不重复，每分钟最多 8 张）</span>
               </label>
-            </div>
-            <div className="settings-section">
-              <div className="panel-head">
-                <h2>联网查资料（可选）</h2>
+              {cardError === null ? null : (
+                <p className="settings-error" role="alert">
+                  {cardError}
+                </p>
+              )}
+              {cards.length === 0 ? (
+                <p className="hint card-empty">
+                  暂无卡片。在转写区选中文字 → 查意思 → 生成卡片；也可以直接粘贴会议文本生成。
+                </p>
+              ) : (
+                <ul className="card-list">
+                  {cards.map((card) => (
+                    <KeywordCard key={card.cardId} card={card} onOpen={(id) => void openCard(id)} />
+                  ))}
+                </ul>
+              )}
+              {detail === null ? null : <CardDetail detail={detail} />}
+            </section>
+
+            <section className="panel">
+              <button
+                className="disclosure"
+                type="button"
+                aria-expanded={showSearchConfig}
+                onClick={() => {
+                  setShowSearchConfig((prev) => !prev);
+                }}
+              >
+                <span>联网查资料（可选）</span>
                 <span className="hint">
                   {searchConfig === null
                     ? "读取配置中…"
                     : searchConfig.ready
                       ? `${SEARCH_PROVIDER_TEXT[searchConfig.provider] ?? searchConfig.provider} 已就绪`
                       : searchConfig.hasKey
-                        ? "已存 Key，但当前构建未启用联网传输"
-                        : "填入检索 Key 后可联网查证"}
+                        ? "已存 Key，当前构建未启用传输"
+                        : "未配置 · 点开填 Key"}
                 </span>
-              </div>
-              <div className="settings-actions">
-                <select
-                  className="key-input"
-                  aria-label="检索服务"
-                  value={searchProvider}
-                  onChange={(event) => {
-                    setSearchProvider(event.target.value);
-                  }}
-                >
-                  <option value="bocha">博查 Bocha（中文）</option>
-                  <option value="tavily">Tavily（英文/通用）</option>
-                </select>
-                <input
-                  className="key-input"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={searchConfig?.hasKey === true ? "已保存，留空不修改" : "检索服务 Key"}
-                  value={searchKey}
-                  onChange={(event) => {
-                    setSearchKey(event.target.value);
-                  }}
-                />
-                <label className="checkline">
-                  <input
-                    type="checkbox"
-                    checked={searchAuto}
-                    onChange={() => {
-                      setSearchAuto((prev) => !prev);
-                    }}
-                  />
-                  <span>生成卡片时自动补来源</span>
-                </label>
-                <button
-                  className="btn"
-                  type="button"
-                  disabled={searchBusy}
-                  onClick={() => {
-                    void saveSearchConfig();
-                  }}
-                >
-                  {searchBusy ? "保存中…" : "保存"}
-                </button>
-              </div>
-              <p className="hint">
-                只有点「联网查」或勾选上面这项时才会出网：发出去的是选中的词（≤80 字），不发整段转写；
-                Key 存系统凭据，不进配置文件。
-              </p>
-              {searchConfigNotice === null ? null : (
-                <p className="settings-notice" role="status">
-                  {searchConfigNotice}
-                </p>
-              )}
-            </div>
-            <div className="settings-section transcript-section">
+              </button>
+              {showSearchConfig ? (
+                <div className="disclosure-body">
+                  <div className="settings-actions">
+                    <select
+                      className="key-input"
+                      aria-label="检索服务"
+                      value={searchProvider}
+                      onChange={(event) => {
+                        setSearchProvider(event.target.value);
+                      }}
+                    >
+                      <option value="bocha">博查 Bocha（中文）</option>
+                      <option value="tavily">Tavily（英文/通用）</option>
+                    </select>
+                    <input
+                      className="key-input"
+                      type="password"
+                      autoComplete="off"
+                      placeholder={
+                        searchConfig?.hasKey === true ? "已保存，留空不修改" : "检索服务 Key"
+                      }
+                      value={searchKey}
+                      onChange={(event) => {
+                        setSearchKey(event.target.value);
+                      }}
+                    />
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={searchBusy}
+                      onClick={() => {
+                        void saveSearchConfig();
+                      }}
+                    >
+                      {searchBusy ? "保存中…" : "保存"}
+                    </button>
+                  </div>
+                  <label className="checkline">
+                    <input
+                      type="checkbox"
+                      checked={searchAuto}
+                      onChange={() => {
+                        setSearchAuto((prev) => !prev);
+                      }}
+                    />
+                    <span>生成卡片时自动补来源</span>
+                  </label>
+                  <p className="hint">
+                    只有点「联网查」或勾选上面这项时才会出网：发出去的是选中的词（≤80 字），不发整段转写；
+                    Key 存系统凭据，不进配置文件。
+                  </p>
+                  {searchConfigNotice === null ? null : (
+                    <p className="settings-notice" role="status">
+                      {searchConfigNotice}
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </section>
+
+            <section className="panel">
               <div className="panel-head">
                 <h2>完整转写</h2>
                 <div className="settings-actions">
@@ -708,6 +741,42 @@ export default function App() {
                   ))
                 )}
               </div>
+              {selection === "" ? null : (
+                <div className="settings-actions selection-bar">
+                  <span className="hint">已选中：{selection}</span>
+                  <button
+                    className="btn btn-start"
+                    type="button"
+                    disabled={explainBusy}
+                    onClick={() => {
+                      void explainSelection();
+                    }}
+                  >
+                    {explainBusy ? "查询中…" : "查意思"}
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={searchBusy}
+                    onClick={() => {
+                      void searchSelection();
+                    }}
+                  >
+                    {searchBusy ? "检索中…" : "联网查"}
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={() => {
+                      setSelection("");
+                      setExplainResult(null);
+                      setExplainNotice(null);
+                    }}
+                  >
+                    取消选中
+                  </button>
+                </div>
+              )}
               {assist === null ? null : (
                 <div className="explain-panel">
                   <p className="explain-source">
@@ -754,42 +823,6 @@ export default function App() {
                 <p className="settings-notice" role="status">
                   {assistNotice}
                 </p>
-              )}
-              {selection === "" ? null : (
-                <div className="settings-actions">
-                  <span className="hint">已选中：{selection}</span>
-                  <button
-                    className="btn btn-start"
-                    type="button"
-                    disabled={explainBusy}
-                    onClick={() => {
-                      void explainSelection();
-                    }}
-                  >
-                    {explainBusy ? "查询中…" : "查意思"}
-                  </button>
-                  <button
-                    className="btn"
-                    type="button"
-                    disabled={searchBusy}
-                    onClick={() => {
-                      void searchSelection();
-                    }}
-                  >
-                    {searchBusy ? "检索中…" : "联网查"}
-                  </button>
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={() => {
-                      setSelection("");
-                      setExplainResult(null);
-                      setExplainNotice(null);
-                    }}
-                  >
-                    取消选中
-                  </button>
-                </div>
               )}
               {explainResult === null ? null : (
                 <div className="explain-panel">
@@ -840,10 +873,11 @@ export default function App() {
                   {explainNotice}
                 </p>
               )}
-            </div>
-            <div className="settings-section">
+            </section>
+
+            <section className="panel">
               <label className="field">
-                <span>会议文本</span>
+                <span>会议文本（手动粘贴）</span>
                 <textarea
                   rows={3}
                   value={ingestText}
@@ -870,25 +904,8 @@ export default function App() {
                   {ingestNotice}
                 </p>
               )}
-            </div>
-            {cardError === null ? null : (
-              <p className="settings-error" role="alert">
-                {cardError}
-              </p>
-            )}
-            {cards.length === 0 ? (
-              <p className="hint">
-                暂无卡片。在转写区选中文字 → 查意思 → 生成卡片；也可以直接粘贴会议文本生成。
-              </p>
-            ) : (
-              <ul className="card-list">
-                {cards.map((card) => (
-                  <KeywordCard key={card.cardId} card={card} onOpen={(id) => void openCard(id)} />
-                ))}
-              </ul>
-            )}
-            {detail === null ? null : <CardDetail detail={detail} />}
-          </section>
+            </section>
+          </div>
         )}
 
         <aside className="panel timeline">

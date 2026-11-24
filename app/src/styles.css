@@ -123,7 +123,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 14px 16px;
+  padding: 16px 18px;
 }
 
 .panel h2 {
@@ -133,6 +133,10 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.panel-head h2 {
+  margin-bottom: 0;
 }
 
 .session h2:not(:first-child) {
@@ -232,8 +236,8 @@ body {
 .card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 12px 14px;
-  margin-bottom: 10px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
 }
 
 .card-top {
@@ -322,7 +326,7 @@ body {
   flex: none;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1180px) {
   .layout {
     grid-template-columns: 220px minmax(0, 1fr);
   }
@@ -471,7 +475,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 12px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -493,24 +497,20 @@ body {
 }
 
 /* 完整转写 + 选中查义 */
-.transcript-section {
-  border-top: 1px solid var(--line);
-}
-
 .transcript-body {
-  max-height: 220px;
+  max-height: 240px;
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fbfcfe;
   font-size: 13px;
-  line-height: 1.75;
+  line-height: 1.8;
   user-select: text;
 }
 
 .transcript-line {
-  margin: 0 0 6px;
+  margin: 0 0 10px;
 }
 
 .transcript-line:last-child {
@@ -518,8 +518,8 @@ body {
 }
 
 .explain-panel {
-  margin-top: 10px;
-  padding: 10px 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
@@ -587,7 +587,7 @@ body {
 }
 
 .assist-label {
-  margin: 8px 0 2px;
+  margin: 14px 0 4px;
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
@@ -600,6 +600,10 @@ body {
   line-height: 1.7;
 }
 
+.assist-list li + li {
+  margin-top: 6px;
+}
+
 .assist-reply {
   display: flex;
   align-items: center;
@@ -610,4 +614,73 @@ body {
 .btn-mini {
   padding: 2px 8px;
   font-size: 11px;
+}
+
+/* 主栏：拆成独立卡片，用间距代替分隔线 */
+.main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.asr-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.asr-row .hint {
+  line-height: 1.6;
+}
+
+.card-empty {
+  margin: 16px 0 0;
+  line-height: 1.7;
+}
+
+.main-col .card-list {
+  margin-top: 16px;
+}
+
+.selection-bar {
+  margin-top: 12px;
+  align-items: center;
+}
+
+.disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-align: left;
+}
+
+.disclosure:hover {
+  color: var(--text);
+}
+
+.disclosure .hint {
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.disclosure-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
 }
