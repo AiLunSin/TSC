@@ -2234,3 +2234,12 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 ### §55.4 待远端确认
 
 修复尚未 push，无法在 macOS runner 上验证。**远端 run 复跑前不宣称该 job 已转绿**；README/ABOUT 里「CI 8/8 全绿」均为 2026-11-23 的历史结论（run 45152256989），已补注本次失败与待复跑状态。
+
+### §55.5 远端复跑结论（2026-11-25 01:23，追加，不改写 §55.4）
+
+- 用户授权推送 `c359c69` + `bda1840`（`25923c4..bda1840 main -> main`），触发新 run **45447235508**。
+- 经 GitHub Actions API 轮询确认：run `conclusion=success`，**8 个 job 全部 `success`**，含此前失败的两个 darwin：
+  `rust (x86_64-apple-darwin)` **success**、`rust (aarch64-apple-darwin)` **success**；其余 `rust (x86_64-pc-windows-msvc)`、`web`、`test-name-inventory (C3)`、`feature-coverage (C2)`、`sqlcipher`、`compliance` 均 success。
+- 结论：**§55.2 的测试脚手架修复在 macOS runner 上生效**，该 flaky 用例已转绿；远端 CI 恢复 8/8。最新 CI 口径以本小节与门面文档为准，§55.4 的「待复跑」是当时的时间线记录，按纪律保留不改写。
+- 边界：远端日志未取到失败断言的**具体数值**（GitHub Actions job logs API 匿名访问 403），§55.1 的根因仍标注为推断；已验证的是「修复有效」，不是「根因已证实」。不把复跑成功写成 macOS 平台行为已定性。
+- 门面同步：README 仓库状态与发布行、ABOUT CI 行、`open-items.md` §0 与 §3 的待办行统一改为「已复跑 8/8 全绿」。
