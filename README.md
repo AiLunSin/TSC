@@ -29,7 +29,7 @@
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线（2026-11-24 实测）：**1000 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **47 例**、平台层 **27 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。桌面层由上一轮 43 例增至 47 例，新增覆盖隐私开关解析、投屏拒卡与紧急遮蔽三条行为。
+最近一次全量基线（2026-11-24 实测）：**1007 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **54 例**、平台层 **27 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。桌面层由 43 例增至 54 例：隐私开关与投屏/紧急遮蔽 4 例，识别协议解析、去重与采集诊断 5 例。
 
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
 
@@ -187,6 +187,8 @@ cargo test -p meeting-copilot-infrastructure --features llm-https --test search_
 
 - 实时入口：卡片区"开始实时转写"——WASAPI 环回 → 16 kHz 单声道 → vosk 流式识别 → `jieba-rs` 关键词 → B4 门控 → 卡片；端到端延迟约 1~2 秒。运行期从 `resource_dir/asr` 读取脚本与模型，缺失时回退到 `app/src-tauri/asr/`、再回退 `.tmp/asr/`。
 - Python 解释器依次探测 `python` / `py -3` / `python3`，**只选能 `import vosk` 的那个**：PATH 里第一个 `python` 常常没装 vosk（微软商店存根或工具自带解释器），旧逻辑会选中它、子进程立刻退出，表现为"点了开始转写却一直没有文本"。三个候选都不带 vosk 时报 `asr_python_missing` 并提示 `pip install vosk`。
+- 识别协议：`stream_asr.py` 输出两种行——`{"partial": "..."}` 为中间结果，`{"text": "..."}` 为稳定句。vosk 只在静音端点给 final，连续说话时会长期只有 partial，因此脚本对 partial 做**稳定判定（约 0.8s 无变化）与 4s 超时强制收句**，主动产出稳定句。界面文本位跟随 partial 实时刷新，**稳定句才抽关键词出卡**（半句不出卡，连续重复句去重）。
+- 诊断：`asr_status` 第四项回传"音频 X s / N 片 / 写入 KB / 稳定句 M"，显示在按钮旁。若为 `0.0s / 0 片`，说明默认输出设备没有声音进入环回（未播放或会议用的是非默认设备），而非识别失败。
 - 打包：`asr/stream_asr.py` 随仓库入库并默认打包；vosk 模型（约 52MB）不入库——发布前复制到 `app/src-tauri/asr/vosk-model-small-cn-0.22/`，再叠加 `app/src-tauri/tauri.asr.conf.json`（Tauri CLI 参数 `--config tauri.asr.conf.json`）打包。基础配置不含模型，因此 CI 与 `cargo clippy`/`cargo test` 无需模型即可编译。
 - 手动入口："粘贴会议文本 → 生成卡片"，复用同一 `ingest_text` 链路。
 - 卡片列表每 1 秒自动刷新；来源为 `UserGenerated`（本地片段），因此可点击，不伪造外部检索来源。

@@ -1631,3 +1631,34 @@ U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，�
 
 - 真实会议音频 → 出卡的端到端（需真实会议与可用输出设备），仍需真机复核。
 - 腾讯会议窗口 UIA 可读文本为 0，字幕通道预计显示"降级"而非"就绪"；该结论不变。
+
+## §36 实时转写"启动成功但无文本、无关键词、无卡片"修复（2026-11-24）
+
+现象（真机）：点"开始实时转写"后返回成功（不报错），但提示位一直停在"等待说话"，卡片区始终为空，也没有任何关键词。
+
+根因（三层，逐层实测确认）：
+
+| # | 位置 | 问题 |
+|---|---|---|
+| 1 | `asr/stream_asr.py` | vosk 只在 `AcceptWaveform` 检测到静音端点时返回 final；全天候连续说话或端点迟迟不触发时，**只有 `partial` 输出，`{"text"}` 只在 EOF（进程结束）才出现**。实测 `test.wav`（7.9s）：57 行 partial、1 行 text，且那一行是关流时才写的 |
+| 2 | `ipc/asr.rs` 读取循环 | 只解析 `{"text"}`，`{"partial"}` 被直接丢弃 → `last_text` 永远为空，界面无文本 |
+| 3 | `ipc/card_store.rs::ingest` | 关键词与卡片只由稳定句触发；稳定句拿不到，自然既无关键词也无卡片 |
+
+修复：
+
+- **脚本主动收句**（`stream_asr.py`）：同一 `partial` 连续 6 轮（≈0.8s）无变化，或单句累计超 4s，就输出 `{"text": partial}` 并 `Reset()`；`partial` 仅在变化时才输出，避免刷屏。收句后从下一段音频重新累积。
+- **Rust 接收中间结果**（`ipc/asr.rs`）：新增 `parse_line` 区分 `Recognized::Partial` / `Stable`；`partial` 只更新界面文本位，**不抽关键词**（避免半句产出碎片卡片）；`Stable` 才 `ingest` 出卡，并对连续重复句去重。
+- **采集诊断**：`asr_status` 扩为 4 元组，第四项回传"音频 X s / N 片 / 写入 KB / 稳定句 M"，前端在按钮旁以 `·` 追加显示——可直接区分"没有声音进管线"与"有声音但没识别出文本"。
+- **编码加固**：子进程固定 `PYTHONUTF8=1` + `PYTHONIOENCODING=utf-8` + `-X utf8`；读取改用 `read_until` + `from_utf8_lossy`，不再因单个坏字节用 `map_while(Result::ok)` 终结整条流。
+- **启动失败原因可见**：`start_asr` 的 `IpcErrorDto.message` 直接展示，不再统一成"启动失败，请稍后重试"。
+
+验证（本机实测）：
+
+- 按实时节奏（每 128 ms 喂 4096 字节）重放 `test.wav`：首句 **2.6s** 出现，7.9s 内共产出 **4 条稳定句**（"我们 确认" / "晕 方案" / "灰度 范围 限定" / "俩 站点"），即每条 1.5~2s。
+- `cargo test -p meeting-copilot-desktop --bins`：**54 passed / 0 failed**（新增 5 例：partial/text 解析、空行与非法行、partial 只更新文本不出卡、重复稳定句去重、诊断计数）。
+- `cargo-clippy -D warnings`、`cargo fmt --all --check`、`tsc --noEmit`、`eslint`、`check-b4-gates --rule=source|zero-transcript`、`check-layering`、`check-ui-integration`、`scan-secrets`、`scan-secrets-docs --all-md` 全部 rc=0。
+
+未验证：
+
+- 真实会议音频的端到端（需真机会议与默认输出设备有声音）。若诊断显示"音频 0.0s / 0 片"，说明系统输出没有声音进入环回（未播放、或会议用非默认设备），与本次修复无关。
+- 4s 强制收句在极长句场景可能切断语义，属已知取舍；后续可改为按标点/静音能量自适应。

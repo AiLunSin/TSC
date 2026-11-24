@@ -69,6 +69,13 @@ impl AsrPaths {
     }
 }
 
+/// 识别进程 stdout 的一行：中间结果只做展示，稳定句才出卡。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Recognized {
+    Partial(String),
+    Stable(String),
+}
+
 /// 实时转写管线状态，由 Tauri managed state 持有（`Arc<AsrPipeline>`）。
 pub struct AsrPipeline {
     running: AtomicBool,
@@ -79,6 +86,12 @@ pub struct AsrPipeline {
     cards: Arc<CardStore>,
     paths: AsrPaths,
     subtitle: UiaSubtitleSource,
+    /// 诊断计数：用来区分"没采到音频"和"采到了但没识别"。
+    audio_chunks: AtomicU64,
+    audio_bytes: AtomicU64,
+    audio_ms: AtomicU64,
+    stable_lines: AtomicU64,
+    last_stable: Mutex<String>,
 }
 
 impl AsrPipeline {
@@ -92,6 +105,11 @@ impl AsrPipeline {
             cards,
             paths,
             subtitle: UiaSubtitleSource::new(Platform::TencentMeeting),
+            audio_chunks: AtomicU64::new(0),
+            audio_bytes: AtomicU64::new(0),
+            audio_ms: AtomicU64::new(0),
+            stable_lines: AtomicU64::new(0),
+            last_stable: Mutex::new(String::new()),
         }
     }
 
@@ -179,6 +197,7 @@ impl AsrPipeline {
             return Ok(());
         }
         self.ensure_subtitle();
+        self.reset_counters();
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let spawned = spawn_recognizer(&self.paths);
         let (child, stdin, stdout) = match spawned {
@@ -208,26 +227,37 @@ impl AsrPipeline {
         // 工作线程只持有 Weak，避免应用退出时线程反过来阻止管线 Drop。
         let recognizer = Arc::downgrade(self);
         std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines().map_while(Result::ok) {
+            let mut reader = BufReader::new(stdout);
+            let mut raw = Vec::new();
+            loop {
+                raw.clear();
+                match reader.read_until(b'\n', &mut raw) {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
                 let Some(recognizer) = recognizer.upgrade() else {
                     return;
                 };
                 if !recognizer.is_current(generation) {
                     return;
                 }
-                let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) else {
+                // 脚本已固定 UTF-8；这里仍用 lossy，避免一个坏字节终结整条流。
+                let line = String::from_utf8_lossy(&raw);
+                let Some(recognized) = parse_line(&line) else {
                     continue;
                 };
-                let Some(text) = value.get("text").and_then(|item| item.as_str()) else {
-                    continue;
-                };
-                let text = text.trim();
-                if text.is_empty() {
-                    continue;
+                match recognized {
+                    // 中间结果只更新界面文本，不抽关键词：半句会产出碎片卡片。
+                    Recognized::Partial(text) => recognizer.set_last_text(&text),
+                    Recognized::Stable(text) => {
+                        recognizer.set_last_text(&text);
+                        recognizer.stable_lines.fetch_add(1, Ordering::Relaxed);
+                        if recognizer.take_stable_if_new(&text) {
+                            let _ = recognizer.cards.ingest(&text);
+                        }
+                    }
                 }
-                recognizer.set_last_text(text);
-                let _ = recognizer.cards.ingest(text);
             }
             if let Some(recognizer) = recognizer.upgrade() {
                 if recognizer.is_current(generation) {
@@ -267,10 +297,18 @@ impl AsrPipeline {
                         for sample in pcm {
                             bytes.extend_from_slice(&sample.to_le_bytes());
                         }
+                        let pcm_ms = u64::try_from(bytes.len()).unwrap_or(0) / 32;
                         if writer.write_all(&bytes).is_err() {
                             break;
                         }
                         let _ = writer.flush();
+                        if let Some(capture) = capture.upgrade() {
+                            capture.audio_chunks.fetch_add(1, Ordering::Relaxed);
+                            capture
+                                .audio_bytes
+                                .fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                            capture.audio_ms.fetch_add(pcm_ms, Ordering::Relaxed);
+                        }
                     }
                     Ok(None) => std::thread::sleep(Duration::from_millis(20)),
                     Err(_) => std::thread::sleep(Duration::from_millis(50)),
@@ -312,6 +350,44 @@ impl AsrPipeline {
             .map(|text| text.clone())
             .unwrap_or_default()
     }
+
+    /// 采集/识别计数，供界面区分"没有声音进管线"与"有声音但没识别出文本"。
+    pub fn diagnostics(&self) -> String {
+        let chunks = self.audio_chunks.load(Ordering::Relaxed);
+        let bytes = self.audio_bytes.load(Ordering::Relaxed);
+        let ms = self.audio_ms.load(Ordering::Relaxed);
+        let stable = self.stable_lines.load(Ordering::Relaxed);
+        if chunks == 0 && stable == 0 {
+            return String::new();
+        }
+        format!(
+            "音频 {:.1}s（{chunks} 片）/ 写入 {:.0}KB / 稳定句 {stable}",
+            ms as f64 / 1000.0,
+            bytes as f64 / 1024.0
+        )
+    }
+
+    fn reset_counters(&self) {
+        self.audio_chunks.store(0, Ordering::Relaxed);
+        self.audio_bytes.store(0, Ordering::Relaxed);
+        self.audio_ms.store(0, Ordering::Relaxed);
+        self.stable_lines.store(0, Ordering::Relaxed);
+        if let Ok(mut last) = self.last_stable.lock() {
+            last.clear();
+        }
+    }
+
+    /// 稳定句去重：脚本强制收句时可能重复上一句，避免刷重复卡片。
+    fn take_stable_if_new(&self, text: &str) -> bool {
+        match self.last_stable.lock() {
+            Ok(last) if last.as_str() == text => false,
+            Ok(mut last) => {
+                *last = text.to_owned();
+                true
+            }
+            Err(_) => true,
+        }
+    }
 }
 
 impl Drop for AsrPipeline {
@@ -323,12 +399,33 @@ impl Drop for AsrPipeline {
 fn quiet_command(program: &str, prefix_args: &[&str]) -> Command {
     let mut command = Command::new(program);
     command.args(prefix_args);
+    // 子进程 stdout 走管道时，Windows 上 Python 可能退回 cp936；固定 UTF-8 以免中文乱码或解码失败。
+    command
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(CREATE_NO_WINDOW);
     }
     command
+}
+
+/// 解析识别进程的一行输出；`{"partial"}` 为中间结果，`{"text"}` 为稳定句。
+pub fn parse_line(line: &str) -> Option<Recognized> {
+    let value: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
+    if let Some(text) = value.get("text").and_then(|item| item.as_str()) {
+        let text = text.trim();
+        if !text.is_empty() {
+            return Some(Recognized::Stable(text.to_owned()));
+        }
+    }
+    let partial = value.get("partial").and_then(|item| item.as_str())?.trim();
+    if partial.is_empty() {
+        None
+    } else {
+        Some(Recognized::Partial(partial.to_owned()))
+    }
 }
 
 /// 候选解释器是否装了 vosk。
@@ -358,7 +455,10 @@ fn spawn_recognizer(
             continue;
         }
         let mut command = quiet_command(program, prefix_args);
+        // -X utf8 与 PYTHONUTF8 双保险：部分发行版忽略环境变量。
         command
+            .arg("-X")
+            .arg("utf8")
             .arg(&paths.script)
             .arg(&paths.model)
             .stdin(Stdio::piped())
@@ -448,13 +548,19 @@ pub fn stop_asr(state: tauri::State<'_, Arc<AsrPipeline>>) -> Result<(), IpcErro
 #[tauri::command]
 pub fn asr_status(
     state: tauri::State<'_, Arc<AsrPipeline>>,
-) -> Result<(bool, String, String), IpcErrorDto> {
-    Ok((state.is_running(), state.last_text(), state.last_error()))
+) -> Result<(bool, String, String, String), IpcErrorDto> {
+    Ok((
+        state.is_running(),
+        state.last_text(),
+        state.last_error(),
+        state.diagnostics(),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use meeting_copilot_application::settings::CardSnapshotSource;
 
     fn pipeline() -> AsrPipeline {
         AsrPipeline::new(Arc::new(CardStore::new()), AsrPaths::resolve(None))
@@ -503,6 +609,58 @@ mod tests {
     #[test]
     fn error_slot_starts_empty() {
         assert_eq!(pipeline().last_error(), "");
+    }
+
+    #[test]
+    fn parses_stable_and_partial_lines() {
+        assert_eq!(
+            parse_line(r#"{"text": "灰度范围限定"}"#),
+            Some(Recognized::Stable("灰度范围限定".to_owned()))
+        );
+        assert_eq!(
+            parse_line(r#"{"partial": "灰度 范围"}"#),
+            Some(Recognized::Partial("灰度 范围".to_owned()))
+        );
+    }
+
+    #[test]
+    fn ignores_blank_and_malformed_lines() {
+        assert_eq!(parse_line(""), None);
+        assert_eq!(parse_line("not json"), None);
+        assert_eq!(parse_line(r#"{"text": "   "}"#), None);
+        assert_eq!(parse_line(r#"{"partial": ""}"#), None);
+        assert_eq!(parse_line(r#"{"other": 1}"#), None);
+    }
+
+    /// 部分收敛：只有 partial 也应推送到界面文本位（否则会议全程"等待说话"）。
+    #[test]
+    fn partial_updates_visible_text_without_cards() {
+        let pipeline = pipeline();
+        if let Some(Recognized::Partial(text)) = parse_line(r#"{"partial": "灰度 范围"}"#) {
+            pipeline.set_last_text(&text);
+        }
+        assert_eq!(pipeline.last_text(), "灰度 范围");
+        assert!(pipeline.cards.cards().is_empty(), "中间结果不直接出卡");
+    }
+
+    #[test]
+    fn repeated_stable_sentence_is_ingested_once() {
+        let pipeline = pipeline();
+        assert!(pipeline.take_stable_if_new("灰度范围限定"));
+        assert!(!pipeline.take_stable_if_new("灰度范围限定"));
+        assert!(pipeline.take_stable_if_new("两地三中心"));
+    }
+
+    #[test]
+    fn diagnostics_empty_until_audio_arrives() {
+        let pipeline = pipeline();
+        assert_eq!(pipeline.diagnostics(), "");
+        pipeline.audio_chunks.store(3, Ordering::Relaxed);
+        pipeline.audio_bytes.store(3200, Ordering::Relaxed);
+        pipeline.audio_ms.store(500, Ordering::Relaxed);
+        let text = pipeline.diagnostics();
+        assert!(text.contains("0.5s"), "{text}");
+        assert!(text.contains("3 片"), "{text}");
     }
 
     #[test]

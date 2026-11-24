@@ -70,6 +70,7 @@ export default function App() {
   const [asrRunning, setAsrRunning] = useState(false);
   const [asrText, setAsrText] = useState("");
   const [asrError, setAsrError] = useState("");
+  const [asrStats, setAsrStats] = useState("");
 
   const loadCards = useCallback(async () => {
     try {
@@ -171,11 +172,14 @@ export default function App() {
     let cancelled = false;
     async function refreshAsr(): Promise<void> {
       try {
-        const [running, text, error] = await invokeCommand<[boolean, string, string]>("asr_status");
+        const [running, text, error, stats] = await invokeCommand<[boolean, string, string, string]>(
+          "asr_status",
+        );
         if (!cancelled) {
           setAsrRunning(running);
           setAsrText(text);
           setAsrError(error);
+          setAsrStats(stats);
         }
       } catch {
         // 保留上一次状态
@@ -184,7 +188,7 @@ export default function App() {
     void refreshAsr();
     const id = window.setInterval(() => {
       void refreshAsr();
-    }, 1500);
+    }, 700);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -198,8 +202,13 @@ export default function App() {
         setAsrError("");
       }
       setAsrRunning(!asrRunning);
-    } catch {
-      setCardError("实时转写启动失败，请稍后重试。");
+    } catch (error) {
+      // 后端已把可读原因放在 IpcErrorDto.message 里，直接展示，别再吞成通用文案。
+      const detail =
+        typeof error === "object" && error !== null && "message" in error
+          ? String(error.message)
+          : "";
+      setAsrError(detail !== "" ? detail : "实时转写启动失败，请稍后重试。");
     }
   }
 
@@ -317,7 +326,10 @@ export default function App() {
                   {asrRunning ? "停止实时转写" : "开始实时转写"}
                 </button>
                 {asrError === "" ? (
-                  <span className="hint">{asrHintText(asrRunning, asrText)}</span>
+                  <span className="hint">
+                    {asrHintText(asrRunning, asrText)}
+                    {asrRunning && asrStats !== "" ? ` · ${asrStats}` : ""}
+                  </span>
                 ) : (
                   <span className="settings-error" role="alert">
                     {asrError}
