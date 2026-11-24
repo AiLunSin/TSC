@@ -8,7 +8,7 @@ use meeting_copilot_domain::model::proactive::{
 };
 use meeting_copilot_domain::port::proactive::{FeedbackStore, OutboxStore, QueryCacheStore};
 use meeting_copilot_domain::vo::{CardRef, ProviderId, SessionId, TaskId};
-use meeting_copilot_infrastructure::store::{SqliteStore, StoreConfig, StoreKey};
+use meeting_copilot_infrastructure::store::{SqliteStore, StoreConfig, StoreKey, SCHEMA_VERSION};
 
 /// `sqlcipher` feature 下文件库必须带密钥打开；固定密钥便于重启后仍能解密。
 const TEST_DB_KEY: [u8; 32] = [42; 32];
@@ -133,7 +133,7 @@ fn outbox_survives_restart_with_same_active_set() {
             .map(|entry| entry.task_id.as_str())
             .collect();
         assert_eq!(ids, vec!["task-1", "task-2"]);
-        assert_eq!(store.schema_version().expect("version"), 2);
+        assert_eq!(store.schema_version().expect("version"), SCHEMA_VERSION);
     }
     let _ = std::fs::remove_file(&config.path);
 }
@@ -148,7 +148,7 @@ fn migration_is_idempotent_and_preserves_existing_rows() {
     }
     {
         let store = open_store(&config);
-        assert_eq!(store.schema_version().expect("version"), 2);
+        assert_eq!(store.schema_version().expect("version"), SCHEMA_VERSION);
         assert!(QueryCacheStore::get(&store, &"b".repeat(64))
             .expect("get")
             .is_some());
