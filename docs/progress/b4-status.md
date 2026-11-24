@@ -2094,8 +2094,8 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - `scripts/u07-43/run-cargo.ps1`：`Enter-VsDevShell` 用大小写不敏感字典装载环境变量，终端里同时有 `HTTP_PROXY`/`http_proxy` 时会抛「已添加项。字典中的关键字」并让 INCLUDE 为空（随后 `libsqlite3-sys` 静默 exit 2）。进入 DevShell 前先去重小写项并恢复大写值；另加模块缺失检查与 `try/catch` 可读报错。
 - `crates/infrastructure/tests/search_live.rs`：`collect_200_real_samples` 结尾写死 `assert_eq!(real_sample_count, 200)`，多源配置下一次 `run` 可能写入多条真实样本，攒够时 real 会 >200 而误判失败。改为 `>= 200`，与 SPEC 7.3 和 `verdict.py` 的 `real < target` 口径一致。
 
-**3. 刻意没动的文件**：`run-u07-43-samples.sh`、`start-bing-bridge.sh`（两个 `--serve-only` 进程仍在 `sleep 3600`，改写可能触发 trap 关掉隧道）、`verdict.py`（第三轮末尾要调用）。这三处若仍有问题，等采样归档后再处理。
+**3. 刻意没动的文件**：`run-u07-43-samples.sh`、`start-bing-bridge.sh`（采样进行期间两个 `--serve-only` 进程处于 `sleep 3600`，改写可能触发 trap 关掉隧道）、`verdict.py`（第三轮末尾要调用）。第三轮结束后这些限制即解除；若要继续打磨，可单独提交。
 
-**验证**：`py_compile` rc=0、`cargo fmt --all -- --check` rc=0、`bash -n` rc=0、PS `Parser::ParseFile` 无语法错误（329 tokens）、DevShell 去重后加载成功且能找到 `link.exe`；工具链前置后 `cargo build -p meeting-copilot-desktop --features llm-https` 35.08s 完成，`cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live --no-run` 13.05s rc=0（确认 `search_live.rs` 改动可编译）。**改动尚未提交**（含另一会话的 14 个文件与本节 4 个文件），等使用者指示再 commit。
+**验证**：`py_compile` rc=0、`cargo fmt --all -- --check` rc=0、`bash -n` rc=0、PS `Parser::ParseFile` 无语法错误（329 tokens）、DevShell 去重后加载成功且能找到 `link.exe`；工具链前置后 `cargo build -p meeting-copilot-desktop --features llm-https` 35.08s 完成，`cargo test -p meeting-copilot-infrastructure --features llm-https --test search_live --no-run` 13.05s rc=0（确认 `search_live.rs` 改动可编译）。本节与 §50 的文档、D 路径脚本、连接地址预算修复已随 `1989d86` 与 `df87623` 提交，工作区干净；exe 与 PATH 备份只留本机，不入库。
 
 **仍 open**：U-05 第 7 项 1/4、第 8 项 0/2（见 §49）；`rustup` 代理待重装。
