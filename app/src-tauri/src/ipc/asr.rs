@@ -38,8 +38,18 @@ impl AsrPaths {
                 return Self { script, model };
             }
         }
+        // 打包前把模型复制到 `app/src-tauri/asr/<model>`（不入库），
+        // 与 `tauri.asr.conf.json` 的资源映射保持一致。
+        let repository_script = dev_root.join("asr/stream_asr.py");
+        let repository_model = dev_root.join("asr").join(MODEL_DIR_NAME);
+        if repository_model.is_dir() {
+            return Self {
+                script: repository_script,
+                model: repository_model,
+            };
+        }
         Self {
-            script: dev_root.join("asr/stream_asr.py"),
+            script: repository_script,
             model: dev_root.join("../../.tmp/asr").join(MODEL_DIR_NAME),
         }
     }

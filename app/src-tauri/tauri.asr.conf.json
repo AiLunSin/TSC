@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "asr/stream_asr.py": "asr/stream_asr.py",
+      "asr/vosk-model-small-cn-0.22": "asr/vosk-model-small-cn-0.22"
+    }
+  }
+}

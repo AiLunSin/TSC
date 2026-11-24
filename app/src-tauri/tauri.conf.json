@@ -34,8 +34,7 @@
     "category": "Productivity",
     "shortDescription": "会议实时要点与联网补全助手",
     "resources": {
-      "asr/stream_asr.py": "asr/stream_asr.py",
-      "../../.tmp/asr/vosk-model-small-cn-0.22": "asr/vosk-model-small-cn-0.22"
+      "asr/stream_asr.py": "asr/stream_asr.py"
     }
   }
 }

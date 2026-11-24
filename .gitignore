@@ -16,3 +16,5 @@ docs/compliance/sbom/*.json
 !docs/compliance/sbom/.gitkeep
 models/
 .tmp/
+# 打包前复制到 app/src-tauri/asr/ 的 vosk 模型（约 52MB，不入库）
+app/src-tauri/asr/vosk-model-small-cn-0.22/
