@@ -3,6 +3,7 @@
 //! 来源为 `UserGenerated`（本地会议片段），因此卡片可合法进入可点击态；
 //! 不伪造外部检索来源。
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,6 +38,30 @@ const STOPWORDS: &[&str] = &[
 const MAX_KEYWORDS_PER_TEXT: usize = 8;
 const MAX_CARDS: usize = 200;
 
+/// 自动出卡限流：同一个词 90 秒内不重复出卡，整场每分钟最多 8 张。
+///
+/// 只作用于自动路径（ASR 稳定句 / UIA 字幕）；用户手点"生成卡片"不受限。
+const AUTO_COOLDOWN_MS: u64 = 90_000;
+const AUTO_WINDOW_MS: u64 = 60_000;
+const AUTO_CARDS_PER_MINUTE: usize = 8;
+/// 冷却表上限：超过后清一遍过期项，避免长会无限增长。
+const AUTO_TERM_MEMORY: usize = 512;
+
+#[derive(Default)]
+struct AutoEmitState {
+    last_by_term: HashMap<String, u64>,
+    window: VecDeque<u64>,
+}
+
+/// 单次自动出卡的额度判定。
+enum Budget {
+    Allow,
+    /// 同词还在冷却期内，跳过这一张。
+    Skip,
+    /// 本分钟额度已用完，整批都不再出卡。
+    Exhausted,
+}
+
 /// 可变卡片源：内存内追加，供 `keyword_cards_snapshot` 只读投影。
 ///
 /// 由 Tauri managed state 持有（`Arc<CardStore>`），不再使用进程级静态单例。
@@ -46,6 +71,8 @@ pub struct CardStore {
     jieba: Jieba,
     tfidf: TfIdf,
     privacy: PrivacyMode,
+    /// 自动出卡的冷却与分钟额度；手动出卡不查这里。
+    auto: Mutex<AutoEmitState>,
 }
 
 impl CardStore {
@@ -61,10 +88,21 @@ impl CardStore {
             jieba: Jieba::new(),
             tfidf: TfIdf::new(None::<&mut &[u8]>, KeywordExtractConfig::default()),
             privacy,
+            auto: Mutex::new(AutoEmitState::default()),
         }
     }
 
+    /// 自动路径（ASR 稳定句、UIA 字幕）：受同词冷却与分钟额度约束。
     pub fn ingest(&self, text: &str) -> Result<usize, IpcErrorDto> {
+        self.ingest_inner(text, true)
+    }
+
+    /// 手动路径（用户粘贴文本后点"生成卡片"）：不受限流，点了就出。
+    pub fn ingest_manual(&self, text: &str) -> Result<usize, IpcErrorDto> {
+        self.ingest_inner(text, false)
+    }
+
+    fn ingest_inner(&self, text: &str, limited: bool) -> Result<usize, IpcErrorDto> {
         let keywords = self.extract_keywords(text);
         if keywords.is_empty() {
             return Err(IpcErrorDto::new(
@@ -91,7 +129,15 @@ impl CardStore {
             .lock()
             .map_err(|_| IpcErrorDto::new("card_store_unavailable", "卡片存储不可用。", true))?;
         let mut added = 0usize;
+        let mut emitted: Vec<String> = Vec::new();
         for keyword in keywords.into_iter().take(MAX_KEYWORDS_PER_TEXT) {
+            if limited {
+                match self.check_auto(&keyword, now)? {
+                    Budget::Exhausted => break,
+                    Budget::Skip => continue,
+                    Budget::Allow => {}
+                }
+            }
             if store.len() >= MAX_CARDS {
                 store.remove(0);
             }
@@ -100,11 +146,50 @@ impl CardStore {
                 Some(draft) => {
                     store.push(CardSnapshotEntry::Draft(draft));
                     added += 1;
+                    if limited {
+                        emitted.push(keyword.clone());
+                    }
                 }
                 None => continue,
             }
         }
+        drop(store);
+        // 只给真正出过卡的词记冷却，避免"被门控拦掉的词也算用掉额度"。
+        for term in emitted {
+            self.record_auto(&term, now);
+        }
         Ok(added)
+    }
+
+    /// 自动路径的额度判定：先清过期窗口，再看分钟上限，最后看同词冷却。
+    fn check_auto(&self, term: &str, now: u64) -> Result<Budget, IpcErrorDto> {
+        let mut auto = self
+            .auto
+            .lock()
+            .map_err(|_| IpcErrorDto::new("card_store_unavailable", "卡片存储不可用。", true))?;
+        auto.window
+            .retain(|at| now.saturating_sub(*at) < AUTO_WINDOW_MS);
+        if auto.window.len() >= AUTO_CARDS_PER_MINUTE {
+            return Ok(Budget::Exhausted);
+        }
+        if let Some(last) = auto.last_by_term.get(term) {
+            if now.saturating_sub(*last) < AUTO_COOLDOWN_MS {
+                return Ok(Budget::Skip);
+            }
+        }
+        Ok(Budget::Allow)
+    }
+
+    fn record_auto(&self, term: &str, now: u64) {
+        let Ok(mut auto) = self.auto.lock() else {
+            return;
+        };
+        auto.window.push_back(now);
+        if auto.last_by_term.len() >= AUTO_TERM_MEMORY {
+            auto.last_by_term
+                .retain(|_, at| now.saturating_sub(*at) < AUTO_COOLDOWN_MS);
+        }
+        auto.last_by_term.insert(term.to_owned(), now);
     }
 
     /// 用"选中的词 + 模型释义"直接生成一张卡片，供"查意思 → 生成卡片"使用。
@@ -294,7 +379,7 @@ pub fn ingest_text(
     if text.trim().is_empty() {
         return Err(IpcErrorDto::new("empty_text", "文本为空。", false));
     }
-    state.ingest(&text)
+    state.ingest_manual(&text)
 }
 
 /// 清空当前会话的全部卡片，返回被清掉的数量。
@@ -396,6 +481,68 @@ mod tests {
         assert!(store.cards().is_empty());
         // 再清一次应为 0：清空是幂等的，不需要界面额外判重。
         assert_eq!(store.clear().expect("clear"), 0);
+    }
+
+    /// 自动路径同词冷却：同一句连说两遍，第二遍不再刷同一批卡片。
+    #[test]
+    fn auto_ingest_cools_down_repeated_terms() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        assert!(store.ingest("灰度发布 两地三中心 容量评估").expect("first") >= 1);
+        assert_eq!(
+            store
+                .ingest("灰度发布 两地三中心 容量评估")
+                .expect("second"),
+            0,
+            "同词冷却期内不应重复出卡"
+        );
+    }
+
+    /// 手动入口不受限流：用户点了「生成卡片」就该出。
+    #[test]
+    fn manual_ingest_bypasses_throttle() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        assert!(
+            store
+                .ingest_manual("灰度发布 两地三中心 容量评估")
+                .expect("first")
+                >= 1
+        );
+        assert!(
+            store
+                .ingest_manual("灰度发布 两地三中心 容量评估")
+                .expect("second")
+                >= 1,
+            "手动入口不应被冷却拦掉"
+        );
+    }
+
+    /// 每分钟额度：连续自动 ingest 也不能无上限地刷卡片。
+    #[test]
+    fn auto_ingest_stops_at_per_minute_cap() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        let texts = [
+            "灰度发布",
+            "两地三中心",
+            "容量评估",
+            "链路压测",
+            "回滚预案",
+            "数据迁移",
+            "风控规则",
+            "结算对账",
+            "指标口径",
+            "巡检脚本",
+            "备份恢复",
+            "灰度回滚",
+        ];
+        let total: usize = texts
+            .iter()
+            .map(|text| store.ingest(text).expect("ingest"))
+            .sum();
+        assert!(total >= 1, "至少应出一张");
+        assert!(
+            total <= AUTO_CARDS_PER_MINUTE,
+            "超出分钟额度：{total} > {AUTO_CARDS_PER_MINUTE}"
+        );
     }
 
     /// 投屏时 G1 硬闸门直接拒绝（`prefilter.rs:76`），本地入口不出卡。

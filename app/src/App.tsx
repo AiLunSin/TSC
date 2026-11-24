@@ -470,7 +470,7 @@ export default function App() {
                     void toggleAutoCards();
                   }}
                 />
-                <span>转写时自动出卡（默认关；开会中建议保持关闭，只留转写文字）</span>
+                <span>转写时自动出卡（默认关；开启后同一词 90 秒内不重复，每分钟最多 8 张）</span>
               </label>
             </div>
             <div className="settings-section transcript-section">

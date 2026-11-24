@@ -1786,5 +1786,34 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 未验证：
 
-- 真机上开启自动出卡后的卡片密度是否仍偏高（限流策略未做，先以默认关闭规避）。
+- 真机上开启自动出卡后的卡片密度是否仍偏高——**已由 §41 补限流**（同词 90s 冷却 + 每分钟 8 张），仍需真机确认手感。
 
+
+## §41 释义分句、跨句选中定位与自动出卡限流（2026-11-24）
+
+§40 之后的三个遗留问题一并处理，均属"用户点得到但体验不对"的层面。
+
+| # | 问题 | 修法 |
+|---|---|---|
+| 1 | 释义只按"查词"处理：选中整段话时仍要求逐点解释，且 120 字装不下 | 按"多句/整段"分支：≥24 字且 ≥2 句走概括 prompt（≤180 字、概括 + 最多两个关键信息 + 术语半句解释），否则走术语 prompt（≤120 字）；`max_tokens` 320/420 分档；请求体显式标 `选中（多句）` |
+| 2 | 跨多句选中拿不到上下文：`context_around` 用整段 `contains`，跨行必然失配，本地回退还会显示"出现 0 次" | `transcript.rs` 增加三段式匹配键：整段 → 单句（长句优先）→ 连续词块（最长 8 个 token 的滑窗，长块优先）；上下文与出现次数共用同一匹配口径 |
+| 3 | 开启自动出卡后仍会刷屏：每个稳定句都可能带 1~8 张 | 自动路径加限流：同词 90 秒冷却 + 每分钟 8 张上限；**手动路径（粘贴文本、释义出卡）不受限**；只给真正出过卡的词记冷却，被门控拦掉的词不占额度 |
+
+实现要点：
+
+- 新增 `CardStore::ingest_manual`（不限流），`ingest_text` 命令改走它；`ingest` 保留为自动路径。
+- `AutoEmitState { last_by_term, window }`：窗口先清 60 秒外的记录再看额度，冷却表超 512 条时清理过期项，长会不会无限增长。
+- 判断顺序：分钟额度（`Exhausted` → 整批 break）→ 同词冷却（`Skip` → 跳过这张）→ 出卡；出卡成功后才 `record_auto`。
+- `local_fallback` 改用 `TranscriptLog::hits`，与 `context_for` 同口径，杜绝"有上下文却说 0 次"。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**70 passed / 0 failed**（新增 10 例：跨句定位、命中口径一致、中英文断句、释义多句分支、请求体标记、同词冷却、手动不受限、分钟额度）。
+- `clippy --all-targets --features llm-https -- -D warnings`、`rustfmt --check`、B4 零转录、分层、UI 集成、G2 宣称、`check-bindings`（13 个 DTO）、`scan-secrets-docs` 全部 rc=0。
+- `tsc --noEmit`、`eslint .`、`npm run build` 通过。
+- 构建产物：`target/debug/meeting-copilot-desktop.exe`（`--features llm-https`，16:41，21.0 MB）。
+
+未验证：
+
+- 真实 Key 下多句释义的实际质量（需真机配 Key 后手测；prompt 里已明确"不逐句翻译、不复述原文"）。
+- 冷却/额度参数（90s、8 张/分）的实际手感：目前是保守取值，可按真实会议密度再调。

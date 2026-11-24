@@ -13,6 +13,7 @@
 - **本轮闭环（2026-11-23）**：§8.1 基线实测 **877 passed / 0 failed / 10 ignored**；§8.2 真实 LLM 采样 9/9、`leak_hits=0`；§8.3 设置页第 1~6、9、10 项真机通过；界面已撤除硬编码演示数据；平台层补齐 `meeting`（进程名 + 窗口标题）与 `wasapi`（环回 `AudioSource`）；核心链路 **系统音频 → vosk 流式 → jieba 关键词 → 可点击卡片**（`start_asr`/`stop_asr`/`asr_status`），并保留手动文本入口 `ingest_text`；CI 修复 macOS 缺失 `wasapi`（非 Windows 占位）与 cookie RUSTSEC（0.18.3），run 45152256989 8/8。
 - **本轮闭环（2026-11-24）**：平台层新增 UIA 字幕与 OCR 兜底（提交 `9c6ca08`）；`meeting` 改为窗口驱动（`OpenProcess` + `QueryFullProcessImageNameW`），修复 Toolhelp 快照漏掉 64 位主进程；OCR 默认关闭（`OCR_FALLBACK=1` 开启），ASR 仍为主链路；新增开发期隐私注入入口 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（`app/src-tauri/src/privacy.rs`，默认关、只认 `"1"`、不加 IPC 命令），为设置页第 8 项备好取证手段；用一次性临时凭据跑通 `llm_live` 9 例与 120 样本基线（`b4-status.md §34`）；全量基线 **1000 passed / 0 failed / 12 ignored**，改动包 47（desktop）+ 27（platform-win，串行）通过，clippy/fmt 与四条门禁 rc=0。真实会议字幕文本未取得，U-05/U-08 保持 open。
 - **本轮闭环（2026-11-24 续）**：把实时转写从"启动了却一直没文本"修到可用四步：① 脚本主动收句（partial 稳定 0.8s / 单句 4s）且 Rust 侧接收 partial（`6d5c2a2`）；② 会议命中即驱动字幕通道、识别异常不再静默（`46e0d6d`）；③ UIA 抽取加三层过滤，控件树不再冒充字幕，字幕文本与 ASR 文本分开存放（`a45adb2`）；④ 0 片显式报"未采到系统声音"、子进程 stderr 落 `asr.log`（`42abbf5`）；⑤ 完整转写 + 选中查义 + 释义出卡（`9d4c40f`）；⑥ 自动出卡默认关闭、界面加开关与"清空"（`3596a37`）；IPC 17→19 命令（`set_auto_cards`、`clear_cards`）。真机已确认：转写逐句出文本、选中可查义、卡片不再自动刷屏。桌面层单测 **60 passed**；clippy/fmt、B4 零转录、分层、UI 集成、G2 宣称、`check-bindings`(13 DTO)、tsc/eslint/vite build 全绿。CI：run #80（`46e0d6d`）success，run #81（`3596a37`）**success（3m29s，8 job）**。
+- **本轮闭环（2026-11-24 收尾）**：① 释义按"多句/整段"分支（≥24 字且 ≥2 句走概括：≤180 字、概括 + 最多两个关键信息 + 术语半句解释；否则术语模式 ≤120 字）；② 跨句选中上下文改为"整段 → 最长句 → 最长连续词块"三级匹配，出现次数与上下文同口径；③ 自动出卡限流（同词 90 秒冷却 + 每分钟 8 张，手动路径不受限）；④ U-05 第 7/8 项取证改为**不依赖真实会议**并附判定表（§8.3）。desktop bins **70 passed**；clippy/fmt/四门禁/`check-bindings`/tsc/eslint/vite build 全绿；构建 16:41。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；P2 已完成（2026-11-23）；P3 规格与实现已完成（2026-11-23，U-07-43 真实样本仍 open）；P4 治理已完成（2026-11-23，见 §8.6）；P5 检索源接入 A~F 已实现并推送（2026-11-24，`f3d66a4`），H-34-G 手工入口已就绪，待真实端点。
 - **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；当时保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据（`target/` 后于 Q-01 清理）。
@@ -22,7 +23,7 @@
 
 | 编号 | 事项 | 当前状态 | 缺口 | 关闭条件 | 所需输入 |
 |---|---|---|---|---|---|
-| U-05 | 设置向导 + 卡片前端产品化接入 | 部分取证：第 1~6、9、10 项真机通过；第 7 卡片渲染与第 8 投屏遮蔽未判定（2026-11-23，见 `b4-status.md §32`）；**第 8 项开发期注入入口已于 2026-11-24 就绪**（`app/src-tauri/src/privacy.rs`，见 §8.3） | 卡片渲染与投屏/紧急遮蔽的真机结论 | 有可复现的联网与真机记录 | 投屏 / 会议样本 |
+| U-05 | 设置向导 + 卡片前端产品化接入 | 部分取证：第 1~6、9、10 项真机通过；第 7 卡片渲染与第 8 投屏遮蔽未判定（2026-11-23，见 `b4-status.md §32`）；**第 8 项开发期注入入口已于 2026-11-24 就绪**（`app/src-tauri/src/privacy.rs`，见 §8.3）；**第 7/8 项取证步骤已改为不依赖真实会议**（2026-11-24，手动文本出卡 + 环境变量启动 exe，含判定表） | 卡片渲染与投屏/紧急遮蔽的真机结论 | 有可复现的联网与真机记录 | 投屏 / 会议样本 |
 | U-07-41.5 | 负反馈加权 | **已实现并提交（`c96f381`）**：事件/权重表、加权与硬抑制、三维统计、门禁扫描面 | 无（真实使用数据由后续会议累积） | 已满足 | — |
 | U-07-42 | 缓存 / outbox | **已实现并提交（`c96f381`）**：TTL/LRU、重启恢复、3 次退避、500 上限 | “≤3 秒识别断网、30 秒补齐率 ≥98%”需真实断网取证 | 真实断网演练记录 | 断网环境 |
 | U-07-43 | 按需补全实体 | **机制已实现并提交（`c96f381`）**；G-43-D 五类异常已覆盖；真实样本 0/200 | 阻塞项 U-09 的 A~F 已实现，待真实端点 H-34-G 验收后启动采样 | U-09 真实端点验收 + 用户配置真实源 + 样本达标 | 检索源、性能样本 |
@@ -86,7 +87,7 @@
 | X-AUD-13 | 非 Windows 平台占位 | macOS CI 因桌面壳无条件引用 Windows-only `wasapi` 而失败（E0432/E0433） | **已修复**：新增 `wasapi_stub.rs`（同接口、`open` 返回不支持），run 45152256989 两个 darwin 任务 success |
 | X-AUD-14 | 本地门禁口径滞后（UI） | `check-ui-integration --rule=settings-ux` 仍匹配 `disabled={!snapshot.canTest/canSave}`，实际页面已改为可计算的 `canTestNow`/`canSaveNow` | **已修复（2026-11-23）**：门禁改用正则，兼容 `snapshot.*` 与可计算变量两种写法 |
 | X-AUD-15 | 装配层全局态（B4 source） | **已修复（2026-11-23）**：`AsrPipeline`/`CardStore` 改为 Tauri managed State（`Arc`），移除 `OnceLock`；门禁豁免同步删除 | 已关闭；`b4-source` 对其他禁用面仍生效 |
-| X-AUD-16 | 开发期隐私注入入口 | 为关闭 U-05 第 8 项，新增 `app/src-tauri/src/privacy.rs`，读 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（只认 `"1"`，默认关）。读取点放在 `src/` 根而非 `ipc/`，避免命中装配层"禁环境变量"规则（`check-b4-gates --rule=source` 已复核 rc=0）；IPC 命令面仍为 14 | **已登记**：属开发期验收开关，不投影给前端、不落库；真机结论出来后可移除以消除入口 |
+| X-AUD-16 | 开发期隐私注入入口 | 为关闭 U-05 第 8 项，新增 `app/src-tauri/src/privacy.rs`，读 `PRIVACY_SCREEN_SHARE` / `PRIVACY_EMERGENCY_MASKED`（只认 `"1"`，默认关）。读取点放在 `src/` 根而非 `ipc/`，避免命中装配层"禁环境变量"规则（`check-b4-gates --rule=source` 已复核 rc=0）；注入未改变当时命令面（14，现为 19，均与此开关无关） | **已登记**：属开发期验收开关，不投影给前端、不落库；真机结论出来后可移除以消除入口 |
 
 ## 5. 工程环境阻塞（非代码问题）
 
@@ -246,37 +247,67 @@ cargo run -p meeting-copilot-desktop --features llm-https
 
 **第 7 项：卡片渲染（真机，手把手）**
 
+> 2026-11-24 更新：自动出卡已默认关闭，**取证不再需要真实会议**。两条路径任选，路径 A 最快（约 1 分钟）。
+
 1. 重新构建（避免嵌入旧 `dist`）：
 
 ```powershell
 cd "<仓库根>"
 cargo clean -p meeting-copilot-desktop
-cargo build -p meeting-copilot-desktop
+cargo build -p meeting-copilot-desktop --features llm-https
 ```
 
-2. 双击 `target\debug\meeting-copilot-desktop.exe`（不要用 agent 启动）。
-3. 点"开始"，进入一个真实会议；等第一张卡片出现。
-4. 逐项看并记录：
+2. 双击 `target\debug\meeting-copilot-desktop.exe`（不要用 agent 启动，agent 进程无法创建 WebView2 窗口）。
+
+3. **路径 A（手动出卡，推荐）**：卡片区下方"会议文本"输入框粘贴
+   `我们确认 SLA 99.9%，灰度范围限定华东两站点，回滚预案下周三前给。`
+   → 点"生成卡片"。预期：卡片列表出现若干张，每张有标题与结论摘要。
+4. **路径 B（转写 + 选中查义）**：点"开始实时转写"，让系统播一段中文语音（或放一段会议录音）；转写区逐句出现文字 → 鼠标选中一个词 → "查意思" → 解释面板出结果 → "生成卡片"。预期：卡片标题就是选中的词。
+5. 逐项看并记录：
    - 卡片正文可见；点击可展开详情；不抢焦点；
+   - 卡片区标题右侧显示"共 N 张"，点"清空"后列表变空且计数归零；
    - 禁用卡（`clickState=disabled`）不可点，并显示原因文案（"引用已过期/授权已撤回/当前卡片不可点击/紧急遮蔽中/投屏保护中/引用未经核实"）。
-5. 记录：日期、会议类型、卡片编号、每项通过/失败、截图路径（截图只留本机）。
+6. 记录：日期、路径（A/B）、卡片标题、每项通过/失败、截图路径（截图只留本机，参照本节第 4 条）。
+
+判定表（填完即可在 `b4-status.md` 追加结论）：
+
+| 检查点 | 预期 | 实测 | 结论 |
+|---|---|---|---|
+| 卡片正文与结论 | 可见、非空 |  |  |
+| 点击展开详情 | 展开、不抢焦点 |  |  |
+| 数量与清空 | "共 N 张"，清空后为空 |  |  |
+| 禁用卡不可点 | 点击无响应 + 原因文案 |  |  |
 
 **第 8 项：投屏/紧急遮蔽（开发期注入入口已就绪，真机结论待补）**
 
 - 代码事实：`crates/application/src/gate/prefilter.rs:76` 在 `screen_share` 且策略 `screen_share_protection_default` 为真时按 G1 `ScreenShareProtection` 拒绝；`crates/application/src/gate/keyword.rs:233` 为 `body_visible = !env.screen_share && !env.emergency_masked`，同文件 `:186` 对紧急遮蔽给出 `ClickState::Disabled(EmergencyMasked)`；`app/src/cards/KeywordCard.tsx:33` 在 `bodyVisible=false` 时只渲染"有 N 条"角标。
-- 注入入口（2026-11-24 就绪）：`app/src-tauri/src/privacy.rs` 读两个开发期开关，**只认严格的 `"1"`**，默认关闭；不落库、不进日志、不投影给前端，IPC 命令面仍为 14。
+- 注入入口（2026-11-24 就绪）：`app/src-tauri/src/privacy.rs` 读两个开发期开关，**只认严格的 `"1"`**，默认关闭；不落库、不进日志、不投影给前端；注入开关本身不新增 IPC 命令（当前命令面 19 个）。
 - 两种状态的实际表现**并不相同**（由单测固定，见下）：
   - `PRIVACY_SCREEN_SHARE=1` → G1 直接拒绝，本地入口**不出卡**（比"隐藏正文"更严格）；
   - `PRIVACY_EMERGENCY_MASKED=1` → 照常出卡，但 `click_state=Disabled(EmergencyMasked)`、正文隐藏。
-- 真机操作（PowerShell，两选一）：
+- 真机操作（PowerShell，两选一）。**先设环境变量再启动已构建的 exe**，不要用 `cargo run`（会重编且可能不带 `llm-https`）：
 
 ```powershell
-$env:PRIVACY_SCREEN_SHARE = "1"      # 投屏态
-# 或 $env:PRIVACY_EMERGENCY_MASKED = "1"
-cargo run -p meeting-copilot-desktop
+cd "<仓库根>"
+$env:PRIVACY_SCREEN_SHARE = "1"                    # 投屏态
+# 或 $env:PRIVACY_EMERGENCY_MASKED = "1"          # 紧急遮蔽态
+& ".\target\debug\meeting-copilot-desktop.exe"
 ```
 
-  触发一次出卡后确认：投屏态无新卡片；紧急态有卡片但不可点、正文隐藏、只留条数角标。
+  用第 7 项的**路径 A**触发一次出卡（粘贴文本 → 生成卡片），然后：
+
+  - 投屏态：确认**没有新卡片**，界面提示"这条内容未通过卡片生成条件"；
+  - 紧急态：确认**有卡片但正文隐藏**（只留"有 N 条"角标），点卡片无响应。
+
+判定表：
+
+| 状态 | 启动变量 | 预期 | 实测 | 结论 |
+|---|---|---|---|---|
+| 投屏 | `PRIVACY_SCREEN_SHARE=1` | 0 张新卡 + 拒绝提示 |  |  |
+| 紧急遮蔽 | `PRIVACY_EMERGENCY_MASKED=1` | 有卡、正文隐藏、角标 N 条 |  |  |
+| 紧急遮蔽 | 同上 | 点击无响应、无详情面板 |  |  |
+
+- 两个变量都是**进程启动时读取**，改完必须重启应用；取证完关掉终端即失效，不写配置、不落库。
 
 - 已有覆盖：契约层 `cargo test -p meeting-copilot-application --test gate_keyword`（断言 `!admission.body_visible`）；桌面层 `cargo test -p meeting-copilot-desktop --bins ipc::card_store`（`screen_share_blocks_card_creation_at_g1`、`emergency_mask_keeps_card_but_disables_click`）。
 - 关闭口径不变：第 8 项要有真机截图与结论才可标 `closed`；本轮只补入口与单测，**不宣称"遮蔽已真机可用"**。

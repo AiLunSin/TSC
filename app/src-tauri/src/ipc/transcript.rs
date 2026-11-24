@@ -57,10 +57,18 @@ impl TranscriptLog {
 
     /// 选中文字在全文里的上下文：前一句 + 后一句，供释义时判断语境。
     pub fn context_around(&self, needle: &str) -> String {
+        self.context_for(needle)
+    }
+
+    /// 选中文字（可能跨多句）的上下文。
+    ///
+    /// 前端把选区里的换行压成了空格，跨句选区是一整串；整段匹配不到时必须退化成
+    /// "按最长的一句 / 最长的连续词块找位置"，否则跨句选中永远拿不到上下文。
+    pub fn context_for(&self, selection: &str) -> String {
         let Ok(lines) = self.lines.lock() else {
             return String::new();
         };
-        let Some(position) = lines.iter().position(|line| line.text.contains(needle)) else {
+        let Some(position) = locate(&lines, selection) else {
             return String::new();
         };
         let start = position.saturating_sub(1);
@@ -71,6 +79,73 @@ impl TranscriptLog {
             .collect::<Vec<_>>()
             .join(" ")
     }
+
+    /// 选中文字在转写里出现的行数：与 `context_for` 用同一匹配口径，
+    /// 避免"上下文有、计数为 0"这种自相矛盾的回退文案。
+    pub fn hits(&self, selection: &str) -> usize {
+        let Ok(lines) = self.lines.lock() else {
+            return 0;
+        };
+        let Some(key) = match_key(&lines, selection) else {
+            return 0;
+        };
+        lines
+            .iter()
+            .filter(|line| line.text.contains(key.as_str()))
+            .count()
+    }
+}
+
+fn locate(lines: &[TranscriptLineDto], selection: &str) -> Option<usize> {
+    let key = match_key(lines, selection)?;
+    lines
+        .iter()
+        .position(|line| line.text.contains(key.as_str()))
+}
+
+/// 匹配键：整段 → 单句（长句优先）→ 连续词块（长块优先）。
+///
+/// ASR 的稳定句带空格（"灰度 范围 限定"），跨行选中时既匹配不到整段，
+/// 也可能没有句读可切，只能靠词块窗口兜底。
+fn match_key(lines: &[TranscriptLineDto], selection: &str) -> Option<String> {
+    let whole = selection.trim();
+    if whole.is_empty() {
+        return None;
+    }
+    if lines.iter().any(|line| line.text.contains(whole)) {
+        return Some(whole.to_owned());
+    }
+    let mut sentences = split_sentences(whole);
+    sentences.sort_by_key(|sentence| std::cmp::Reverse(sentence.chars().count()));
+    if let Some(hit) = sentences
+        .into_iter()
+        .find(|sentence| sentence.chars().count() >= 2 && contains_any(lines, sentence))
+    {
+        return Some(hit.to_owned());
+    }
+    let tokens: Vec<&str> = whole.split_whitespace().collect();
+    let widest = tokens.len().min(8);
+    for width in (2..=widest).rev() {
+        for chunk in tokens.windows(width) {
+            let key = chunk.join(" ");
+            if contains_any(lines, &key) {
+                return Some(key);
+            }
+        }
+    }
+    None
+}
+
+fn contains_any(lines: &[TranscriptLineDto], needle: &str) -> bool {
+    lines.iter().any(|line| line.text.contains(needle))
+}
+
+/// 按中英文句读切分选中文字；片段已去空白，空片段丢弃。
+pub fn split_sentences(text: &str) -> Vec<&str> {
+    text.split(['。', '！', '？', '；', '!', '?', ';', '\n'])
+        .map(str::trim)
+        .filter(|sentence| !sentence.is_empty())
+        .collect()
 }
 
 fn now_ms() -> i64 {
@@ -123,5 +198,35 @@ mod tests {
         assert!(context.contains("前面一句"), "{context}");
         assert!(context.contains("灰度发布"), "{context}");
         assert!(context.contains("后面一句"), "{context}");
+    }
+
+    /// 跨行选中（前端把换行压成空格）必须仍能定位到位置。
+    #[test]
+    fn context_survives_cross_line_selection() {
+        let log = TranscriptLog::new();
+        log.push("第一行 灰度 范围 限定 华中");
+        log.push("第二行 我们 先 看 数据");
+        log.push("第三行 结论 是 通过");
+        let context = log.context_for("灰度 范围 限定 华中 我们 先 看 数据");
+        assert!(context.contains("灰度"), "{context}");
+        assert!(context.contains("第二行"), "{context}");
+    }
+
+    /// 跨行选中的出现次数与上下文同口径，不能出现"有上下文却显示 0 次"。
+    #[test]
+    fn hits_matches_the_same_key_as_context() {
+        let log = TranscriptLog::new();
+        log.push("灰度 范围 限定 华中");
+        log.push("其他内容");
+        log.push("灰度 范围 限定 华东");
+        assert_eq!(log.hits("灰度 范围 限定 华中 我们 再 看"), 1);
+        assert_eq!(log.hits("整段里没有的句子"), 0);
+    }
+
+    #[test]
+    fn splits_chinese_and_ascii_sentences() {
+        let parts = split_sentences("第一句。第二句！第三句? 第四句;");
+        assert_eq!(parts, vec!["第一句", "第二句", "第三句", "第四句"]);
+        assert!(split_sentences("   ").is_empty());
     }
 }

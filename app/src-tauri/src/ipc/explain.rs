@@ -19,11 +19,23 @@ const MAX_CONTEXT: usize = 600;
 /// 请求超时：短于探针，避免用户等太久。
 #[cfg(feature = "llm-https")]
 const TIMEOUT_MS: u64 = 20_000;
+/// 多句/整段的判定门槛：太短的"好的。收到。"仍按术语处理。
+const PASSAGE_MIN_CHARS: usize = 24;
+const PASSAGE_MIN_SENTENCES: usize = 2;
+const MAX_TOKENS_TERM: u16 = 320;
+const MAX_TOKENS_PASSAGE: u16 = 420;
 
-const SYSTEM_PROMPT: &str = "你是会议实时助手。用户会给你一段在会议转写中选中的文字，\
-以及它前后的上下文。请用简体中文回答，总长不超过 120 字，不要用 Markdown：\
-（1）先说明它在这里的意思；（2）若是专业术语或缩写，补充它通常指什么；\
-（3）若与上下文相关，指出它在当前讨论中的作用。不要编造事实，不确定就直说不确定。";
+/// 术语/短语：先给在此处的意思，再补通用含义。
+const SYSTEM_PROMPT_TERM: &str = "你是会议实时助手。用户会给你一段在会议转写里选中的词或短语，\
+以及它前后的上下文。用简体中文回答，总长不超过 120 字，纯文本、不要 Markdown、不要罗列项目符号：\
+先用一句话说明它在这里指什么；若是专业术语、缩写或产品名，补充它通常的含义（确定的英文全称可以给出）；\
+若上下文能看出它在讨论里的作用，用半句话点出来。不要复述原文，不要编造数字或结论，不确定就直说。";
+
+/// 多句/整段：概括 + 关键信息，不逐句翻译。
+const SYSTEM_PROMPT_PASSAGE: &str = "你是会议实时助手。用户选中的是多句或整段会议转写，\
+可能带识别错字与口语重复。用简体中文回答，总长不超过 180 字，纯文本、不要 Markdown、不要罗列项目符号：\
+先用一句话概括这段在讲什么；再点出最多两个关键信息（数字、结论、待办、争议点）；\
+若出现术语或缩写，顺带用半句话解释。不要逐句翻译或逐词解释，不要复述原文，不确定就直说。";
 
 /// 释义入口：校验 → 取凭据 → 出网或本地回退。
 pub fn explain_impl(
@@ -63,12 +75,14 @@ pub fn explain_impl(
     };
     let model = current_model(state)?;
 
-    let user = if context.is_empty() {
-        format!("选中：{text}")
+    let system = system_prompt_for(text);
+    let max_tokens = if is_passage(text) {
+        MAX_TOKENS_PASSAGE
     } else {
-        format!("选中：{text}\n上下文：{context}")
+        MAX_TOKENS_TERM
     };
-    match call_llm(&secret, &model, SYSTEM_PROMPT, &user) {
+    let user = build_user_message(text, &context);
+    match call_llm(&secret, &model, system, &user, max_tokens) {
         Ok(explanation) => Ok(ExplainResultDto {
             text: text.to_owned(),
             explanation,
@@ -109,10 +123,37 @@ fn current_model(state: &AppState) -> Result<String, IpcErrorDto> {
         .ok_or_else(|| IpcErrorDto::new("model_missing", "未配置可用的模型。", false))
 }
 
+/// 是否是"多句/整段"：句数够且总长够，避免把"好的。收到。"当整段处理。
+fn is_passage(text: &str) -> bool {
+    text.chars().count() >= PASSAGE_MIN_CHARS
+        && crate::ipc::transcript::split_sentences(text).len() >= PASSAGE_MIN_SENTENCES
+}
+
+fn system_prompt_for(text: &str) -> &'static str {
+    if is_passage(text) {
+        SYSTEM_PROMPT_PASSAGE
+    } else {
+        SYSTEM_PROMPT_TERM
+    }
+}
+
+/// 请求体里显式标出"多句"，让模型知道该概括而不是逐词解释。
+fn build_user_message(text: &str, context: &str) -> String {
+    let label = if is_passage(text) {
+        "选中（多句）"
+    } else {
+        "选中"
+    };
+    if context.is_empty() {
+        format!("{label}：{text}")
+    } else {
+        format!("{label}：{text}\n上下文：{context}")
+    }
+}
+
 fn local_fallback(transcripts: &TranscriptLog, text: &str, note: &str) -> ExplainResultDto {
-    let lines = transcripts.snapshot();
-    let hits = lines.iter().filter(|line| line.text.contains(text)).count();
-    let context = transcripts.context_around(text);
+    let hits = transcripts.hits(text);
+    let context = transcripts.context_for(text);
     let explanation = if hits == 0 {
         format!("{note}本次转写里还没有出现这段文字。")
     } else if context.is_empty() {
@@ -128,7 +169,13 @@ fn local_fallback(transcripts: &TranscriptLog, text: &str, note: &str) -> Explai
 }
 
 #[cfg(feature = "llm-https")]
-fn call_llm(secret: &str, model: &str, system: &str, user: &str) -> Result<String, IpcErrorDto> {
+fn call_llm(
+    secret: &str,
+    model: &str,
+    system: &str,
+    user: &str,
+    max_tokens: u16,
+) -> Result<String, IpcErrorDto> {
     use std::time::{Duration, Instant};
 
     use meeting_copilot_domain::port::llm::CancelToken;
@@ -149,7 +196,7 @@ fn call_llm(secret: &str, model: &str, system: &str, user: &str) -> Result<Strin
             {"role": "user", "content": user},
         ],
         "thinking": {"type": "disabled"},
-        "max_tokens": 320,
+        "max_tokens": max_tokens,
         "temperature": 0.3,
     }))
     .map_err(|_| IpcErrorDto::new("llm_bad_request", "请求构造失败。", false))?;
@@ -218,6 +265,7 @@ fn call_llm(
     _model: &str,
     _system: &str,
     _user: &str,
+    _max_tokens: u16,
 ) -> Result<String, IpcErrorDto> {
     // 标记为可回退：交给 local_fallback 给出本机上下文，而不是直接报错。
     Err(IpcErrorDto::new(
@@ -244,4 +292,35 @@ pub fn ingest_explanation(
     input: IngestExplanationInputDto,
 ) -> Result<usize, IpcErrorDto> {
     state.ingest_explanation(&input.word, &input.explanation)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_exchange_stays_term_mode() {
+        assert!(!is_passage("好的。收到。"));
+        assert_eq!(system_prompt_for("好的。收到。"), SYSTEM_PROMPT_TERM);
+    }
+
+    #[test]
+    fn long_multi_sentence_selection_uses_passage_prompt() {
+        let text = "我们这次灰度范围限定在华中两个站点。先看 SLA 指标，再决定要不要扩到华东。";
+        assert!(is_passage(text));
+        assert_eq!(system_prompt_for(text), SYSTEM_PROMPT_PASSAGE);
+        assert!(build_user_message(text, "前一句 后一句").contains("选中（多句）"));
+    }
+
+    #[test]
+    fn term_message_carries_context() {
+        let message = build_user_message("灰度", "前面一句 后面一句");
+        assert!(message.starts_with("选中：灰度"), "{message}");
+        assert!(message.contains("上下文：前面一句 后面一句"), "{message}");
+    }
+
+    #[test]
+    fn empty_context_omits_context_line() {
+        assert!(!build_user_message("SLA", "").contains("上下文"));
+    }
 }
