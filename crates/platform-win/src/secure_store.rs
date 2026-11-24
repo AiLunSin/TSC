@@ -2,8 +2,11 @@
 
 use meeting_copilot_application::settings::{PortError, SecretBytes, SecureStore};
 
-/// 全仓唯一天然目标名。
+/// 模型服务的凭据目标名。
 pub const CREDENTIAL_TARGET: &str = "meeting-copilot/llm-api-key";
+
+/// 联网检索服务的凭据目标名。与模型 Key 分开存，互不覆盖。
+pub const SEARCH_CREDENTIAL_TARGET: &str = "meeting-copilot/search-api-key";
 
 /// 凭据存储实现；非 Windows 目标统一返回 `Unsupported`。
 pub struct WindowsCredentialStore {
@@ -11,18 +14,23 @@ pub struct WindowsCredentialStore {
 }
 
 impl WindowsCredentialStore {
-    /// 使用唯一目标名构造。
+    /// 使用模型服务的目标名构造。
     pub fn new() -> Self {
-        Self {
-            target: CREDENTIAL_TARGET.to_owned(),
-        }
+        Self::with_target_name(CREDENTIAL_TARGET)
     }
 
-    #[cfg(test)]
-    fn with_target(target: impl Into<String>) -> Self {
+    /// 用指定目标名构造：一个目标名只存一条凭据，不同服务必须用不同目标名。
+    pub fn with_target_name(target: impl Into<String>) -> Self {
         Self {
             target: target.into(),
         }
+    }
+}
+
+#[cfg(test)]
+impl WindowsCredentialStore {
+    fn with_target(target: impl Into<String>) -> Self {
+        Self::with_target_name(target)
     }
 }
 

@@ -40,6 +40,32 @@ export interface ExplainResultDto {
   source: string;
 }
 
+export interface SearchConfigDto {
+  provider: string;
+  hasKey: boolean;
+  auto: boolean;
+  ready: boolean;
+}
+
+export interface SearchHitDto {
+  title: string;
+  site: string;
+  snippet: string;
+  url: string;
+}
+
+export interface SearchResponseDto {
+  provider: string;
+  hits: SearchHitDto[];
+}
+
+export interface AssistResultDto {
+  source: string;
+  points: string[];
+  replies: string[];
+  note: string;
+}
+
 export type ModelChoiceDto =
   | { preset: { displayName: string } }
   | { custom: { name: string } };
@@ -157,6 +183,10 @@ export const IPC_COMMANDS = [
   "transcript_snapshot",
   "explain_selection",
   "ingest_explanation",
+  "search_config",
+  "search_config_save",
+  "web_search",
+  "assist_reply",
 ] as const;
 
 export type IpcCommand = (typeof IPC_COMMANDS)[number];

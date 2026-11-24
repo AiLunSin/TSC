@@ -1,6 +1,16 @@
 {
-  "SessionSummaryDto": ["sessionId", "platform", "state", "startedAtMs", "channel"],
-  "ChannelStatusDto": ["name", "state", "detail"],
+  "SessionSummaryDto": [
+    "sessionId",
+    "platform",
+    "state",
+    "startedAtMs",
+    "channel"
+  ],
+  "ChannelStatusDto": [
+    "name",
+    "state",
+    "detail"
+  ],
   "SuggestionCardDto": [
     "cardId",
     "kind",
@@ -10,9 +20,21 @@
     "sourceLabel",
     "shownAtMs"
   ],
-  "IpcErrorDto": ["code", "message", "retryable"],
-  "TranscriptLineDto": ["index", "text", "atMs"],
-  "ExplainResultDto": ["text", "explanation", "source"],
+  "IpcErrorDto": [
+    "code",
+    "message",
+    "retryable"
+  ],
+  "TranscriptLineDto": [
+    "index",
+    "text",
+    "atMs"
+  ],
+  "ExplainResultDto": [
+    "text",
+    "explanation",
+    "source"
+  ],
   "SettingsSnapshotDto": [
     "formState",
     "hasKey",
@@ -26,9 +48,24 @@
     "advancedCollapsed",
     "probeReport"
   ],
-  "ProbeReportDto": ["succeeded", "failure", "message", "elapsedMs", "remainingMs"],
-  "SettingsSaveReceiptDto": ["persisted", "fallback", "hasKey", "notice"],
-  "SettingsClearReceiptDto": ["cleared", "hasKey", "notice"],
+  "ProbeReportDto": [
+    "succeeded",
+    "failure",
+    "message",
+    "elapsedMs",
+    "remainingMs"
+  ],
+  "SettingsSaveReceiptDto": [
+    "persisted",
+    "fallback",
+    "hasKey",
+    "notice"
+  ],
+  "SettingsClearReceiptDto": [
+    "cleared",
+    "hasKey",
+    "notice"
+  ],
   "KeywordCardViewDto": [
     "cardId",
     "keywordKind",
@@ -41,6 +78,39 @@
     "disabledReason",
     "badgeCount"
   ],
-  "CardBodyDto": ["title", "conclusion", "confidence", "referenceIds"],
-  "CardDetailDto": ["cardId", "title", "conclusion", "referenceIds", "citationAlignment"]
+  "CardBodyDto": [
+    "title",
+    "conclusion",
+    "confidence",
+    "referenceIds"
+  ],
+  "CardDetailDto": [
+    "cardId",
+    "title",
+    "conclusion",
+    "referenceIds",
+    "citationAlignment"
+  ],
+  "SearchConfigDto": [
+    "provider",
+    "hasKey",
+    "auto",
+    "ready"
+  ],
+  "SearchHitDto": [
+    "title",
+    "site",
+    "snippet",
+    "url"
+  ],
+  "SearchResponseDto": [
+    "provider",
+    "hits"
+  ],
+  "AssistResultDto": [
+    "source",
+    "points",
+    "replies",
+    "note"
+  ]
 }

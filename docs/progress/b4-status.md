@@ -1868,3 +1868,47 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 未验证：
 
 - 真实会议里 6s 阈值的手感（连续独白场景）；若仍偏碎，下一步可做"按静音能量自适应"而不是固定秒数。
+
+## §44 联网查证与辅助回复（2026-11-24）
+
+用户问"支不支持自动上网查询（卡片）并增加辅助提醒（大模型辅助回复）"。核对结论：**此前都不支持**——`crates/infrastructure/src/search/` 有通用检索适配器（U-09 A~F，GET + JSON），但从未接进桌面链路，卡片引用一直是 `local-*`（`UserGenerated`）；也没有任何"辅助回复"入口。本轮补上这两块。
+
+### 联网查证
+
+| 项 | 做法 |
+|---|---|
+| 服务 | 只给两家预设：博查 Bocha（`api.bochaai.com/v1/web-search`，中文）、Tavily（`api.tavily.com/search`）。**不接受任意地址**，避免把查询发到不可控主机 |
+| 凭据 | 检索 Key 与模型 Key 分成两个系统凭据目标（`meeting-copilot/llm-api-key` / `meeting-copilot/search-api-key`），互不覆盖；配置落 `search.json`（3 键：版本、服务、自动开关），不含 Key |
+| 触发 | 默认只在用户点"联网查"时查询；可选勾"生成卡片时自动补来源"，只影响用户点"生成卡片"那一下，查不到静默退回本机引用 |
+| 外发内容 | 只发选中的词/短句（≤80 字），8s 超时，取前 5 条；不发整段转写 |
+| 卡片 | 点过联网查再出卡，引用逐条标 `GeneralWeb`，ID 形如 `web-0:example.com`，详情能直接看出出处；来源串全非法时退回 `local-*`，不会出现"标了外部来源却没有引用" |
+| 解析 | 两家响应形状不同（`data.webPages.value` / `results`），一个 `parse_hits` 兼容；缺 `siteName` 时从地址取主机名兜底 |
+
+### 辅助回复
+
+- 新命令 `assist_reply`：**最近 12 句（≤900 字）+ 可选中的一句**交给模型，要求严格 JSON（`points` 2~3 条提醒、`replies` 1~2 条可直接说的话），解析时容忍 ```json 围栏与前后废话。
+- 模型不按格式返回时**不装作成功**：面板显示原文并标注"模型没按格式返回"，而不是给空列表。
+- 未配置 Key 直接提示去设置页，不静默降级成"本机上下文"（辅助回复没有本机替代品）。
+- 回复逐条可复制；剪贴板被拒时提示手动选中，不静默失败。
+
+### 工程改动
+
+- 新增 `ipc/llm.rs`：`read_secret` / `current_model` / `call_llm` 从 `explain.rs` 抽出，释义与辅助回复共用一份请求拼装与错误映射。
+- 新增 `ipc/search.rs`、`ipc/assist.rs`；`ipc/dto.rs` 增 6 个 DTO，`IngestExplanationInputDto` 增 `sources`（`#[serde(default)]`，旧前端不传也兼容）。
+- `CardStore::ingest_explanation_with_sources` + `build_references`；`build_draft` 增 `sources` 参数。
+- `platform-win::secure_store` 增加 `with_target_name`（公开），用于第二个凭据目标。
+- IPC 19 → **23**；`types.ts`、`schema.json`（17 DTO）、`check-bindings` 三处同步。
+- 无特性构建也要能过 clippy：只在 `llm-https` 下用到的常量/函数按 `cfg(any(feature, test))` 门控。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**90 passed / 0 failed**（新增 11 例：两家响应解析、空形状、服务名严格解析、辅助回复 JSON/围栏/截断/拒空、带来源引用、空来源回退）。
+- `cargo test -p meeting-copilot-platform-win`：30 passed / 1 ignored。
+- clippy（含 `--features llm-https` 与默认特性两套）`-D warnings`、rustfmt、B4 零转录、分层、UI 集成六规则、G2 宣称、`check-bindings`(17 DTO)、`scan-secrets`、`scan-secrets-docs` 全绿。
+- `tsc --noEmit`、`eslint .`、`npm run build` 通过；产物 `target/debug/meeting-copilot-desktop.exe`（17:16，`--features llm-https`，22.2 MB）。
+
+未验证：
+
+- 真实检索 Key 下的结果质量、配额与中文召回（需用户自备博查/Tavily Key 后手测）。
+- 辅助回复在真实会议里的可用度：目前上下文只看最近 12 句，跨话题会议可能需要手动选中锚定。
+- 检索结果只展示不打开浏览器（界面里给出地址文本），点开外链未实现。

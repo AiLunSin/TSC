@@ -11,7 +11,9 @@ use std::sync::{Arc, Mutex};
 use meeting_copilot_application::settings::{
     CardSnapshotEntry, CardSnapshotSource, SecureStore, ViewFactsSnapshot, ViewFactsSource,
 };
-use meeting_copilot_platform_win::secure_store::WindowsCredentialStore;
+use meeting_copilot_platform_win::secure_store::{
+    WindowsCredentialStore, SEARCH_CREDENTIAL_TARGET,
+};
 use meeting_copilot_ui_bridge::settings::SettingsFormState;
 use meeting_copilot_ui_bridge::IPC_PROTOCOL_VERSION;
 use tauri::Manager;
@@ -149,6 +151,14 @@ fn main() {
                 Arc::clone(&transcripts),
                 asr_paths,
             )));
+            // 检索凭据与模型凭据分开存：两个目标名互不覆盖。
+            let search_secure: Arc<dyn SecureStore> = Arc::new(
+                WindowsCredentialStore::with_target_name(SEARCH_CREDENTIAL_TARGET),
+            );
+            app.manage(Arc::new(ipc::search::SearchState::new(
+                config_dir.clone(),
+                search_secure,
+            )));
             app.manage(build_state(config_dir, presets, cards.clone()));
             tracing::info!(
                 protocol = IPC_PROTOCOL_VERSION,
@@ -175,7 +185,11 @@ fn main() {
             ipc::keyword_card_open,
             ipc::transcript::transcript_snapshot,
             ipc::explain::explain_selection,
-            ipc::explain::ingest_explanation
+            ipc::explain::ingest_explanation,
+            ipc::search::search_config,
+            ipc::search::search_config_save,
+            ipc::search::web_search,
+            ipc::assist::assist_reply
         ])
         .run(tauri::generate_context!())
         .expect("failed to run meeting-copilot desktop");

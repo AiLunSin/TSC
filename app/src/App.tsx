@@ -2,9 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { invokeCommand } from "./bridge/tauri";
 import type {
+  AssistResultDto,
   CardDetailDto,
   ExplainResultDto,
   KeywordCardViewDto,
+  SearchConfigDto,
+  SearchHitDto,
+  SearchResponseDto,
   TranscriptLineDto,
 } from "./bridge/types";
 import { CardDetail } from "./cards/CardDetail";
@@ -57,6 +61,22 @@ function formatElapsed(totalSeconds: number): string {
     : `${pad(minutes)}:${pad(seconds)}`;
 }
 
+/** 后端把可读原因放在 IpcErrorDto.message 里，优先展示它而不是通用文案。 */
+function errorMessage(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = String(error.message);
+    if (message !== "") {
+      return message;
+    }
+  }
+  return fallback;
+}
+
+const SEARCH_PROVIDER_TEXT: Record<string, string> = {
+  bocha: "博查 Bocha",
+  tavily: "Tavily",
+};
+
 export default function App() {
   const [active, setActive] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -82,6 +102,19 @@ export default function App() {
   const [explainBusy, setExplainBusy] = useState(false);
   const [explainResult, setExplainResult] = useState<ExplainResultDto | null>(null);
   const [explainNotice, setExplainNotice] = useState<string | null>(null);
+  const [searchConfig, setSearchConfig] = useState<SearchConfigDto | null>(null);
+  const [searchProvider, setSearchProvider] = useState("bocha");
+  const [searchKey, setSearchKey] = useState("");
+  const [searchAuto, setSearchAuto] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchNotice, setSearchNotice] = useState<string | null>(null);
+  const [searchConfigNotice, setSearchConfigNotice] = useState<string | null>(null);
+  const [cardBusy, setCardBusy] = useState(false);
+  const [searchHits, setSearchHits] = useState<SearchHitDto[]>([]);
+  const [searchHitProvider, setSearchHitProvider] = useState("");
+  const [assistBusy, setAssistBusy] = useState(false);
+  const [assist, setAssist] = useState<AssistResultDto | null>(null);
+  const [assistNotice, setAssistNotice] = useState<string | null>(null);
 
   const loadCards = useCallback(async () => {
     try {
@@ -121,6 +154,26 @@ export default function App() {
       window.clearInterval(id);
     };
   }, [loadTranscript]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSearch(): Promise<void> {
+      try {
+        const config = await invokeCommand<SearchConfigDto>("search_config");
+        if (!cancelled) {
+          setSearchConfig(config);
+          setSearchProvider(config.provider);
+          setSearchAuto(config.auto);
+        }
+      } catch {
+        // 读不到就按"未配置"展示
+      }
+    }
+    void loadSearch();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -241,20 +294,98 @@ export default function App() {
   }
 
   async function cardFromExplanation(): Promise<void> {
-    if (explainResult === null) {
+    if (explainResult === null || cardBusy) {
       return;
     }
+    setCardBusy(true);
     try {
       const added = await invokeCommand<number>("ingest_explanation", {
         input: {
           word: explainResult.text,
           explanation: explainResult.explanation,
+          sources: searchHits.map((hit) => hit.site).filter((site) => site !== ""),
         },
       });
       setExplainNotice(added > 0 ? "已生成卡片。" : "这条内容未通过卡片生成条件。");
       await loadCards();
     } catch {
       setExplainNotice("生成卡片失败，请稍后重试。");
+    } finally {
+      setCardBusy(false);
+    }
+  }
+
+  async function saveSearchConfig(): Promise<void> {
+    setSearchBusy(true);
+    setSearchConfigNotice(null);
+    try {
+      const config = await invokeCommand<SearchConfigDto>("search_config_save", {
+        input: { provider: searchProvider, key: searchKey, auto: searchAuto },
+      });
+      setSearchConfig(config);
+      setSearchProvider(config.provider);
+      setSearchAuto(config.auto);
+      setSearchKey("");
+      setSearchConfigNotice(
+        config.ready ? "已保存，联网查可用。" : "已保存，但当前构建或 Key 还不足以联网。",
+      );
+    } catch (error) {
+      setSearchConfigNotice(errorMessage(error, "保存失败，请稍后重试。"));
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  // 只把选中的一小段发出去；查不到就如实说，不猜。
+  async function searchSelection(): Promise<void> {
+    const query = selection.trim();
+    if (query === "") {
+      return;
+    }
+    setSearchBusy(true);
+    setSearchNotice(null);
+    setSearchHits([]);
+    try {
+      const response = await invokeCommand<SearchResponseDto>("web_search", {
+        input: { query },
+      });
+      setSearchHits(response.hits);
+      setSearchHitProvider(response.provider);
+      if (response.hits.length === 0) {
+        setSearchNotice("没查到结果，换个说法再试。");
+      }
+    } catch (error) {
+      setSearchNotice(errorMessage(error, "联网查失败，请稍后重试。"));
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  async function askAssist(): Promise<void> {
+    setAssistBusy(true);
+    setAssistNotice(null);
+    setAssist(null);
+    try {
+      const result = await invokeCommand<AssistResultDto>("assist_reply", {
+        input: { focus: selection },
+      });
+      setAssist(result);
+      if (result.points.length === 0 && result.replies.length === 0) {
+        setAssistNotice("模型没按格式返回，原文见下方。");
+      }
+    } catch (error) {
+      setAssistNotice(errorMessage(error, "生成失败，请稍后重试。"));
+    } finally {
+      setAssistBusy(false);
+    }
+  }
+
+  async function copyReply(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      setAssistNotice("已复制，可以直接粘贴到会议里。");
+    } catch {
+      setAssistNotice("当前窗口不允许写剪贴板，请手动选中这段文字。");
     }
   }
 
@@ -403,11 +534,11 @@ export default function App() {
           <dl className="privacy">
             <div>
               <dt>自动外发</dt>
-              <dd>未接入</dd>
+              <dd>未接入（仅手动触发）</dd>
             </div>
             <div>
               <dt>查询脱敏</dt>
-              <dd>未接入</dd>
+              <dd>未接入（发原文）</dd>
             </div>
             <div>
               <dt>审计</dt>
@@ -473,10 +604,88 @@ export default function App() {
                 <span>转写时自动出卡（默认关；开启后同一词 90 秒内不重复，每分钟最多 8 张）</span>
               </label>
             </div>
+            <div className="settings-section">
+              <div className="panel-head">
+                <h2>联网查资料（可选）</h2>
+                <span className="hint">
+                  {searchConfig === null
+                    ? "读取配置中…"
+                    : searchConfig.ready
+                      ? `${SEARCH_PROVIDER_TEXT[searchConfig.provider] ?? searchConfig.provider} 已就绪`
+                      : searchConfig.hasKey
+                        ? "已存 Key，但当前构建未启用联网传输"
+                        : "填入检索 Key 后可联网查证"}
+                </span>
+              </div>
+              <div className="settings-actions">
+                <select
+                  className="key-input"
+                  aria-label="检索服务"
+                  value={searchProvider}
+                  onChange={(event) => {
+                    setSearchProvider(event.target.value);
+                  }}
+                >
+                  <option value="bocha">博查 Bocha（中文）</option>
+                  <option value="tavily">Tavily（英文/通用）</option>
+                </select>
+                <input
+                  className="key-input"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={searchConfig?.hasKey === true ? "已保存，留空不修改" : "检索服务 Key"}
+                  value={searchKey}
+                  onChange={(event) => {
+                    setSearchKey(event.target.value);
+                  }}
+                />
+                <label className="checkline">
+                  <input
+                    type="checkbox"
+                    checked={searchAuto}
+                    onChange={() => {
+                      setSearchAuto((prev) => !prev);
+                    }}
+                  />
+                  <span>生成卡片时自动补来源</span>
+                </label>
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={searchBusy}
+                  onClick={() => {
+                    void saveSearchConfig();
+                  }}
+                >
+                  {searchBusy ? "保存中…" : "保存"}
+                </button>
+              </div>
+              <p className="hint">
+                只有点「联网查」或勾选上面这项时才会出网：发出去的是选中的词（≤80 字），不发整段转写；
+                Key 存系统凭据，不进配置文件。
+              </p>
+              {searchConfigNotice === null ? null : (
+                <p className="settings-notice" role="status">
+                  {searchConfigNotice}
+                </p>
+              )}
+            </div>
             <div className="settings-section transcript-section">
               <div className="panel-head">
                 <h2>完整转写</h2>
-                <span className="hint">选中任意文字可查意思，并生成卡片</span>
+                <div className="settings-actions">
+                  <span className="hint">选中文字可查意思、联网查、生成卡片</span>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={assistBusy}
+                    onClick={() => {
+                      void askAssist();
+                    }}
+                  >
+                    {assistBusy ? "生成中…" : "AI 提醒 / 怎么回"}
+                  </button>
+                </div>
               </div>
               <div
                 className="transcript-body"
@@ -499,6 +708,52 @@ export default function App() {
                   ))
                 )}
               </div>
+              {assist === null ? null : (
+                <div className="explain-panel">
+                  <p className="explain-source">
+                    模型辅助（基于最近转写{selection === "" ? "" : " + 选中句"}）
+                  </p>
+                  {assist.points.length === 0 ? null : (
+                    <>
+                      <p className="assist-label">注意这些</p>
+                      <ul className="assist-list">
+                        {assist.points.map((point) => (
+                          <li key={point}>{point}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {assist.replies.length === 0 ? null : (
+                    <>
+                      <p className="assist-label">可以直接说</p>
+                      <ul className="assist-list">
+                        {assist.replies.map((reply) => (
+                          <li key={reply} className="assist-reply">
+                            <span>{reply}</span>
+                            <button
+                              className="btn btn-mini"
+                              type="button"
+                              onClick={() => {
+                                void copyReply(reply);
+                              }}
+                            >
+                              复制
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  {assist.note === "" ? null : (
+                    <p className="explain-text">{assist.note}</p>
+                  )}
+                </div>
+              )}
+              {assistNotice === null ? null : (
+                <p className="settings-notice" role="status">
+                  {assistNotice}
+                </p>
+              )}
               {selection === "" ? null : (
                 <div className="settings-actions">
                   <span className="hint">已选中：{selection}</span>
@@ -511,6 +766,16 @@ export default function App() {
                     }}
                   >
                     {explainBusy ? "查询中…" : "查意思"}
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={searchBusy}
+                    onClick={() => {
+                      void searchSelection();
+                    }}
+                  >
+                    {searchBusy ? "检索中…" : "联网查"}
                   </button>
                   <button
                     className="btn"
@@ -529,20 +794,45 @@ export default function App() {
                 <div className="explain-panel">
                   <p className="explain-source">
                     {explainResult.source === "llm" ? "模型释义" : "本机上下文"}
+                    {searchHits.length > 0 ? ` · 附 ${String(searchHits.length)} 条网络来源` : ""}
                   </p>
                   <p className="explain-text">{explainResult.explanation}</p>
                   <div className="settings-actions">
                     <button
                       className="btn btn-start"
                       type="button"
+                      disabled={cardBusy}
                       onClick={() => {
                         void cardFromExplanation();
                       }}
                     >
-                      生成卡片
+                      {cardBusy ? "生成中…" : "生成卡片"}
                     </button>
                   </div>
                 </div>
+              )}
+              {searchHits.length === 0 ? null : (
+                <div className="explain-panel">
+                  <p className="explain-source">
+                    {searchHitProvider === "" ? "联网结果" : `${searchHitProvider} 结果`}
+                    （点「生成卡片」会把这些站点记为来源）
+                  </p>
+                  <ul className="hit-list">
+                    {searchHits.map((hit) => (
+                      <li key={`${hit.url}|${hit.title}`}>
+                        <span className="hit-title">{hit.title}</span>
+                        <span className="hit-site">{hit.site}</span>
+                        <p className="hit-snippet">{hit.snippet}</p>
+                        {hit.url === "" ? null : <p className="hit-url">{hit.url}</p>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {searchNotice === null ? null : (
+                <p className="settings-notice" role="status">
+                  {searchNotice}
+                </p>
               )}
               {explainNotice === null ? null : (
                 <p className="settings-notice" role="status">

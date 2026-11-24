@@ -146,7 +146,7 @@ impl CardStore {
                 store.remove(0);
             }
             let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
-            match build_draft(sequence, &keyword, &excerpt, &gate, self.privacy) {
+            match build_draft(sequence, &keyword, &excerpt, &gate, self.privacy, &[]) {
                 Some(draft) => {
                     store.push(CardSnapshotEntry::Draft(draft));
                     added += 1;
@@ -200,7 +200,22 @@ impl CardStore {
     ///
     /// 与 `ingest` 的区别：不抽关键词，标题固定为用户选中的文字，
     /// 结论用释义摘要；门控与隐私判定照旧走 `card_gate::evaluate`。
+    /// 不带来源的便捷入口；生产路径走 [`Self::ingest_explanation_with_sources`]。
+    #[cfg(test)]
     pub fn ingest_explanation(&self, word: &str, explanation: &str) -> Result<usize, IpcErrorDto> {
+        self.ingest_explanation_with_sources(word, explanation, &[])
+    }
+
+    /// 带来源的释义出卡：`sources` 为联网检索到的站点，非空时引用标为 `GeneralWeb`。
+    ///
+    /// 来源只影响"这张卡的出处"，不改变门控与隐私判定；来源不合法时退回本机引用，
+    /// 不会出现"标注了外部来源却没有引用"的卡片。
+    pub fn ingest_explanation_with_sources(
+        &self,
+        word: &str,
+        explanation: &str,
+        sources: &[String],
+    ) -> Result<usize, IpcErrorDto> {
         // 选区可能来自带空格的转写行，标题也要合上，否则卡片标题是"学历 歧视"。
         let word = crate::ipc::transcript::tidy_cjk_spaces(word.trim());
         let word = word.as_str();
@@ -236,7 +251,7 @@ impl CardStore {
             store.remove(0);
         }
         let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
-        match build_draft(sequence, &title, &excerpt, &gate, self.privacy) {
+        match build_draft(sequence, &title, &excerpt, &gate, self.privacy, sources) {
             Some(draft) => {
                 store.push(CardSnapshotEntry::Draft(draft));
                 Ok(1)
@@ -297,6 +312,7 @@ fn build_draft(
     excerpt: &str,
     gate: &LocalGate,
     privacy: PrivacyMode,
+    sources: &[String],
 ) -> Option<KeywordCardDraft> {
     let title: String = keyword.chars().take(TitleText::LIMIT).collect();
     let summary = fit_text(excerpt, ConclusionText::LIMIT);
@@ -344,18 +360,48 @@ fn build_draft(
         triggered_at_ms: now_ms(),
         confidence: Confidence::new(0.9).ok()?,
         summary: ConclusionText::new(summary).ok(),
-        references: vec![ReferenceView {
-            reference_id: ReferenceRef::new(format!("local-{sequence}")).ok()?,
-            trust_tier: ReferenceTrustTier::UserGenerated,
-            access_status: ReferenceAccessStatus::Available,
-            published_at_ms: None,
-            alignment: CitationAlignment::Passed,
-        }],
+        references: build_references(sequence, sources),
         citation_alignment: CitationAlignment::Passed,
         gate_decision_ref: admission.allow_ref?,
         card_status: KeywordCardStatus::Displayed,
         click_state: admission.click_state,
     })
+}
+
+/// 卡片引用：有网络来源就按来源逐条标 `GeneralWeb`，没有才用本机片段。
+///
+/// `reference_id` 里带站点名（`web-0:example.com`），卡片详情能直接看出出处；
+/// 站点串不合法时跳过该条，全部跳过则退回本机引用。
+fn build_references(sequence: u64, sources: &[String]) -> Vec<ReferenceView> {
+    let mut references: Vec<ReferenceView> = Vec::new();
+    for (index, source) in sources.iter().enumerate() {
+        let site = source.trim();
+        if site.is_empty() {
+            continue;
+        }
+        let Ok(reference_id) = ReferenceRef::new(format!("web-{index}:{site}")) else {
+            continue;
+        };
+        references.push(ReferenceView {
+            reference_id,
+            trust_tier: ReferenceTrustTier::GeneralWeb,
+            access_status: ReferenceAccessStatus::Available,
+            published_at_ms: None,
+            alignment: CitationAlignment::Passed,
+        });
+    }
+    if references.is_empty() {
+        if let Ok(reference_id) = ReferenceRef::new(format!("local-{sequence}")) {
+            references.push(ReferenceView {
+                reference_id,
+                trust_tier: ReferenceTrustTier::UserGenerated,
+                access_status: ReferenceAccessStatus::Available,
+                published_at_ms: None,
+                alignment: CitationAlignment::Passed,
+            });
+        }
+    }
+    references
 }
 
 /// 把长文本截到卡片上限以内，并尽量停在句子/分句边界上。
@@ -456,6 +502,7 @@ mod tests {
             "会议讨论阿里云方案",
             &gate,
             PrivacyMode::default(),
+            &[],
         )
         .expect("draft");
         assert_eq!(
@@ -488,7 +535,8 @@ mod tests {
             "阿里云",
             "会议讨论阿里云方案",
             &gate,
-            PrivacyMode::default()
+            PrivacyMode::default(),
+            &[]
         )
         .is_none());
     }
@@ -608,7 +656,7 @@ mod tests {
         };
         let gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000, privacy).expect("gate");
         assert!(matches!(&gate.decision, GateDecision::Allow { .. }));
-        let draft = build_draft(1, "阿里云", "会议讨论阿里云方案", &gate, privacy)
+        let draft = build_draft(1, "阿里云", "会议讨论阿里云方案", &gate, privacy, &[])
             .expect("遮蔽下仍出卡，只隐藏正文");
         assert_eq!(
             draft.click_state,
@@ -646,5 +694,51 @@ mod tests {
             panic!("应为草案卡");
         };
         assert_eq!(draft.keyword_text.as_str(), "学历歧视");
+    }
+
+    /// 带网络来源时，引用逐条标 `GeneralWeb`，且站点写在引用 ID 里。
+    #[test]
+    fn explanation_with_sources_marks_web_references() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        let added = store
+            .ingest_explanation_with_sources(
+                "SLA",
+                "服务等级协议，约定可用性与响应时限。",
+                &["example.com".to_owned(), "ops.example.org".to_owned()],
+            )
+            .expect("added");
+        assert_eq!(added, 1);
+        let cards = store.cards();
+        let CardSnapshotEntry::Draft(draft) = &cards[0] else {
+            panic!("应为草案卡");
+        };
+        assert_eq!(draft.references.len(), 2);
+        assert_eq!(
+            draft.references[0].trust_tier,
+            ReferenceTrustTier::GeneralWeb
+        );
+        assert_eq!(
+            draft.references[0].reference_id.as_str(),
+            "web-0:example.com"
+        );
+    }
+
+    /// 来源串非法或为空时退回本机引用，不能出现"标了外部来源却没有引用"。
+    #[test]
+    fn blank_sources_fall_back_to_local_reference() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        let added = store
+            .ingest_explanation_with_sources("灰度", "分批次放量。", &["   ".to_owned()])
+            .expect("added");
+        assert_eq!(added, 1);
+        let cards = store.cards();
+        let CardSnapshotEntry::Draft(draft) = &cards[0] else {
+            panic!("应为草案卡");
+        };
+        assert_eq!(draft.references.len(), 1);
+        assert_eq!(
+            draft.references[0].trust_tier,
+            ReferenceTrustTier::UserGenerated
+        );
     }
 }

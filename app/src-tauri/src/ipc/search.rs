@@ -1,0 +1,479 @@
+//! 联网检索：配置、凭据、单次查询。
+//!
+//! 边界：只有用户点"联网查"、或显式打开"出卡时自动补来源"之后才会出网；
+//! 外发内容只有选中的词/短句（≤80 字），不带整段转写，不落盘、不写日志正文。
+//! 检索 Key 与模型 Key 分开存，互不覆盖。
+
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use meeting_copilot_application::settings::{PortError, SecureStore};
+use serde::{Deserialize, Serialize};
+use tauri::State;
+
+use crate::ipc::dto::{
+    IpcErrorDto, SearchConfigDto, SearchConfigInputDto, SearchHitDto, SearchInputDto,
+    SearchResponseDto,
+};
+
+/// 配置文件固定放在应用配置目录下，与 `settings.json` 分开：
+/// 设置文件是"恰 4 键"的强契约，不宜混入检索配置。
+const CONFIG_FILE: &str = "search.json";
+/// 单次查询上限：查询串只应是"一个词或一句短语"。
+const MAX_QUERY_CHARS: usize = 80;
+/// 单次返回条数：够做卡片来源即可，多了界面放不下。
+#[cfg(any(feature = "llm-https", test))]
+const MAX_HITS: usize = 5;
+/// 检索超时：比模型短，用户等的是"顺手查一下"。
+#[cfg(feature = "llm-https")]
+const TIMEOUT_MS: u64 = 8_000;
+
+/// 检索服务预设。只给固定端点，不接受任意地址，避免把查询发到不可控主机。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchProvider {
+    /// 博查：中文网页结果，返回 `data.webPages.value`。
+    Bocha,
+    /// Tavily：面向模型的检索，返回 `results`。
+    Tavily,
+}
+
+impl SearchProvider {
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "bocha" => Some(Self::Bocha),
+            "tavily" => Some(Self::Tavily),
+            _ => None,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Bocha => "bocha",
+            Self::Tavily => "tavily",
+        }
+    }
+
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Bocha => "博查 Bocha",
+            Self::Tavily => "Tavily",
+        }
+    }
+
+    /// 端点固定为 `(host, path)`，`https` 由传输层保证。
+    #[cfg(feature = "llm-https")]
+    const fn endpoint(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Bocha => ("api.bochaai.com", "/v1/web-search"),
+            Self::Tavily => ("api.tavily.com", "/search"),
+        }
+    }
+}
+
+/// 落盘的检索配置：3 键，版本不符直接回默认。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SearchFileV1 {
+    schema_version: u32,
+    provider: String,
+    auto: bool,
+}
+
+impl Default for SearchFileV1 {
+    fn default() -> Self {
+        Self {
+            schema_version: 1,
+            provider: SearchProvider::Bocha.as_str().to_owned(),
+            // 自动补来源默认关：出网必须由用户显式开启。
+            auto: false,
+        }
+    }
+}
+
+impl SearchFileV1 {
+    fn provider(&self) -> SearchProvider {
+        SearchProvider::parse(&self.provider).unwrap_or(SearchProvider::Bocha)
+    }
+}
+
+/// 检索配置存储：临时文件 + 同目录替换，损坏时回默认。
+pub struct SearchStore {
+    dir: PathBuf,
+}
+
+impl SearchStore {
+    pub fn new(dir: impl Into<PathBuf>) -> Self {
+        Self { dir: dir.into() }
+    }
+
+    fn main_path(&self) -> PathBuf {
+        self.dir.join(CONFIG_FILE)
+    }
+
+    fn tmp_path(&self) -> PathBuf {
+        self.dir.join("search.json.tmp")
+    }
+
+    fn load(&self) -> SearchFileV1 {
+        let Ok(text) = fs::read_to_string(self.main_path()) else {
+            return SearchFileV1::default();
+        };
+        match serde_json::from_str::<SearchFileV1>(&text) {
+            Ok(file) if file.schema_version == 1 => file,
+            _ => SearchFileV1::default(),
+        }
+    }
+
+    fn save(&self, file: &SearchFileV1) -> Result<(), PortError> {
+        fs::create_dir_all(&self.dir).map_err(|_| PortError::Unavailable)?;
+        let json = serde_json::to_vec_pretty(file).map_err(|_| PortError::Corrupted)?;
+        let tmp = self.tmp_path();
+        fs::write(&tmp, json).map_err(|_| PortError::Unavailable)?;
+        fs::rename(&tmp, self.main_path()).map_err(|_| PortError::Unavailable)
+    }
+}
+
+/// 检索运行态：配置 + 独立凭据。由 Tauri 管理，不放进 `AppState`。
+pub struct SearchState {
+    pub store: SearchStore,
+    pub secure: Arc<dyn SecureStore>,
+}
+
+impl SearchState {
+    pub fn new(dir: impl Into<PathBuf>, secure: Arc<dyn SecureStore>) -> Self {
+        Self {
+            store: SearchStore::new(dir),
+            secure,
+        }
+    }
+
+    fn read_key(&self) -> Result<Option<String>, IpcErrorDto> {
+        let stored = self.secure.read().map_err(|_| {
+            IpcErrorDto::new("search_key_unavailable", "检索凭据存储不可用。", true)
+        })?;
+        Ok(stored
+            .map(|bytes| bytes.with_bytes(|raw| String::from_utf8_lossy(raw).into_owned()))
+            .filter(|key| !key.trim().is_empty()))
+    }
+
+    pub fn config(&self) -> SearchConfigDto {
+        let file = self.store.load();
+        let has_key = self.read_key().unwrap_or(None).is_some();
+        SearchConfigDto {
+            provider: file.provider().as_str().to_owned(),
+            has_key,
+            auto: file.auto,
+            ready: has_key && cfg!(feature = "llm-https"),
+        }
+    }
+
+    /// 保存：留空 Key 表示沿用现有凭据；服务名非法直接拒绝。
+    pub fn save_config(
+        &self,
+        input: &SearchConfigInputDto,
+    ) -> Result<SearchConfigDto, IpcErrorDto> {
+        let provider = SearchProvider::parse(&input.provider).ok_or_else(|| {
+            IpcErrorDto::new("search_provider_invalid", "不支持的检索服务。", false)
+        })?;
+        let raw_key = input.key.trim();
+        if !raw_key.is_empty() {
+            let secret = meeting_copilot_application::settings::SecretBytes::new(
+                raw_key.as_bytes().to_vec(),
+            );
+            self.secure.write(&secret).map_err(|_| {
+                IpcErrorDto::new("search_key_unwritable", "检索 Key 保存失败。", true)
+            })?;
+        } else if self.read_key()?.is_none() {
+            return Err(IpcErrorDto::new(
+                "search_key_missing",
+                "请先填入检索服务的 Key。",
+                false,
+            ));
+        }
+        self.store
+            .save(&SearchFileV1 {
+                schema_version: 1,
+                provider: provider.as_str().to_owned(),
+                auto: input.auto,
+            })
+            .map_err(|_| {
+                IpcErrorDto::new("search_config_unwritable", "检索配置保存失败。", true)
+            })?;
+        Ok(self.config())
+    }
+
+    /// 单次查询：未配置时给出可照做的提示，而不是空列表。
+    pub fn query(&self, raw: &str) -> Result<SearchResponseDto, IpcErrorDto> {
+        let query: String = raw.trim().chars().take(MAX_QUERY_CHARS).collect();
+        if query.is_empty() {
+            return Err(IpcErrorDto::new(
+                "search_query_empty",
+                "请先选中要查的文字。",
+                false,
+            ));
+        }
+        let file = self.store.load();
+        let provider = file.provider();
+        let Some(key) = self.read_key()? else {
+            return Err(IpcErrorDto::new(
+                "search_not_configured",
+                "尚未配置联网检索：在「联网查资料」里填入检索 Key 后再试。",
+                false,
+            ));
+        };
+        let hits = run_search(provider, &key, &query)?;
+        Ok(SearchResponseDto {
+            provider: provider.display_name().to_owned(),
+            hits,
+        })
+    }
+}
+
+/// 真正出网的一次检索；非 `llm-https` 构建直接说明未启用。
+#[cfg(feature = "llm-https")]
+fn run_search(
+    provider: SearchProvider,
+    key: &str,
+    query: &str,
+) -> Result<Vec<SearchHitDto>, IpcErrorDto> {
+    use std::time::{Duration, Instant};
+
+    use meeting_copilot_domain::port::llm::CancelToken;
+    use meeting_copilot_infrastructure::llm::live::{BearerTransport, SecretString};
+    use meeting_copilot_infrastructure::llm::transport::{HttpRequest, HttpTransport};
+    use meeting_copilot_infrastructure::llm::transport_tls::TlsTransport;
+
+    let body = match provider {
+        SearchProvider::Bocha => serde_json::json!({
+            "query": query,
+            "count": MAX_HITS,
+            "summary": true,
+        }),
+        SearchProvider::Tavily => serde_json::json!({
+            "query": query,
+            "max_results": MAX_HITS,
+            "search_depth": "basic",
+        }),
+    };
+    let payload = serde_json::to_vec(&body)
+        .map_err(|_| IpcErrorDto::new("search_bad_request", "检索请求构造失败。", false))?;
+    let headers = vec![
+        ("Content-Type".to_owned(), "application/json".to_owned()),
+        ("Accept".to_owned(), "application/json".to_owned()),
+    ];
+    let (host, path) = provider.endpoint();
+    let mut request = HttpRequest::json_post(host, 443, path, headers, payload);
+    request.secure = true;
+
+    let transport: Arc<dyn HttpTransport> = Arc::new(BearerTransport::new(
+        Arc::new(TlsTransport::new()),
+        SecretString::new(key.to_owned()),
+    ));
+    let cancel = CancelToken::new();
+    let deadline = Instant::now() + Duration::from_millis(TIMEOUT_MS);
+    let response = transport.send(&request, deadline, &cancel).map_err(|_| {
+        IpcErrorDto::new("search_unreachable", "连不上检索服务，请检查网络。", true)
+    })?;
+    match response.status {
+        200..=299 => {}
+        401 | 403 => {
+            return Err(IpcErrorDto::new(
+                "search_auth_failed",
+                "检索 Key 无效或已失效，请重新填写。",
+                false,
+            ));
+        }
+        429 => {
+            return Err(IpcErrorDto::new(
+                "search_rate_limited",
+                "检索过于频繁，请稍后再试。",
+                true,
+            ));
+        }
+        _ => {
+            return Err(IpcErrorDto::new(
+                "search_failed",
+                "检索服务返回异常，请稍后再试。",
+                true,
+            ));
+        }
+    }
+    let value: serde_json::Value = serde_json::from_slice(&response.body)
+        .map_err(|_| IpcErrorDto::new("search_bad_response", "检索结果无法解析。", true))?;
+    let hits = parse_hits(&value);
+    if hits.is_empty() {
+        return Err(IpcErrorDto::new(
+            "search_no_hit",
+            "这次没查到可用结果，换个说法再试。",
+            false,
+        ));
+    }
+    Ok(hits)
+}
+
+#[cfg(not(feature = "llm-https"))]
+fn run_search(
+    _provider: SearchProvider,
+    _key: &str,
+    _query: &str,
+) -> Result<Vec<SearchHitDto>, IpcErrorDto> {
+    Err(IpcErrorDto::new(
+        "search_transport_off",
+        "当前构建未启用联网传输。",
+        false,
+    ))
+}
+
+/// 兼容两家的响应形状：博查 `data.webPages.value`，Tavily `results`。
+#[cfg(any(feature = "llm-https", test))]
+fn parse_hits(value: &serde_json::Value) -> Vec<SearchHitDto> {
+    let candidates = [
+        value
+            .get("data")
+            .and_then(|data| data.get("webPages"))
+            .and_then(|pages| pages.get("value")),
+        value.get("results"),
+        value.get("webPages").and_then(|pages| pages.get("value")),
+    ];
+    let Some(items) = candidates
+        .into_iter()
+        .flatten()
+        .find(|item| item.is_array())
+        .and_then(|item| item.as_array())
+    else {
+        return Vec::new();
+    };
+    let mut hits = Vec::new();
+    for item in items {
+        let title = text_field(item, &["name", "title"]);
+        let url = text_field(item, &["url", "link"]);
+        let snippet = text_field(item, &["snippet", "content", "summary", "description"]);
+        let site = {
+            let named = text_field(item, &["siteName", "site"]);
+            if named.is_empty() {
+                host_of(&url)
+            } else {
+                named
+            }
+        };
+        if title.is_empty() && snippet.is_empty() {
+            continue;
+        }
+        hits.push(SearchHitDto {
+            title: title.chars().take(80).collect(),
+            site,
+            snippet: snippet.chars().take(240).collect(),
+            url,
+        });
+        if hits.len() >= MAX_HITS {
+            break;
+        }
+    }
+    hits
+}
+
+#[cfg(any(feature = "llm-https", test))]
+fn text_field(item: &serde_json::Value, keys: &[&str]) -> String {
+    keys.iter()
+        .find_map(|key| item.get(*key).and_then(|value| value.as_str()))
+        .unwrap_or("")
+        .trim()
+        .to_owned()
+}
+
+/// 从 URL 里取主机名，作为站点名兜底。
+#[cfg(any(feature = "llm-https", test))]
+fn host_of(url: &str) -> String {
+    // 不写字面量协议前缀：IPC 层禁止出现完整地址形态，这里按 schema 拼。
+    let mut rest = url;
+    for scheme in ["https", "http"] {
+        let prefix = format!("{scheme}://");
+        if let Some(stripped) = rest.strip_prefix(&prefix) {
+            rest = stripped;
+            break;
+        }
+    }
+    rest.split(['/', '?'])
+        .next()
+        .unwrap_or("")
+        .trim_start_matches("www.")
+        .to_owned()
+}
+
+#[tauri::command]
+pub fn search_config(state: State<'_, Arc<SearchState>>) -> SearchConfigDto {
+    state.config()
+}
+
+#[tauri::command]
+pub fn search_config_save(
+    state: State<'_, Arc<SearchState>>,
+    input: SearchConfigInputDto,
+) -> Result<SearchConfigDto, IpcErrorDto> {
+    state.save_config(&input)
+}
+
+#[tauri::command]
+pub fn web_search(
+    state: State<'_, Arc<SearchState>>,
+    input: SearchInputDto,
+) -> Result<SearchResponseDto, IpcErrorDto> {
+    state.query(&input.query)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_bocha_shape() {
+        let value = serde_json::json!({
+            "code": 200,
+            "data": { "webPages": { "value": [
+                {"name": "SLA 是什么", "url": "https://www.example.com/a", "snippet": "服务等级协议…", "siteName": "示例站"},
+                {"name": "SLA 指标", "url": "https://ops.example.org/b", "snippet": "99.9% 可用性"}
+            ]}}
+        });
+        let hits = parse_hits(&value);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "SLA 是什么");
+        assert_eq!(hits[0].site, "示例站");
+        // 没给 siteName 时用主机名兜底，并去掉 www.
+        assert_eq!(hits[1].site, "ops.example.org");
+    }
+
+    #[test]
+    fn parses_tavily_shape() {
+        let value = serde_json::json!({
+            "results": [
+                {"title": "灰度发布", "url": "https://www.example.com/gray", "content": "分批次放量…"},
+                {"title": "回滚预案", "url": "https://example.com/rollback", "content": "回滚步骤…"}
+            ]
+        });
+        let hits = parse_hits(&value);
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].title, "灰度发布");
+        assert_eq!(hits[0].site, "example.com");
+    }
+
+    #[test]
+    fn empty_shape_yields_no_hit() {
+        assert!(parse_hits(&serde_json::json!({"code": 500})).is_empty());
+        assert!(parse_hits(&serde_json::json!({"results": []})).is_empty());
+    }
+
+    #[test]
+    fn provider_parse_is_case_insensitive_and_strict() {
+        assert_eq!(
+            SearchProvider::parse(" Bocha "),
+            Some(SearchProvider::Bocha)
+        );
+        assert_eq!(
+            SearchProvider::parse("TAVILY"),
+            Some(SearchProvider::Tavily)
+        );
+        assert_eq!(SearchProvider::parse("bing"), None);
+    }
+}

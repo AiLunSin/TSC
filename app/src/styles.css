@@ -539,3 +539,75 @@ body {
   line-height: 1.75;
   white-space: pre-wrap;
 }
+/* 联网检索结果与辅助回复 */
+.key-input {
+  min-width: 170px;
+  max-width: 260px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.hit-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.hit-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hit-site {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hit-snippet {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.hit-url {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--accent);
+  word-break: break-all;
+  user-select: text;
+}
+
+.assist-label {
+  margin: 8px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.assist-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.assist-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.btn-mini {
+  padding: 2px 8px;
+  font-size: 11px;
+}

@@ -9,6 +9,7 @@ use tauri::State;
 
 use crate::ipc::card_store::CardStore;
 use crate::ipc::dto::{ExplainInputDto, ExplainResultDto, IngestExplanationInputDto, IpcErrorDto};
+use crate::ipc::search::SearchState;
 use crate::ipc::state::AppState;
 use crate::ipc::transcript::TranscriptLog;
 
@@ -17,8 +18,6 @@ const MAX_SELECTION: usize = 200;
 /// 上下文上限：只取前后各一句，且总量封顶。
 const MAX_CONTEXT: usize = 600;
 /// 请求超时：短于探针，避免用户等太久。
-#[cfg(feature = "llm-https")]
-const TIMEOUT_MS: u64 = 20_000;
 /// 多句/整段的判定门槛：太短的"好的。收到。"仍按术语处理。
 const PASSAGE_MIN_CHARS: usize = 24;
 const PASSAGE_MIN_SENTENCES: usize = 2;
@@ -65,7 +64,7 @@ pub fn explain_impl(
         given
     };
 
-    let secret = read_secret(state)?;
+    let secret = crate::ipc::llm::read_secret(state)?;
     let Some(secret) = secret else {
         return Ok(local_fallback(
             transcripts,
@@ -73,7 +72,7 @@ pub fn explain_impl(
             "尚未配置 API Key，以下仅为本机上下文。",
         ));
     };
-    let model = current_model(state)?;
+    let model = crate::ipc::llm::current_model(state)?;
 
     let system = system_prompt_for(text);
     let max_tokens = if is_passage(text) {
@@ -82,7 +81,7 @@ pub fn explain_impl(
         MAX_TOKENS_TERM
     };
     let user = build_user_message(text, &context);
-    match call_llm(&secret, &model, system, &user, max_tokens) {
+    match crate::ipc::llm::call_llm(&secret, &model, system, &user, max_tokens) {
         Ok(explanation) => Ok(ExplainResultDto {
             text: text.to_owned(),
             explanation,
@@ -96,31 +95,6 @@ pub fn explain_impl(
         )),
         Err(error) => Err(error),
     }
-}
-
-fn read_secret(state: &AppState) -> Result<Option<String>, IpcErrorDto> {
-    let stored = state
-        .secure
-        .read()
-        .map_err(|_| IpcErrorDto::new("secret_unavailable", "凭据存储不可用。", true))?;
-    Ok(stored
-        .map(|bytes| bytes.with_bytes(|raw| String::from_utf8_lossy(raw).into_owned()))
-        .filter(|secret| !secret.trim().is_empty()))
-}
-
-fn current_model(state: &AppState) -> Result<String, IpcErrorDto> {
-    let config = state
-        .config
-        .load()
-        .unwrap_or_default()
-        .normalized(state.catalog.model_count(), state.catalog.endpoint_count());
-    state
-        .catalog
-        .presets
-        .get(config.model_index)
-        .or_else(|| state.catalog.presets.first())
-        .cloned()
-        .ok_or_else(|| IpcErrorDto::new("model_missing", "未配置可用的模型。", false))
 }
 
 /// 是否是"多句/整段"：句数够且总长够，避免把"好的。收到。"当整段处理。
@@ -168,113 +142,6 @@ fn local_fallback(transcripts: &TranscriptLog, text: &str, note: &str) -> Explai
     }
 }
 
-#[cfg(feature = "llm-https")]
-fn call_llm(
-    secret: &str,
-    model: &str,
-    system: &str,
-    user: &str,
-    max_tokens: u16,
-) -> Result<String, IpcErrorDto> {
-    use std::time::{Duration, Instant};
-
-    use meeting_copilot_domain::port::llm::CancelToken;
-    use meeting_copilot_infrastructure::llm::live::{
-        BearerTransport, SecretString, DEEPSEEK_HOSTS, PATH_CONSTANT,
-    };
-    use meeting_copilot_infrastructure::llm::transport::{HttpRequest, HttpTransport};
-    use meeting_copilot_infrastructure::llm::transport_tls::TlsTransport;
-
-    let transport: Arc<dyn HttpTransport> = Arc::new(BearerTransport::new(
-        Arc::new(TlsTransport::new()),
-        SecretString::new(secret.to_owned()),
-    ));
-    let body = serde_json::to_vec(&serde_json::json!({
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-        "thinking": {"type": "disabled"},
-        "max_tokens": max_tokens,
-        "temperature": 0.3,
-    }))
-    .map_err(|_| IpcErrorDto::new("llm_bad_request", "请求构造失败。", false))?;
-    let headers = vec![
-        ("Content-Type".to_owned(), "application/json".to_owned()),
-        ("Accept".to_owned(), "application/json".to_owned()),
-    ];
-    let host = DEEPSEEK_HOSTS.first().copied().unwrap_or_default();
-    let mut request = HttpRequest::json_post(host, 443, PATH_CONSTANT, headers, body);
-    request.secure = true;
-    let cancel = CancelToken::new();
-    let deadline = Instant::now() + Duration::from_millis(TIMEOUT_MS);
-    let response = transport
-        .send(&request, deadline, &cancel)
-        .map_err(|_| IpcErrorDto::new("llm_unreachable", "无法连接模型服务，请检查网络。", true))?;
-    match response.status {
-        200..=299 => {}
-        401 | 403 => {
-            return Err(IpcErrorDto::new(
-                "llm_auth_failed",
-                "API Key 无效或已失效，请在设置页重新测试。",
-                false,
-            ));
-        }
-        402 => {
-            return Err(IpcErrorDto::new(
-                "llm_quota_exceeded",
-                "账户额度不足，请检查模型账户。",
-                false,
-            ));
-        }
-        429 => {
-            return Err(IpcErrorDto::new(
-                "llm_rate_limited",
-                "请求过于频繁，请稍后再试。",
-                true,
-            ));
-        }
-        _ => {
-            return Err(IpcErrorDto::new(
-                "llm_failed",
-                "模型服务返回异常，请稍后再试。",
-                true,
-            ));
-        }
-    }
-    let value: serde_json::Value = serde_json::from_slice(&response.body)
-        .map_err(|_| IpcErrorDto::new("llm_bad_response", "模型返回内容无法解析。", true))?;
-    let content = value["choices"][0]["message"]["content"]
-        .as_str()
-        .unwrap_or("")
-        .trim();
-    if content.is_empty() {
-        return Err(IpcErrorDto::new(
-            "llm_empty",
-            "模型没有返回内容，请重试。",
-            true,
-        ));
-    }
-    Ok(content.to_owned())
-}
-
-#[cfg(not(feature = "llm-https"))]
-fn call_llm(
-    _secret: &str,
-    _model: &str,
-    _system: &str,
-    _user: &str,
-    _max_tokens: u16,
-) -> Result<String, IpcErrorDto> {
-    // 标记为可回退：交给 local_fallback 给出本机上下文，而不是直接报错。
-    Err(IpcErrorDto::new(
-        "llm_transport_off",
-        "当前构建未启用模型传输。",
-        true,
-    ))
-}
-
 /// 选中文字查意思；未配置 Key 或未启用传输时回退到本机上下文。
 #[tauri::command]
 pub fn explain_selection(
@@ -286,12 +153,29 @@ pub fn explain_selection(
 }
 
 /// 把一次释义落成卡片，进入现有卡片列表。
+///
+/// 来源顺序：界面上已「联网查」过的来源 > 用户开启"出卡自动补来源"时现查 > 本机片段。
+/// 自动补来源只在用户已显式开启时发生，查不到就静默退回本机引用，不打断出卡。
 #[tauri::command]
 pub fn ingest_explanation(
-    state: State<'_, Arc<CardStore>>,
+    cards: State<'_, Arc<CardStore>>,
+    search: State<'_, Arc<SearchState>>,
     input: IngestExplanationInputDto,
 ) -> Result<usize, IpcErrorDto> {
-    state.ingest_explanation(&input.word, &input.explanation)
+    let mut sources = input.sources.clone();
+    let config = search.config();
+    if sources.is_empty() && config.auto && config.ready {
+        if let Ok(response) = search.query(&input.word) {
+            sources = response
+                .hits
+                .iter()
+                .map(|hit| hit.site.clone())
+                .filter(|site| !site.is_empty())
+                .take(3)
+                .collect();
+        }
+    }
+    cards.ingest_explanation_with_sources(&input.word, &input.explanation, &sources)
 }
 
 #[cfg(test)]

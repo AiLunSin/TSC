@@ -1,6 +1,7 @@
-//! 6 组只读 DTO 与 4 个输入 DTO：全部 camelCase、拒绝未知字段。
+//! IPC DTO：全部 camelCase、拒绝未知字段。
 //!
-//! 字段数固定为 11/5/4/3/10/4/5；新增字段视为结构违规。
+//! 设置向导与卡片投影的字段数是强契约（11/5/4/3/10/4/5），新增字段视为结构违规；
+//! 释义、转写、检索与辅助回复各自有独立 DTO，改动需同步 `app/src/bridge/schema.json`。
 
 use serde::{Deserialize, Serialize};
 
@@ -181,12 +182,75 @@ pub struct ExplainResultDto {
     pub source: String,
 }
 
-/// 把释义落成卡片的请求。
+/// 把释义落成卡片的请求；`sources` 为联网检索到的来源站点，可空。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct IngestExplanationInputDto {
     pub word: String,
     pub explanation: String,
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+/// 检索配置：4 项。`ready` 表示"已选服务 + 已存 Key + 构建带传输"三者齐备。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchConfigDto {
+    pub provider: String,
+    pub has_key: bool,
+    pub auto: bool,
+    pub ready: bool,
+}
+
+/// 保存检索配置；`key` 留空表示沿用已存凭据。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchConfigInputDto {
+    pub provider: String,
+    pub key: String,
+    pub auto: bool,
+}
+
+/// 联网检索请求。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchInputDto {
+    pub query: String,
+}
+
+/// 单条检索结果；`site` 为站点名，便于在卡片上标注来源。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchHitDto {
+    pub title: String,
+    pub site: String,
+    pub snippet: String,
+    pub url: String,
+}
+
+/// 检索结果集：`provider` 用于界面标注是谁查的。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SearchResponseDto {
+    pub provider: String,
+    pub hits: Vec<SearchHitDto>,
+}
+
+/// 辅助回复请求；`focus` 为选中文字，可空。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistInputDto {
+    pub focus: String,
+}
+
+/// 辅助回复结果：`points` 是提醒，`replies` 是可直接说的话。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssistResultDto {
+    pub source: String,
+    pub points: Vec<String>,
+    pub replies: Vec<String>,
+    pub note: String,
 }
 
 /// IPC 错误：与前端既有 3 项一致。
