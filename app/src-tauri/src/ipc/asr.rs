@@ -97,6 +97,9 @@ pub struct AsrPipeline {
     audio_ms: AtomicU64,
     stable_lines: AtomicU64,
     last_stable: Mutex<String>,
+    /// 转写时是否自动出卡。默认关：开会时每句都出卡会把卡片区刷成噪音，
+    /// 用户要的是"转写成文字 → 自己选中 → 查意思 → 需要时才出卡"。
+    auto_cards: AtomicBool,
 }
 
 impl AsrPipeline {
@@ -121,7 +124,17 @@ impl AsrPipeline {
             audio_ms: AtomicU64::new(0),
             stable_lines: AtomicU64::new(0),
             last_stable: Mutex::new(String::new()),
+            auto_cards: AtomicBool::new(false),
         }
+    }
+
+    /// 自动出卡开关（默认关）。
+    pub fn auto_cards(&self) -> bool {
+        self.auto_cards.load(Ordering::Relaxed)
+    }
+
+    pub fn set_auto_cards(&self, enabled: bool) {
+        self.auto_cards.store(enabled, Ordering::Relaxed);
     }
 
     fn set_last_text(&self, text: &str) {
@@ -170,7 +183,10 @@ impl AsrPipeline {
             };
             // 字幕通道独立存放：不能让 UIA 文本覆盖 ASR 的实时文本。
             pipeline.set_subtitle_text(text);
-            let _ = cards.ingest(text);
+            // 只有用户显式打开"自动出卡"时才从这里出卡，否则卡片区会被字幕刷屏。
+            if pipeline.auto_cards() {
+                let _ = cards.ingest(text);
+            }
         });
         let _ = self.subtitle.subscribe(sink);
     }
@@ -288,7 +304,10 @@ impl AsrPipeline {
                         recognizer.stable_lines.fetch_add(1, Ordering::Relaxed);
                         // 稳定句进全文缓冲：用户回看与选中查询都以这里为准。
                         recognizer.transcripts.push(&text);
-                        if recognizer.take_stable_if_new(&text) {
+                        // 去重副作用必须保留（脚本收句会重复上一句）；
+                        // 但只有显式开启自动出卡时才真的往卡片区塞卡片。
+                        let fresh = recognizer.take_stable_if_new(&text);
+                        if fresh && recognizer.auto_cards() {
                             let _ = recognizer.cards.ingest(&text);
                         }
                     }
@@ -642,13 +661,27 @@ pub fn stop_asr(state: tauri::State<'_, Arc<AsrPipeline>>) -> Result<(), IpcErro
 #[tauri::command]
 pub fn asr_status(
     state: tauri::State<'_, Arc<AsrPipeline>>,
-) -> Result<(bool, String, String, String), IpcErrorDto> {
+) -> Result<(bool, String, String, String, bool), IpcErrorDto> {
     Ok((
         state.is_running(),
         state.display_text(),
         state.last_error(),
         state.diagnostics(),
+        state.auto_cards(),
     ))
+}
+
+/// 转写时是否自动出卡。
+///
+/// 默认关：每句稳定文本都抽关键词会产出大量碎片卡片，把卡片区刷成噪音；
+/// 用户要的路径是"转写成文字 → 自己选中 → 查意思 → 需要时才出卡"。
+#[tauri::command]
+pub fn set_auto_cards(
+    state: tauri::State<'_, Arc<AsrPipeline>>,
+    enabled: bool,
+) -> Result<bool, IpcErrorDto> {
+    state.set_auto_cards(enabled);
+    Ok(state.auto_cards())
 }
 
 #[cfg(test)]
@@ -747,6 +780,17 @@ mod tests {
         assert!(pipeline.take_stable_if_new("灰度范围限定"));
         assert!(!pipeline.take_stable_if_new("灰度范围限定"));
         assert!(pipeline.take_stable_if_new("两地三中心"));
+    }
+
+    /// 自动出卡默认关：开会时只积累转写文字，卡片区不该自己长卡片。
+    #[test]
+    fn auto_cards_default_off_and_switchable() {
+        let pipeline = pipeline();
+        assert!(!pipeline.auto_cards(), "默认不自动出卡");
+        pipeline.set_auto_cards(true);
+        assert!(pipeline.auto_cards());
+        pipeline.set_auto_cards(false);
+        assert!(!pipeline.auto_cards());
     }
 
     #[test]

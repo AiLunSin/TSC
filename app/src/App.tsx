@@ -44,7 +44,7 @@ function asrHintText(running: boolean, text: string): string {
   }
   return running
     ? "系统音频实时识别，等待说话…"
-    : "点「开始实时转写」后按系统音频出卡；也可直接粘贴会议文本。";
+    : "点「开始实时转写」，识别到的句子会逐条进入下方转写区。";
 }
 
 function formatElapsed(totalSeconds: number): string {
@@ -76,6 +76,7 @@ export default function App() {
   const [asrText, setAsrText] = useState("");
   const [asrError, setAsrError] = useState("");
   const [asrStats, setAsrStats] = useState("");
+  const [autoCards, setAutoCards] = useState(false);
   const [lines, setLines] = useState<TranscriptLineDto[]>([]);
   const [selection, setSelection] = useState("");
   const [explainBusy, setExplainBusy] = useState(false);
@@ -257,18 +258,38 @@ export default function App() {
     }
   }
 
+  async function toggleAutoCards(): Promise<void> {
+    try {
+      const next = await invokeCommand<boolean>("set_auto_cards", { enabled: !autoCards });
+      setAutoCards(next);
+    } catch {
+      setCardError("自动出卡开关暂不可用。");
+    }
+  }
+
+  async function clearCards(): Promise<void> {
+    try {
+      await invokeCommand<number>("clear_cards");
+      setDetail(null);
+      await loadCards();
+    } catch {
+      setCardError("清空卡片失败，请稍后重试。");
+    }
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function refreshAsr(): Promise<void> {
       try {
-        const [running, text, error, stats] = await invokeCommand<[boolean, string, string, string]>(
-          "asr_status",
-        );
+        const [running, text, error, stats, autoCardsOn] = await invokeCommand<
+          [boolean, string, string, string, boolean]
+        >("asr_status");
         if (!cancelled) {
           setAsrRunning(running);
           setAsrText(text);
           setAsrError(error);
           setAsrStats(stats);
+          setAutoCards(autoCardsOn);
         }
       } catch {
         // 保留上一次状态
@@ -401,7 +422,23 @@ export default function App() {
           <section className="panel cards">
             <div className="panel-head">
               <h2>关键词卡片</h2>
-              <span className="hint">粘贴会议文本，自动提取关键词并生成卡片</span>
+              <div className="settings-actions">
+                <span className="hint">
+                  {cards.length === 0
+                    ? "按需生成，不随转写自动刷卡片"
+                    : `共 ${String(cards.length)} 张`}
+                </span>
+                <button
+                  className="btn"
+                  type="button"
+                  disabled={cards.length === 0}
+                  onClick={() => {
+                    void clearCards();
+                  }}
+                >
+                  清空
+                </button>
+              </div>
             </div>
             <div className="settings-section">
               <div className="settings-actions">
@@ -425,6 +462,16 @@ export default function App() {
                   </span>
                 )}
               </div>
+              <label className="checkline">
+                <input
+                  type="checkbox"
+                  checked={autoCards}
+                  onChange={() => {
+                    void toggleAutoCards();
+                  }}
+                />
+                <span>转写时自动出卡（默认关；开会中建议保持关闭，只留转写文字）</span>
+              </label>
             </div>
             <div className="settings-section transcript-section">
               <div className="panel-head">
@@ -539,7 +586,9 @@ export default function App() {
               </p>
             )}
             {cards.length === 0 ? (
-              <p className="hint">暂无卡片。</p>
+              <p className="hint">
+                暂无卡片。在转写区选中文字 → 查意思 → 生成卡片；也可以直接粘贴会议文本生成。
+              </p>
             ) : (
               <ul className="card-list">
                 {cards.map((card) => (

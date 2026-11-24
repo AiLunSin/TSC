@@ -1756,3 +1756,34 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 - 真实 Key 下的释义质量与端到端时延（需真机配 Key 后手测）。
 - 选中跨多句时的语义完整性：目前按原样把整段选中文本发出，未做断句。
+
+## §40 转写不再自动出卡，改为按需生成（2026-11-24）
+
+真机反馈：§39 上线后转写正常了，但"总是在下边自动生产卡片"——卡片区被自动生成的碎片卡淹没，反而盖住了真正想要的转写文字。
+
+原因：两条自动入口都在往 `CardStore` 塞卡片，且没有开关。
+
+| # | 自动入口 | 触发频率 | 结果 |
+|---|---|---|---|
+| 1 | ASR 稳定句 `cards.ingest` | 每个收句（静音端点/4s 上限） | 每句抽 1~8 个关键词，各出一张卡 |
+| 2 | UIA 字幕 `cards.ingest` | 字幕每次变化 | 与 ASR 重复出卡，且字幕本身有滚动残句 |
+
+修法（按需生成，自动路径默认关）：
+
+- **开关**：`AsrPipeline::auto_cards`（`AtomicBool`，默认 `false`）；两条自动入口都改为 `if pipeline.auto_cards()` 才 ingest。稳定句去重（`take_stable_if_new`）仍每句调用，避免脚本重复收句把后续去重状态弄脏。
+- **命令**：新增 `set_auto_cards(enabled) -> bool`；`asr_status` 扩为 5 元组，第 5 位回传开关态，避免界面与后端各存一份状态。
+- **界面**：转写按钮下方加复选框「转写时自动出卡（默认关；开会中建议保持关闭，只留转写文字）」。
+- **清空**：新增 `clear_cards -> usize` 与卡片区「清空」按钮、卡片数量显示，用户可随时丢掉历史卡片；`CardStore::clear` 幂等。
+- 用户主路径不变：转写 → 选中文字 → 查意思 → 生成卡片；手动「会议文本 → 生成卡片」入口保留。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**60 passed / 0 failed**（新增 2 例：自动出卡默认关且可切换、清空返回数量且幂等）。
+- `clippy --all-targets --features llm-https -- -D warnings`、`rustfmt --check`、B4 零转录、分层、UI 集成、G2 宣称、`check-bindings`（13 个 DTO）全部 rc=0。
+- `tsc --noEmit`、`eslint .`、`npm run build` 通过。
+- 构建产物：`target/debug/meeting-copilot-desktop.exe`（`--features llm-https`，16:26，21.0 MB）。
+
+未验证：
+
+- 真机上开启自动出卡后的卡片密度是否仍偏高（限流策略未做，先以默认关闭规避）。
+

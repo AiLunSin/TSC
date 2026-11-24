@@ -152,6 +152,17 @@ impl CardStore {
         }
     }
 
+    /// 清空本次会话的卡片，供界面上的"清空"按钮使用。
+    pub fn clear(&self) -> Result<usize, IpcErrorDto> {
+        let mut store = self
+            .cards
+            .lock()
+            .map_err(|_| IpcErrorDto::new("card_store_unavailable", "卡片存储不可用。", true))?;
+        let removed = store.len();
+        store.clear();
+        Ok(removed)
+    }
+
     /// 从会议文本中提取关键词：jieba TF-IDF 排序，过滤停用词与单字。
     fn extract_keywords(&self, text: &str) -> Vec<String> {
         let mut result: Vec<String> = Vec::new();
@@ -286,6 +297,12 @@ pub fn ingest_text(
     state.ingest(&text)
 }
 
+/// 清空当前会话的全部卡片，返回被清掉的数量。
+#[tauri::command]
+pub fn clear_cards(state: tauri::State<'_, Arc<CardStore>>) -> Result<usize, IpcErrorDto> {
+    state.clear()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,6 +384,18 @@ mod tests {
         assert!(added >= 1);
         assert!(!store.cards().is_empty());
         assert!(store.ingest("   ").is_err());
+    }
+
+    /// 界面上的「清空」：清掉本次会话累积的卡片，返回清掉的数量。
+    #[test]
+    fn clear_removes_all_cards_and_reports_count() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        let added = store.ingest("飞书 钉钉 腾讯会议").expect("added");
+        assert!(added >= 1);
+        assert_eq!(store.clear().expect("clear"), added);
+        assert!(store.cards().is_empty());
+        // 再清一次应为 0：清空是幂等的，不需要界面额外判重。
+        assert_eq!(store.clear().expect("clear"), 0);
     }
 
     /// 投屏时 G1 硬闸门直接拒绝（`prefilter.rs:76`），本地入口不出卡。
