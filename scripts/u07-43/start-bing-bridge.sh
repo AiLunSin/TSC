@@ -133,10 +133,18 @@ TUNNEL_PID=""
 stop_pid() {
   local pid="${1:-}"
   [[ -n "${pid}" ]] || return 0
+  # `$!` 是 MSYS 内部 PID，与 Windows PID 不是同一个编号。早先把这个数字直接
+  # 交给 Stop-Process -Id 会杀到恰好占用该 WINPID 的无关进程。用 ps -W 精确
+  # 映射后再 taskkill；kill 对 MSYS 子进程（桥）有效，taskkill 对原生 exe
+  # （cloudflared）兜底。
+  local winpid=""
+  if command -v ps >/dev/null 2>&1 && ps -W >/dev/null 2>&1; then
+    winpid="$(ps -W -p "${pid}" 2>/dev/null | awk 'NR==2 {print $4}')"
+  fi
   kill "${pid}" 2>/dev/null || true
-  if command -v powershell >/dev/null 2>&1; then
-    powershell -NoProfile -Command "Stop-Process -Id ${pid} -Force -ErrorAction SilentlyContinue" \
-      >/dev/null 2>&1 || true
+  if [[ -n "${winpid}" && "${winpid}" != "${pid}" ]] \
+    && command -v taskkill >/dev/null 2>&1; then
+    taskkill //PID "${winpid}" //F >/dev/null 2>&1 || true
   fi
 }
 cleanup() {
@@ -145,6 +153,25 @@ cleanup() {
   TUNNEL_PID=""; BRIDGE_PID=""
 }
 trap cleanup EXIT INT TERM
+
+# 端口已被占用时，新起的 python 桥会立刻因 bind 失败退出，但下面的 /health
+# 探测会连到**旧桥**并返回成功，于是多个实例并存：各自起隧道、各自覆盖
+# config.env，端点漂移且旧桥永远清不掉。启动前先明确拒绝。
+if "${PY}" - "${PORT}" <<'PYEOF'
+import socket, sys
+s = socket.socket()
+s.settimeout(0.5)
+try:
+    occupied = s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0
+finally:
+    s.close()
+sys.exit(0 if occupied else 1)
+PYEOF
+then
+  echo "端口 ${PORT} 已被占用：可能已有 --serve-only 实例或旧桥仍在运行。" >&2
+  echo "先停掉旧进程（Get-Process cloudflared,python | Stop-Process），或换 --port N。" >&2
+  exit 2
+fi
 
 : >"${BRIDGE_LOG}"
 : >"${TUNNEL_LOG}"
@@ -169,6 +196,13 @@ urllib.request.urlopen(sys.argv[1], timeout=2).read()
 PYEOF
 then
   echo "桥未启动，日志尾部：" >&2
+  tail -15 "${BRIDGE_LOG}" >&2 || true
+  exit 2
+fi
+# health 只证明「有东西在 8788 上」，还要确认是**自己刚启动的那个进程**：
+# 否则端口竞争时会把别人的桥当成自己的，继续起隧道并覆盖 config.env。
+if ! kill -0 "${BRIDGE_PID}" 2>/dev/null; then
+  echo "桥进程已退出（端口 ${PORT} 可能被占用），不启动隧道。日志尾部：" >&2
   tail -15 "${BRIDGE_LOG}" >&2 || true
   exit 2
 fi
