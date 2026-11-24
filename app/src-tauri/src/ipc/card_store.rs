@@ -24,6 +24,7 @@ use meeting_copilot_domain::vo::{
 
 use crate::ipc::card_gate::{self, LocalGate};
 use crate::ipc::dto::IpcErrorDto;
+use crate::privacy::PrivacyMode;
 
 const STOPWORDS: &[&str] = &[
     "我们", "你们", "他们", "这个", "那个", "就是", "然后", "可以", "一个", "什么", "怎么", "现在",
@@ -44,15 +45,22 @@ pub struct CardStore {
     sequence: AtomicU64,
     jieba: Jieba,
     tfidf: TfIdf,
+    privacy: PrivacyMode,
 }
 
 impl CardStore {
     pub(crate) fn new() -> Self {
+        Self::new_with_privacy(PrivacyMode::from_env())
+    }
+
+    /// 显式给定隐私态：测试用固定值，生产由 `new()` 从开发期开关读取。
+    pub(crate) fn new_with_privacy(privacy: PrivacyMode) -> Self {
         Self {
             cards: Mutex::new(Vec::new()),
             sequence: AtomicU64::new(0),
             jieba: Jieba::new(),
             tfidf: TfIdf::new(None::<&mut &[u8]>, KeywordExtractConfig::default()),
+            privacy,
         }
     }
 
@@ -67,8 +75,12 @@ impl CardStore {
         }
         let excerpt: String = text.trim().chars().take(80).collect();
         let now = now_ms();
-        let Some(gate) = card_gate::evaluate(text, self.sequence.load(Ordering::Relaxed), now)
-        else {
+        let Some(gate) = card_gate::evaluate(
+            text,
+            self.sequence.load(Ordering::Relaxed),
+            now,
+            self.privacy,
+        ) else {
             return Ok(0);
         };
         if matches!(&gate.decision, GateDecision::Deny { .. }) {
@@ -84,7 +96,7 @@ impl CardStore {
                 store.remove(0);
             }
             let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
-            match build_draft(sequence, &keyword, &excerpt, &gate) {
+            match build_draft(sequence, &keyword, &excerpt, &gate, self.privacy) {
                 Some(draft) => {
                     store.push(CardSnapshotEntry::Draft(draft));
                     added += 1;
@@ -135,6 +147,7 @@ fn build_draft(
     keyword: &str,
     excerpt: &str,
     gate: &LocalGate,
+    privacy: PrivacyMode,
 ) -> Option<KeywordCardDraft> {
     let title: String = keyword.chars().take(TitleText::LIMIT).collect();
     let summary: String = excerpt.chars().take(ConclusionText::LIMIT).collect();
@@ -158,8 +171,8 @@ fn build_draft(
     let env = KeywordCardEnv {
         authorization_status: AuthorizationStatus::Granted,
         authorization_revoked: false,
-        screen_share: false,
-        emergency_masked: false,
+        screen_share: privacy.screen_share,
+        emergency_masked: privacy.emergency_masked,
         current_session: &gate.session_id,
         card_status: KeywordCardStatus::Displayed,
     };
@@ -234,7 +247,7 @@ mod tests {
 
     #[test]
     fn extracts_chinese_and_acronym_keywords() {
-        let store = CardStore::new();
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
         let keywords =
             store.extract_keywords("我们确认 SLA 99.9% 和灰度范围，阿里云华东两站点优先。");
         assert!(!keywords.is_empty());
@@ -246,7 +259,7 @@ mod tests {
 
     #[test]
     fn stops_on_stopwords_and_short_tokens() {
-        let store = CardStore::new();
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
         assert!(!store
             .extract_keywords("我们 可以 这个 那个")
             .iter()
@@ -256,9 +269,17 @@ mod tests {
 
     #[test]
     fn gate_allows_local_clickable_card_with_real_allow_trace() {
-        let gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000).expect("gate");
+        let gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000, PrivacyMode::default())
+            .expect("gate");
         assert!(matches!(&gate.decision, GateDecision::Allow { .. }));
-        let draft = build_draft(1, "阿里云", "会议讨论阿里云方案", &gate).expect("draft");
+        let draft = build_draft(
+            1,
+            "阿里云",
+            "会议讨论阿里云方案",
+            &gate,
+            PrivacyMode::default(),
+        )
+        .expect("draft");
         assert_eq!(
             draft.click_state,
             meeting_copilot_domain::model::gate_keyword::ClickState::Enabled
@@ -276,22 +297,74 @@ mod tests {
 
     #[test]
     fn denied_gate_produces_no_card() {
-        let mut gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000).expect("gate");
+        let mut gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000, PrivacyMode::default())
+            .expect("gate");
         gate.decision = GateDecision::Deny {
             reason: meeting_copilot_domain::model::gate::GateRejectReason::ConsentMissing,
             stopped_at: meeting_copilot_domain::model::gate::GateStage::G1,
             per_stage: meeting_copilot_domain::model::gate::PerStageResults::empty(),
             cooldown_until_ms: None,
         };
-        assert!(build_draft(1, "阿里云", "会议讨论阿里云方案", &gate).is_none());
+        assert!(build_draft(
+            1,
+            "阿里云",
+            "会议讨论阿里云方案",
+            &gate,
+            PrivacyMode::default()
+        )
+        .is_none());
     }
 
     #[test]
     fn ingest_appends_cards_but_rejects_empty_text() {
-        let store = CardStore::new();
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
         let added = store.ingest("飞书 钉钉 腾讯会议").expect("added");
         assert!(added >= 1);
         assert!(!store.cards().is_empty());
         assert!(store.ingest("   ").is_err());
+    }
+
+    /// 投屏时 G1 硬闸门直接拒绝（`prefilter.rs:76`），本地入口不出卡。
+    #[test]
+    fn screen_share_blocks_card_creation_at_g1() {
+        let privacy = PrivacyMode {
+            screen_share: true,
+            emergency_masked: false,
+        };
+        let gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000, privacy).expect("gate");
+        assert!(matches!(
+            &gate.decision,
+            GateDecision::Deny {
+                stopped_at: meeting_copilot_domain::model::gate::GateStage::G1,
+                ..
+            }
+        ));
+        let store = CardStore::new_with_privacy(privacy);
+        assert_eq!(
+            store.ingest("会议讨论阿里云方案").expect("ingest"),
+            0,
+            "投屏下不应产出卡片"
+        );
+    }
+
+    /// 紧急遮蔽不拦 G1，但卡片必须不可点（`keyword.rs:186`）。
+    #[test]
+    fn emergency_mask_keeps_card_but_disables_click() {
+        let privacy = PrivacyMode {
+            screen_share: false,
+            emergency_masked: true,
+        };
+        let gate = card_gate::evaluate("会议讨论阿里云方案", 1, 10_000, privacy).expect("gate");
+        assert!(matches!(&gate.decision, GateDecision::Allow { .. }));
+        let draft = build_draft(1, "阿里云", "会议讨论阿里云方案", &gate, privacy)
+            .expect("遮蔽下仍出卡，只隐藏正文");
+        assert_eq!(
+            draft.click_state,
+            meeting_copilot_domain::model::gate_keyword::ClickState::Disabled(
+                meeting_copilot_domain::model::gate_keyword::ClickDisabledReason::EmergencyMasked
+            )
+        );
+        assert!(draft.click_state_is_consistent());
+        assert_eq!(draft.gate_decision_ref.trace_id(), &gate.trace_id);
     }
 }

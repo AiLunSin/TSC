@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 mod ipc;
+mod privacy;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;

@@ -22,6 +22,8 @@ use meeting_copilot_domain::vo::{
     Confidence, ProviderId, SessionId, TraceId, UtteranceRef, UtteranceText,
 };
 
+use crate::privacy::PrivacyMode;
+
 static SANITIZER: PassthroughSanitizer = PassthroughSanitizer;
 static AUDIT_SINK: NoopSink = NoopSink;
 const LOCAL_PROVIDER: &str = "local-desktop";
@@ -33,7 +35,14 @@ pub(super) struct LocalGate {
 }
 
 /// 对一段本地文本执行完整 B4 判定；装配失败一律返回 `None`（fail-closed）。
-pub(super) fn evaluate(text: &str, sequence: u64, now_ms: u64) -> Option<LocalGate> {
+///
+/// `privacy` 只影响 G1 里的投屏判定；紧急遮蔽在卡片准入阶段生效（见 `card_store`）。
+pub(super) fn evaluate(
+    text: &str,
+    sequence: u64,
+    now_ms: u64,
+    privacy: PrivacyMode,
+) -> Option<LocalGate> {
     let session_id = SessionId::new("desktop-local-session").ok()?;
     // 授权时间戳在领域模型里是毫秒 `i64`，门控时钟是 `u64`。
     let granted_at_ms = i64::try_from(now_ms).ok()?;
@@ -134,7 +143,7 @@ pub(super) fn evaluate(text: &str, sequence: u64, now_ms: u64) -> Option<LocalGa
         network: NetworkState::Online,
         session_state: SessionState::Listening,
         silent_period: false,
-        screen_share: false,
+        screen_share: privacy.screen_share,
         consent_confirmed: true,
         auto_suggestion_enabled: true,
         session_suppressed: false,
