@@ -1662,3 +1662,38 @@ U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，�
 
 - 真实会议音频的端到端（需真机会议与默认输出设备有声音）。若诊断显示"音频 0.0s / 0 片"，说明系统输出没有声音进入环回（未播放、或会议用非默认设备），与本次修复无关。
 - 4s 强制收句在极长句场景可能切断语义，属已知取舍；后续可改为按标点/静音能量自适应。
+
+## §37 UIA 字幕把控件树当字幕、抢占 ASR 文本位（2026-11-24）
+
+现象（真机）：开始实时转写后，提示位显示的是腾讯会议窗口的一整串控件标识——
+
+```
+A-Ss; EmojiFloatWndWidget-InMeeting DanmuContainer ComingBulletContainer BulletContainer
+side_bar_select_panel 更多操作 pageContainer home_meeting_list meeting_list_meeting_item
+main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 最大化 关闭
+```
+
+即：既看不到识别文本，又可能被这串垃圾抽出关键词，生成毫无意义的卡片。
+
+根因：
+
+| # | 位置 | 问题 |
+|---|---|---|
+| 1 | `platform-win/src/subtitle.rs::read_window_text` | 把窗口内**所有**后代元素的 UIA `Name` 全部收下（含类名、容器名、按钮名、时间/会议号），`merge_names` 拼接后当作字幕文本 |
+| 2 | `ipc/asr.rs::ensure_subtitle` 的 sink | 字幕事件直接 `set_last_text` 并 `cards.ingest`，与 ASR 共用同一个文本位与卡片来源，互相覆盖 |
+
+修复：
+
+- **平台层过滤**（`subtitle.rs` 新增 `looks_like_subtitle` / `subtitle_candidates`）：只保留"像一句话"的条目——长度 6~200、不含 `_`/`;`、纯英文要求 ≥3 个词、含中文时 ASCII 标识符占比不得超过一半、并排除固定的中文控件标签（更多操作/最小化/会议号…）。过滤后一个都不剩时返回 `NoText`（健康度 `degraded`），不再把控件树当字幕。
+- **双通道分离**（`ipc/asr.rs`）：字幕文本改存 `subtitle_text`，不再覆盖 `last_text`；`asr_status` 的第一项文本改走 `display_text()`——ASR 有内容用 ASR，ASR 为空才回退字幕。卡片仍可由通过过滤的字幕文本产生，但不会再被控件树污染。
+
+验证：
+
+- 新增 4 例：`rejects_control_tree_junk_from_tencent_meeting`（把真机那串原文逐条断言全部拒绝）、`keeps_sentence_like_subtitles`、`subtitle_filter_drops_short_labels_and_numbers`、`asr_text_wins_over_subtitle_text`。
+- `cargo test -p meeting-copilot-platform-win -p meeting-copilot-desktop`：**30 + 55 passed / 0 failed**（平台层 1 ignored 冒烟照旧）。
+- `clippy -D warnings`（含 `--all-targets`）、`fmt --check`、B4 源码/零转录、分层、UI、密钥与文档扫描全部 rc=0。
+
+未验证：
+
+- 腾讯会议当前版本窗口内是否真存在字幕元素——本仓真机上一直为 0，过滤后该通道预期稳定显示"降级"，这是如实状态，不宣称字幕实时可用。
+- 过滤词表是按真机抓到的样本归纳的，换版本/换应用可能需要补词。

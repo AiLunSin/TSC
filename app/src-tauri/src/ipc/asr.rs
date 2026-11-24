@@ -81,6 +81,8 @@ pub struct AsrPipeline {
     running: AtomicBool,
     generation: AtomicU64,
     last_text: Mutex<String>,
+    /// UIA 字幕通道的文本，与 ASR 分开存放：ASR 有内容时优先展示 ASR。
+    subtitle_text: Mutex<String>,
     last_error: Mutex<String>,
     child: Mutex<Option<Child>>,
     cards: Arc<CardStore>,
@@ -100,6 +102,7 @@ impl AsrPipeline {
             running: AtomicBool::new(false),
             generation: AtomicU64::new(0),
             last_text: Mutex::new(String::new()),
+            subtitle_text: Mutex::new(String::new()),
             last_error: Mutex::new(String::new()),
             child: Mutex::new(None),
             cards,
@@ -115,6 +118,12 @@ impl AsrPipeline {
 
     fn set_last_text(&self, text: &str) {
         if let Ok(mut last) = self.last_text.lock() {
+            *last = text.to_owned();
+        }
+    }
+
+    fn set_subtitle_text(&self, text: &str) {
+        if let Ok(mut last) = self.subtitle_text.lock() {
             *last = text.to_owned();
         }
     }
@@ -148,9 +157,11 @@ impl AsrPipeline {
         let pipeline = Arc::downgrade(self);
         let sink = Box::new(move |event: SubtitleEvent| {
             let text = event.text.as_str();
-            if let Some(pipeline) = pipeline.upgrade() {
-                pipeline.set_last_text(text);
-            }
+            let Some(pipeline) = pipeline.upgrade() else {
+                return;
+            };
+            // 字幕通道独立存放：不能让 UIA 文本覆盖 ASR 的实时文本。
+            pipeline.set_subtitle_text(text);
             let _ = cards.ingest(text);
         });
         let _ = self.subtitle.subscribe(sink);
@@ -346,6 +357,18 @@ impl AsrPipeline {
 
     pub fn last_text(&self) -> String {
         self.last_text
+            .lock()
+            .map(|text| text.clone())
+            .unwrap_or_default()
+    }
+
+    /// 界面文本位：ASR 有实时文本就用 ASR，否则回退到 UIA 字幕通道。
+    pub fn display_text(&self) -> String {
+        let asr = self.last_text();
+        if !asr.is_empty() {
+            return asr;
+        }
+        self.subtitle_text
             .lock()
             .map(|text| text.clone())
             .unwrap_or_default()
@@ -551,7 +574,7 @@ pub fn asr_status(
 ) -> Result<(bool, String, String, String), IpcErrorDto> {
     Ok((
         state.is_running(),
-        state.last_text(),
+        state.display_text(),
         state.last_error(),
         state.diagnostics(),
     ))
@@ -661,6 +684,16 @@ mod tests {
         let text = pipeline.diagnostics();
         assert!(text.contains("0.5s"), "{text}");
         assert!(text.contains("3 片"), "{text}");
+    }
+
+    /// UIA 字幕不得覆盖 ASR 实时文本；ASR 空时才回退字幕。
+    #[test]
+    fn asr_text_wins_over_subtitle_text() {
+        let pipeline = pipeline();
+        pipeline.set_subtitle_text("字幕通道文本");
+        assert_eq!(pipeline.display_text(), "字幕通道文本");
+        pipeline.set_last_text("我们确认灰度范围");
+        assert_eq!(pipeline.display_text(), "我们确认灰度范围");
     }
 
     #[test]

@@ -29,7 +29,7 @@
 | U-09 检索源接入 | **A~F 实现完成（2026-11-24）**：默认零源、`providers.json` 校验、注册表、健康分类、HTTPS JSON 适配器、按需 runner；真实端点 H-34-G 与 200 条样本待验收 |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可、CI 8/8 全绿、历史路径清理 |
 
-最近一次全量基线（2026-11-24 实测）：**1007 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **54 例**、平台层 **27 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。桌面层由 43 例增至 54 例：隐私开关与投屏/紧急遮蔽 4 例，识别协议解析、去重与采集诊断 5 例。
+最近一次全量基线（2026-11-24 实测）：**1011 passed / 0 failed / 12 ignored**（含 P-UI 桌面层 **55 例**、平台层 **30 例**另 1 个 ignored 冒烟；两者均可单列运行）；`fmt --check`、`clippy -D warnings`、分层、密钥、许可证门禁通过。桌面层由 43 例增至 55 例：隐私开关与投屏/紧急遮蔽 4 例，识别协议解析、去重与采集诊断 5 例，文本位优先级 1 例；平台层新增 UIA 字幕过滤 3 例。
 
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95~104 `passed`。
 
@@ -163,6 +163,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
 - 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（14 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`start_asr`/`stop_asr`/`asr_status`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
 - 采集状态栏由 `capture_status` 驱动：系统音频通道读取 WASAPI 环回健康度（可用即"就绪"）；字幕文本通道由 UIA 轮询驱动，检测到会议即自动启动（窗口无可读文本时"降级"、无会议窗口时"未启用"）；本地 ASR 读取实时管线运行状态（运行中即"就绪"）。识别进程异常退出时，`asr_status` 第三项回传可见原因（缺 vosk、模型不可读、无音频设备），不再静默失败。
+- UIA 字幕通道只接受"像一句话"的元素（长度、中英文标识符占比、固定控件标签词表三重过滤）；腾讯会议窗口里那些 `DanmuContainer`／`pageContainer`／`最小化` 之类的控件名会被全部丢弃，该通道因此常态为"降级"而不是假装就绪。字幕文本与 ASR 文本**分开存放**：文本位优先展示 ASR，ASR 为空才回退字幕，避免两条通道互相覆盖。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 2 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。
 - 凭据经 `crates/platform-win/src/secure_store.rs` 写入 Windows 凭据管理器（唯一目标名）；非敏感配置为 `settings.json` **恰 4 键**、原子写、损坏回默认；Key 固定掩码 `masked`、不落盘明文、不进日志/审计/回放。
 - 探针经 `ProbeExecutor` 端口执行；**生产探针默认关闭**，仅 `--features llm-https` 显式开启；设置页真机第 1~6、9、10 项已通过，卡片渲染与投屏遮蔽仍未判定，**不宣称整体界面已验收**。

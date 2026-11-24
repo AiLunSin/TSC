@@ -106,6 +106,75 @@ fn merge_names(names: &[String]) -> String {
     truncate_chars(&merged, UtteranceText::LIMIT)
 }
 
+/// UIA 控件名白名单化：腾讯会议窗口的 `Name` 里混着大量控件标识
+///（`DanmuContainer`、`pageContainer`、`最小化`、`15:37-16:37`…），
+/// 直接当字幕会把整棵控件树写进卡片，必须按"像不像一句话"过滤。
+fn looks_like_subtitle(text: &str) -> bool {
+    let trimmed = text.trim();
+    let chars = trimmed.chars().count();
+    // 太短多半是按钮/标签；太长多半是整块容器文本。
+    if !(6..=200).contains(&chars) {
+        return false;
+    }
+    // 控件标识：下划线、分号、纯 ASCII 驼峰串都不像自然语言。
+    if trimmed.contains('_') || trimmed.contains(';') {
+        return false;
+    }
+    let cjk = trimmed
+        .chars()
+        .filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c))
+        .count();
+    let ascii_word = trimmed
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .count();
+    if cjk == 0 {
+        // 纯英文：要求像句子（至少 3 个词），排除 Base64/哈希/标识符。
+        return trimmed.split_whitespace().count() >= 3 && ascii_word < chars;
+    }
+    // 含中文：ASCII 标识符占比过高说明是控件名拼接。
+    if ascii_word * 2 > chars {
+        return false;
+    }
+    // 中文控件标签短且固定，长度阈值挡不住"会议号：446 586 518"这类，单独按词表排除。
+    const UI_LABELS: &[&str] = &[
+        "更多操作",
+        "最小化",
+        "最大化",
+        "关闭",
+        "进行中",
+        "已结束",
+        "未开始",
+        "会议号",
+        "复制会议",
+        "共享屏幕",
+        "麦克风",
+        "摄像头",
+        "挂断",
+        "参会人",
+        "会议设置",
+        "云录制",
+        "表情回应",
+        "举手",
+        "申请发言",
+        "聊天记录",
+        "查看全部",
+        "点击查看",
+        "暂无数据",
+        "正在加载",
+    ];
+    !UI_LABELS.contains(&trimmed)
+}
+
+/// 从一堆 UIA `Name` 中挑出可能是字幕的条目。
+fn subtitle_candidates(names: &[String]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|name| looks_like_subtitle(name))
+        .cloned()
+        .collect()
+}
+
 fn build_event(text: String, platform: Platform, start_ms: u64) -> Option<SubtitleEvent> {
     let text = UtteranceText::new(truncate_chars(&text, UtteranceText::LIMIT)).ok()?;
     let char_count = u64::try_from(text.char_count()).unwrap_or(u64::MAX);
@@ -345,7 +414,7 @@ mod imp {
         TreeScope_Descendants, UIA_TextPatternId,
     };
 
-    use super::{merge_names, ocr_fallback_enabled, ScanOutcome};
+    use super::{merge_names, ocr_fallback_enabled, subtitle_candidates, ScanOutcome};
 
     const MAX_ELEMENTS: i32 = 600;
     const RPC_E_CHANGED_MODE: i32 = 0x8001_0106u32 as i32;
@@ -485,7 +554,8 @@ mod imp {
                 last_error.unwrap_or_else(|| "读取窗口文本失败".to_owned()),
             );
         }
-        let text = merge_names(&names);
+        let candidates = subtitle_candidates(&names);
+        let text = merge_names(&candidates);
         if text.is_empty() {
             return ScanOutcome::NoText { elements };
         }
@@ -563,6 +633,42 @@ mod tests {
         assert_eq!(platform_for("腾讯会议"), Platform::TencentMeeting);
         assert_eq!(platform_for("飞书"), Platform::Feishu);
         assert_eq!(platform_for("微信"), Platform::TencentMeeting);
+    }
+
+    #[test]
+    fn rejects_control_tree_junk_from_tencent_meeting() {
+        // 真机抓到的原文：整棵控件树的 `Name` 拼接，旧逻辑把它当字幕写进卡片。
+        let junk = vec![
+            "A-Ss; EmojiFloatWndWidget-InMeeting".to_owned(),
+            "DanmuContainer ComingBulletContainer BulletContainer side_bar_select_panel".to_owned(),
+            "pageContainer home_meeting_list meeting_list_meeting_item main_container".to_owned(),
+            "time_item label_wrap left_padding 15:37-16:37 right_padding".to_owned(),
+            "446 586 518 state_item".to_owned(),
+            "更多操作".to_owned(),
+            "最小化".to_owned(),
+            "关闭".to_owned(),
+        ];
+        assert!(subtitle_candidates(&junk).is_empty());
+    }
+
+    #[test]
+    fn keeps_sentence_like_subtitles() {
+        let names = vec![
+            "我们确认一下灰度范围，先在两站点做".to_owned(),
+            "这个方案的风险点在哪里".to_owned(),
+            "Let us review the deployment plan tomorrow".to_owned(),
+        ];
+        let kept = subtitle_candidates(&names);
+        assert_eq!(kept.len(), 3, "{kept:?}");
+    }
+
+    #[test]
+    fn subtitle_filter_drops_short_labels_and_numbers() {
+        assert!(!looks_like_subtitle("进行中"));
+        assert!(!looks_like_subtitle("15:37-16:37"));
+        assert!(!looks_like_subtitle("会议号：446 586 518"));
+        assert!(!looks_like_subtitle(""));
+        assert!(looks_like_subtitle("我们把灰度范围限定在华东两个站点"));
     }
 
     #[test]
