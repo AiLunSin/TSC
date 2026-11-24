@@ -159,7 +159,7 @@ bash scripts/test-name-inventory.sh
 
 > 并发注意：`platform-win` 的 3 个 `secure_store` 用例并行写同一凭据目标会互踩（`test-key-idempotent` vs `test-key-roundtrip`）。若随机失败，先按串行复核：`cargo test -p meeting-copilot-platform-win -p meeting-copilot-desktop -- --test-threads=1`。这是既存的测试隔离缺陷，不是本轮改动引入。
 
-验收：以 README「当前进度」的最近一次全量基线为准（当前 `1049 passed / 0 failed / 12 ignored`，桌面层 93 例、平台层 30 例）；四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
+验收：以 README「当前进度」的最近一次全量基线为准（当前 `1059 passed / 0 failed / 12 ignored`，桌面层 93 例、平台层 30 例）；四条门禁 rc=0。任何一条不通过，先停下修基线，不要继续后面的步骤。
 
 ### 8.2 关闭 U-08 的"真实 LLM 采样"子项
 

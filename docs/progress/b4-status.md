@@ -80,10 +80,10 @@
 | G4 预算与冷却 | 已实现（AC-B4-24~27，含租约 3 条；真机性能仍未判定） |
 | AC-B4-48 200 例回放 | closed（§11，W-B4-41；`replay_200_cases_*` 已交付） |
 | AC-B4-51~57 关键词卡片契约 | closed（§11，W-B4-34~40） |
-| AC-B4-58~64 39 引用对齐校验 | 规格已定、待实现（§12；AC-B4-58~64 为 `pending`；不建 39 实体） |
-| 13.3 回放本体 | 规格已定、待实现（§20；AC-B4-95~104 为 `pending`；`tests/replay/` 仍不存在） |
-| 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 未做（38/39/51 与关键词卡片的边界已在规格中定义） |
-| 真实检索源连通 / 真实 LLM 冷却 | 未判定（仍为既有 9 个 ignored） |
+| AC-B4-58~64 39 引用对齐校验 | **已完成（2026-11-22，§13 关闭）**：AC-B4-58~64 全部 `passed` |
+| 13.3 回放本体 | **已完成（2026-11-22，§20 P9 关闭）**：AC-B4-95~104 `passed`；`crates/application/tests/replay/` 仍不存在（AC-B4-57 口径） |
+| 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 38→§15、39→§13、51→§53 均已关闭；41.5/42/43/52 已实现并提交（`c96f381`），U-07-43/U-07-52 已关闭 |
+| 真实检索源连通 / 真实 LLM 冷却 | 未判定（`#[ignore]` 13 个真实 attribute，默认特性 12） |
 
 ## §6 复跑方法
 
@@ -214,7 +214,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | AC-B4-40 | passed | 5 常量各 1 处；`GapKind` 6 变体 |
 | AC-B4-41 | passed | `Cargo.toml`/`Cargo.lock` 零 diff；`cargo deny` 四项 |
 | AC-B4-42 | passed | `scan-secrets.sh`、`--rule=zero-transcript`、`scan-secrets-docs.sh --all-md` |
-| AC-B4-43 | passed | `--rule=source` 退 0；9 个 `#[ignore]` 不变 |
+| AC-B4-43 | passed | `--rule=source` 退 0；`#[ignore]` 13 个真实 attribute 不变 |
 | AC-B4-44 | passed | `--list --ignored` = 9；`check-g2-claims.sh` = 0 |
 | AC-B4-45 | not-applicable | macOS 无设备（D-B4-04） |
 | AC-B4-46 | passed | `replay_interface_is_io_free`；`api.rs` 4 个 `pub fn` |
@@ -230,7 +230,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | AC-B4-56 | passed | 见 §11：`keyword_card_zero_transcript_boundary`、`--rule=zero-transcript` |
 | AC-B4-57 | passed | 见 §11：`--rule=source`、`tests/replay/` 不存在 |
 
-> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 与 51~57 已由 §11（2026-11-22 P4 快照）闭合为 `passed`；39 的 AC-B4-58~64 为 2026-11-22 需求增量，**规格已定、待实现**（见 §12），故 39 增量范围尚未闭合，既有 P0~P4 出口不受影响。
+> 结论口径：**离线通过 ≠ G4 达标、替身通过 ≠ 真实端点已验证**。AC-B4-48 与 51~57 已由 §11（2026-11-22 P4 快照）闭合为 `passed`；39 的 AC-B4-58~64 已于 2026-11-22 关闭（§13，全部 `passed`）；既有 P0~P4 出口不受影响。
 
 新增偏差：
 
@@ -256,12 +256,12 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 |---|---|---|---|
 | U-01 | AC-B4-48 200 例回放 | **closed（W-B4-41）**：不改 `GateInputFixture`、不写原文；`gate_replay.rs` 内本地构造 `NormalizedFragment`/`Insight`；`total=200`、`mismatched=0`、`seed=7`、两次逐字节一致 | B4 测试面 / W-B4-28.3、28.4 |
 | U-02 | AC-B4-51~57 关键词卡片契约 | **closed（W-B4-34~40）**：五类候选、首见唯一、13 项卡片字段、只有 `Allow` 可出卡/可点击、点击本地查看、零转录、归属拆分 | B4 契约扩展；实现任务待 tasks.md 增量 |
-| U-03 | 38 卡片合成 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.8/§6.16~6.18/§7.13 与 `requirements.md` §12 已定义 38 的 7 项输入、11 项可展示字段、6 项拒绝原因、固定模板解释、`Unknown→Unverified` 唯一回填、离线/零转录/归属边界与 AC-B4-65~74；尚未创建 38 实体文件，AC-B4-65~74 为 `pending` | 38（`crates/application/src/cards/**` + `card_compose` target；不建 UI/存储/回放目录、不新增 domain 契约） |
-| U-04 | 39 引用对齐校验 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.7/§6.14~6.15/§7.12 与 `requirements.md` §11 已定义 `Passed`/`Failed`/`Unknown` 三态（`Unknown→Unverified` 唯一投影）、引用只存 ID+4 档信任+2 态可访问+发布时间、零转录/离线/确定性边界与 AC-B4-58~64；尚未创建 39 实体文件，AC-B4-58~64 为 `pending` | 39（domain 契约 `citation.rs` + application 只读校验 `citation/align.rs` + `citation_align` target；不建 UI/合成/回放目录） |
-| U-05 | 51 点击 UI 与设置向导 | **离线契约已实现（P7/P8）；产品化接入规格已定、待实现（§28）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；点击 UI 与设置向导离线契约已实现（`keyword_card_view` 19 例、`llm_settings_view` 18 例）；**产品化缺口**（Windows 安全存储、非敏感配置、既有网关探针、保存/清除执行、Tauri 前端渲染与 IPC）见 §28，AC-B4-111~130 为 `pending`。归属：51（`crates/ui-bridge/src/**`）→ 平台（`crates/platform-win/src/secure_store.rs`）→ 装配层（`app/src-tauri/src/ipc/**`）→ 前端（`app/src/**`）；不建 52 存储/回放目录；`NEW_TARGETS` 保持 25 |
-| U-06 | 13.3 回放本体 | **规格已定，待实现（2026-11-22）**：`spec.md` §5.11/§6.29/§7.16 与 `requirements.md` §15 已定义驱动契约（7 项封闭）、双层用例（报告层零文本/执行层借用）、装载校验（3 错误/升序）、只调 4 函数、记录核验（14 字段）、失败报告（2 项/5 码）、确定性（两次/乱序/100 次）、零转录、与 200 例并存、`tests/replay/` 不解禁与 `NEW_TARGETS` 24→25；尚未创建 13.3 实体文件，AC-B4-95~104 为 `pending`；已于 P9 closed（见 §23） | 13.3（`gate/replay.rs` + `tests/gate_replay_driver.rs` + `gate_replay_driver` target；不改 `tests/gate_replay.rs`、不建 `tests/replay/`、不新增依赖） |
-| U-07 | 41.5 / 42 / 43 / 52 | 未做；负反馈、缓存/outbox、按需补全实体、审计哈希链存储 | 对应章节 |
-| U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | 保持 9 个 `#[ignore]`，不宣称 G4 |
+| U-03 | 38 卡片合成 | **已关闭（2026-11-22，§15）**：`spec.md` §5.8/§6.16~6.18/§7.13 与 `requirements.md` §12 已定义 38 的 7 项输入、11 项可展示字段、6 项拒绝原因、固定模板解释、`Unknown→Unverified` 唯一回填、离线/零转录/归属边界与 AC-B4-65~74；已实现 `cards/**` + `card_compose`（14 passed），AC-B4-65~74 全部 `passed` | 38（`crates/application/src/cards/**` + `card_compose` target；不建 UI/存储/回放目录、不新增 domain 契约） |
+| U-04 | 39 引用对齐校验 | **已关闭（2026-11-22，§13）**：`spec.md` §5.7/§6.14~6.15/§7.12 与 `requirements.md` §11 已定义 `Passed`/`Failed`/`Unknown` 三态（`Unknown→Unverified` 唯一投影）、引用只存 ID+4 档信任+2 态可访问+发布时间、零转录/离线/确定性边界与 AC-B4-58~64；已实现 `citation.rs` + `citation/align.rs` + `citation_align`（12 passed），AC-B4-58~64 全部 `passed` | 39（domain 契约 `citation.rs` + application 只读校验 `citation/align.rs` + `citation_align` target；不建 UI/合成/回放目录） |
+| U-05 | 51 点击 UI 与设置向导 | **已关闭（2026-11-25，§53）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；点击 UI 与设置向导离线契约已实现（`keyword_card_view` 19 例、`llm_settings_view` 18 例）；**产品化缺口**（Windows 安全存储、非敏感配置、既有网关探针、保存/清除执行、Tauri 前端渲染与 IPC）见 §28，AC-B4-111~130 全部 `passed`。归属：51（`crates/ui-bridge/src/**`）→ 平台（`crates/platform-win/src/secure_store.rs`）→ 装配层（`app/src-tauri/src/ipc/**`）→ 前端（`app/src/**`）；不建 52 存储/回放目录；`NEW_TARGETS` 保持 25 |
+| U-06 | 13.3 回放本体 | **已关闭（P9，§23）**：`spec.md` §5.11/§6.29/§7.16 与 `requirements.md` §15 已定义驱动契约（7 项封闭）、双层用例（报告层零文本/执行层借用）、装载校验（3 错误/升序）、只调 4 函数、记录核验（14 字段）、失败报告（2 项/5 码）、确定性（两次/乱序/100 次）、零转录、与 200 例并存、`tests/replay/` 不解禁与 `NEW_TARGETS` 24→25；已实现 `gate/replay.rs` + `gate_replay_driver`（22 例），AC-B4-95~104 全部 `passed` | 13.3（`gate/replay.rs` + `tests/gate_replay_driver.rs` + `gate_replay_driver` target；不改 `tests/gate_replay.rs`、不建 `tests/replay/`、不新增依赖） |
+| U-07 | 41.5 / 42 / 43 / 52 | **已实现并提交（`c96f381`）**；43、52 已关闭，42 仅缺断网演练取证（AUD-04） | 对应章节 |
+| U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | `#[ignore]` 13 个真实 attribute（默认特性 12），不宣称 G4 |
 
 ### §10.2 口径约束
 
@@ -273,13 +273,13 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 6. **39 引用对齐（2026-11-22 增量）**：39 只输出 `Passed`/`Failed`/`Unknown`（`Unknown→Unverified` **唯一投影**），引用只存 `reference_id`/`trust_tier`/`access_status`/`published_at_ms`/`alignment`；不联网抓正文、不写门控记录；AC-B4-58~64 为 `pending`；不改既有 AC 01~57 与任何封闭字段数。
 7. **38 卡片合成（2026-11-22 增量）**：38 只做 7 项输入的确定性组装，输出 11 项可展示字段；`gate_decision_ref`/`click_state` 由 B4 准入补齐，38 不判定点击；解释只用固定模板 + 术语（不调 LLM、不复制引用正文）；`card_id` 由装配方注入、38 不重算；拒绝原因码 6 项为 38 私有，不并入 `GateRejectReason`（23）、不新增 `GateCounter`（32）；AC-B4-65~74 为 `pending`；不改既有 AC 01~64 与任何封闭字段数。
 8. **13.3 回放本体（2026-11-22 增量）**：13.3 只做“驱动 + 用例装载 + 比对 + 失败报告”；契约 7 项封闭、执行层 `ReplayCase` 4 项、失败项 2 项/5 码；只调 4 个纯函数与常量 `FixedClock`，不重算门控、不做报表、不写生产计数；`tests/replay/` **不解禁**，用例落 `tests/gate_replay_driver.rs` 单文件；与 `tests/gate_replay.rs` 的 200 例**并存且零 diff**；`NEW_TARGETS` 24→25、脚本零改动；AC-B4-95~104 为 `pending`；不改既有 AC 01~94 与任何封闭字段数。
-9. **U-05 产品化接入（2026-11-22 增量，§28）**：设置侧只新增"6 命令 + 只读 DTO + 三端口"；凭据只进 Windows 凭据管理器（不采用 DPAPI，不自管密文文件），非敏感配置恰 4 键，探针只经 `ProbeExecutor` 端口调用既有网关，保存/清除由装配层执行且失败必显式降级；卡片侧只消费注入快照与既有 51 视图函数，点击 0 检索/0 LLM/0 外发/0 审计/0 存储、不抢焦点、投屏/遮蔽只留角标；不改 110 条既有 AC、不改任何封闭字段数、不新增 cargo test target（`NEW_TARGETS` 保持 25）；AC-B4-111~130 为 `pending`。
+9. **U-05 产品化接入（2026-11-22 增量，§28）**：设置侧只新增"6 命令 + 只读 DTO + 三端口"；凭据只进 Windows 凭据管理器（不采用 DPAPI，不自管密文文件），非敏感配置恰 4 键，探针只经 `ProbeExecutor` 端口调用既有网关，保存/清除由装配层执行且失败必显式降级；卡片侧只消费注入快照与既有 51 视图函数，点击 0 检索/0 LLM/0 外发/0 审计/0 存储、不抢焦点、投屏/遮蔽只留角标；不改 110 条既有 AC、不改任何封闭字段数、不新增 cargo test target（`NEW_TARGETS` 保持 25）；AC-B4-111~130 全部 `passed`。
 
 ### §10.3 建议执行顺序（不含新任务编号）
 
 1. 先完成 **U-01**：AC-B4-48 方案 A 的 200 例回放与两次逐字节一致性，闭合 P3 遗留 pending。
 2. 再落 **U-02**：B4 关键词候选/卡片契约与 `click_state` 前置；只动契约与测试，不动 38/39/51 实体。
-3. 随后按 **U-03（已关闭，见 §15）→ U-04（已关闭，见 §13）→ U-05 离线契约（已实现，见 §16/§17/§19）→ U-05 产品化接入（规格已定、待实现，见 §28）** 接入 38 合成、39 校验、51 UI 的真实存储/网关/前端；每步以"只消费 B4 契约、不反写记录"为门禁。
+3. 随后按 **U-03（已关闭，见 §15）→ U-04（已关闭，见 §13）→ U-05 离线契约（已实现，见 §16/§17/§19）→ U-05 产品化接入（已关闭，见 §28/§53）** 接入 38 合成、39 校验、51 UI 的真实存储/网关/前端；每步以"只消费 B4 契约、不反写记录"为门禁。
 4. **U-06 已 closed（§23）；U-05 产品化缺口与 U-07/U-08 保持 open**；不宣称关键词卡片产品化、设置向导可用、回放平台或 B4 出口完成。
 
 ### §10.4 工作区与提交状态
@@ -320,10 +320,10 @@ AC 三态（增量）：
 |---|---|
 | U-01 AC-48 200 例 | **closed**（W-B4-41） |
 | U-02 AC-51~57 | **closed**（W-B4-34~40） |
-| U-03 / U-05 | open（P4 时点：38 合成 / 51 UI 实体未承接；U-03 已于 2026-11-22 更新为"规格已定，待实现"，见 §14；U-05 于 2026-11-22 更新为"规格已定，待实现"，见 §16） |
-| U-04 39 引用对齐校验 | **规格已定，待实现**（`spec.md` §5.7/§6.14~6.15/§7.12、`requirements.md` §11、AC-B4-58~64；待建 `citation.rs` + `citation/align.rs` + `citation_align` target） |
-| U-06 13.3 回放本体 | open（`tests/replay/` 保持不存在） |
-| U-07 41.5/42/43/52 | open |
+| U-03 / U-05 | **closed**（U-03 →§15；U-05 →§53，2026-11-25） |
+| U-04 39 引用对齐校验 | **closed**（§13；`citation.rs` + `citation/align.rs` + `citation_align` 12 passed，AC-B4-58~64 passed） |
+| U-06 13.3 回放本体 | **closed**（P9，§23；`crates/application/tests/replay/` 保持不存在） |
+| U-07 41.5/42/43/52 | **已实现并提交（`c96f381`）**；42 仅缺断网演练取证（AUD-04） |
 | U-08 真实端点/真机 | open（9 ignored，不宣称 G4） |
 
 新增偏差：
@@ -388,7 +388,7 @@ AC 三态（增量）：
 - 未修改：`design.md`、`tasks.md`、任何 `crates/**` 源码、`Cargo.toml`/`Cargo.lock`、既有门禁脚本。
 - 未执行 `git commit`；如需提交本次 39 需求增量，请确认后单独执行（提交范围仅上述 3 个文档）。
 
-> 结论：AC-48/51~57 离线用例已通过；38 卡片合成、39 引用校验、51 点击 UI 与真实端点仍未做，**不宣称产品级"可点击关键词卡片"已交付**。后续：38 已于 §15 关闭，39 已于 §13 关闭，51 于 §16 更新为“规格已定、待实现”；真实端点仍未做。
+> 结论：AC-48/51~57 离线用例已通过；38 卡片合成、39 引用校验、51 点击 UI 当时未做（后续均已关闭：38→§15、39→§13、51→§53），**不宣称产品级"可点击关键词卡片"已交付**。后续：38 已于 §15 关闭，39 已于 §13 关闭，51 已于 2026-11-25 关闭（§53）；真实端点仍未做。
 ## §13 P5 增量快照（W-B4-43 ~ W-B4-48）
 
 日期：2026-11-22。
@@ -419,8 +419,8 @@ AC 三态（增量）：
 | 编号 | 状态 |
 |---|---|
 | U-04 39 引用对齐 | **closed（W-B4-43~48）**；历史口径见 §10.1 |
-| U-03 38 卡片合成 | **规格已定，待实现**（见 §14） |
-| U-05 51 点击 UI | **规格已定，待实现**（见 §16） |
+| U-03 38 卡片合成 | **已关闭（§15）** |
+| U-05 51 点击 UI | **已关闭（§53）** |
 | U-06 / U-07 / U-08 | open（不变） |
 
 新增偏差：
@@ -526,7 +526,7 @@ AC 三态（增量）：
 | 编号 | 状态 |
 |---|---|
 | U-03 38 卡片合成 | **closed（W-B4-49~56）**；历史口径见 §10.1 |
-| U-05 51 点击 UI | **规格已定，待实现**（见 §16） |
+| U-05 51 点击 UI | **已关闭（§53）** |
 | U-06 / U-07 / U-08 | open（不变） |
 
 新增偏差：
@@ -546,9 +546,9 @@ AC 三态（增量）：
 | D-B4-P63 | `triggered_at_ms = candidate.trigger_span.end_ms` | 不读系统时间 |
 | D-B4-P64 | 6 顶层 pub 类型 = 4 契约 + 2 辅助 | 面收敛 |
 
-> 结论：38 卡片合成离线契约已闭环；51 点击 UI **规格已定、待实现（见 §16）**；真实端点仍 open，**不宣称产品级“可点击卡片”已交付**。
+> 结论：38 卡片合成离线契约已闭环；51 点击 UI 已关闭（§53）；真实端点仍 open，**不宣称产品级“可点击卡片”已交付**。
 
-> 结论：39 的离线契约与只读判定已闭环；38 卡片合成已 closed；51 点击 UI **规格已定、待实现（见 §16）**，**不宣称产品级“可点击卡片”已交付**。
+> 结论：39 的离线契约与只读判定已闭环；38 卡片合成已 closed；51 点击 UI 已关闭（§53），**不宣称产品级“可点击卡片”已交付**。
 
 ## §16 51 点击 UI 需求增量登记（2026-11-22）
 
@@ -611,7 +611,7 @@ AC 三态（增量）：
 - 未执行 `git commit`；如需提交本次 51 需求增量，请确认后单独执行（提交范围仅上述 3 个文档）。
 - 下一步入口：实现前先确认 §16.2 的 D-B4-P65~P74，特别是 10/4/5/6/2/2 字段封闭、`ComposedCard` 预览恒 `Disabled{NotAllowed}`、只降不升优先级与“51 不写 `click_state`/不写 `card_status`”。
 
-> 结论：51 点击 UI **规格已定，待实现**；AC-B4-75~84 全部 `pending`；**不宣称真实 UI 已渲染、不宣称产品级“可点击卡片”已交付**。
+> 结论：51 点击 UI 已关闭（§53）；AC-B4-75~84 全部 `passed`；**不宣称真实 UI 已渲染、不宣称产品级“可点击卡片”已交付**。
 ## §17 51 设置向导需求增量登记（2026-11-22）
 
 > 本节登记 51 设置向导（API Key 输入、模型选择/自定义、端点仅白名单、一键连通性测试、保存/清除、失败人话化、傻瓜化界面）的**需求规格增量**。本轮只更新 `spec.md`、`requirements.md` 与本文件，**未改代码、未建 settings 实体文件、未新增依赖、未提交**。
@@ -640,7 +640,7 @@ AC 三态（增量）：
 | **D-B4-P81** | 失败人话化 8 条固定中文文案与 `ProbeFailureKind` 一一对应；文案不含 Key 子串、请求体、端点串、内部错误码；失败保留输入并恢复可测 | 非技术用户需要"下一步做什么"而非错误码；文案是零转录的高危面 | AC-B4-92；文案表断言 |
 | **D-B4-P82** | 保存/清除只产出意图 `Persist{Memory\|OsSecureStore}`/`Clear`；清除需二次确认；安全存储拒绝时降级 `Memory` 并显式提示"仅本次运行有效"，禁止静默失败与回退明文落盘 | UI 不执行 IO 才能保证"明文不落盘"可静态断言；降级策略避免用户误以为已持久化 | AC-B4-88；`std::fs`/`keyring` 命中 0 |
 | **D-B4-P83** | 新增 settings target `llm_settings_view`（`NEW_TARGETS` 23→24）；脚本新增 `UI_SETTINGS_DIR` 与 `UI_SETTINGS_TEST`（**拼接写法**，脚本内不含完整 target 名）与 `ui_settings_files()`；`require_core_faces()` 增目录断言（缺目录退 2）；`source` 扫描 settings 源码、`zero-transcript` 扫描 settings 源码与测试；规则仍 7 条；`--rule=targets` 循环**不追加**；测试只进 `zero-transcript`（沿用 39 口径，与 38 的 D-B4-P59 不同）；**X-03 同口径：脚本与文件同批提交** | 否则 settings 是静态盲区；测试文件含反例样本，不宜进 source 禁词面；先改脚本会让 7 条规则全部退 2 | `scripts/` 两处扩展；AC-B4-91/93/94 |
-| **D-B4-P84** | 设置向导**不新增任何依赖**（`crates/ui-bridge/Cargo.toml` 与 `Cargo.lock` 零 diff），不复用 51 点击 UI 的两条 path 依赖；与 `keyword_card/**` 互不依赖；AC 追加 85~94（汇总 84→94）；U-05 口径更新为"点击 UI 与设置向导：规格已定，待实现"；既有 13 项封闭面与 `gate/api.rs` 4 个 `pub fn` 不变 | settings 只消费注入的纯数据，无需 application/domain 类型；避免 51 两个面互相牵连 | AC-B4-93/94；`Cargo.toml` 零 diff |
+| **D-B4-P84** | 设置向导**不新增任何依赖**（`crates/ui-bridge/Cargo.toml` 与 `Cargo.lock` 零 diff），不复用 51 点击 UI 的两条 path 依赖；与 `keyword_card/**` 互不依赖；AC 追加 85~94（汇总 84→94）；U-05 口径更新为"点击 UI 与设置向导：已关闭（§53，2026-11-25）"；既有 13 项封闭面与 `gate/api.rs` 4 个 `pub fn` 不变 | settings 只消费注入的纯数据，无需 application/domain 类型；避免 51 两个面互相牵连 | AC-B4-93/94；`Cargo.toml` 零 diff |
 
 ### §17.3 AC 三态（增量 AC-B4-85~94）
 
@@ -675,7 +675,7 @@ AC 三态（增量）：
 - 未执行 `git commit`；如需提交本次 51 设置向导需求增量，请确认后单独执行（提交范围仅上述 3 个文档）。
 - 下一步入口：实现前先确认 §17.2 的 D-B4-P75~P84，特别是 8/6/5 字段封闭、固定无载荷掩码、一步式默认、单飞状态机与"51 只产出意图不执行 IO"；随后由 51 阶段建 `crates/ui-bridge/src/settings/**` + `llm_settings_view` target + 2 处脚本扩展（同批提交）。
 
-> 结论：51 设置向导 **规格已定，待实现**；AC-B4-85~94 全部 `pending`；**不宣称设置界面已可用、不宣称凭据已安全落盘、不宣称真实网关连通性已验证**。
+> 结论：51 设置向导 已关闭（§53）；AC-B4-85~94 全部 `passed`；**不宣称设置界面已可用、不宣称凭据已安全落盘、不宣称真实网关连通性已验证**。
 
 ## §18 P7 增量快照（51 点击 UI）
 
@@ -799,7 +799,7 @@ AC 三态：AC-B4-85~94 均为 **passed**（18 用例）。
 - 未执行 `git commit`；如需提交本次 13.3 需求增量，请确认后单独执行（提交范围仅上述 3 个文档）。
 - 下一步入口：实现前先确认 §20.2 的 D-B4-P108~P117，特别是“`tests/replay/` 不解禁”“200 例零 diff”“只调 4 函数”“失败报告 2 项/5 码”“`NEW_TARGETS` 24→25 且脚本零改动”；确认后由 13.3 阶段建 `gate/replay.rs` + `tests/gate_replay_driver.rs` + `NEW_TARGETS` 1 行（同批提交）。
 
-> 结论：13.3 回放本体 **规格已定，待实现**；AC-B4-95~104 全部 `pending`；`tests/replay/` 仍不存在、200 例证据不变；**不宣称回放平台/报表/真机已交付**。→ 已实现（§23）
+> 结论：13.3 回放本体 **已关闭（P9，§23）**；AC-B4-95~104 全部 `passed`；`crates/application/tests/replay/` 仍不存在、200 例证据不变；**不宣称回放平台/报表/真机已交付**。→ 已实现（§23）
 
 ### §20.6 文档补正与偏差登记（2026-11-22 · P9 需求规格复核）
 
@@ -1037,12 +1037,12 @@ AC 三态：
 
 | 项 | 状态 | 所需条件 |
 |---|---|---|
-| U-07-41.5 负反馈加权 | 未做（规格层明确不做） | 需先补 b4 级需求规格（字段/枚举/AC/零转录） |
-| U-07-42 缓存/outbox | 未做 | 需用户确认持久化介质与"重启不丢"口径 |
-| U-07-43 按需补全实体 | 未做 | 需用户提供真实检索源与 8s p95 样本 |
-| U-07-52 审计哈希链存储 | 未做 | 需用户确认落库介质与 180 天保留策略 |
-| U-08 真实端点 / 真机 | 未判定，9 个 `#[ignore]` 保持 | 需用户提供端点凭据、真机与投屏样本 |
-| AC-B4-109 远端 CI | 本地 passed | 需用户授权 push 后取远端结论 |
+| U-07-41.5 负反馈加权 | **已实现并提交（`c96f381`）**，AUD-03 已关闭（§56.2） | 已满足 |
+| U-07-42 缓存/outbox | **已实现并提交（`c96f381`）**；`NetProbe`/`RecoveryCoordinator` 已接入（2026-11-25，§56.7） | 仅缺真实断网演练取证（AUD-04，§56.3） |
+| U-07-43 按需补全实体 | **已关闭（2026-11-24，§50）**：三轮 200/200 达标 | 已满足 |
+| U-07-52 审计哈希链存储 | **已关闭（2026-11-24，方案 B 5 年，§33）** | 已满足 |
+| U-08 真实端点 / 真机 | 未判定，`#[ignore]` 13 个真实 attribute（默认特性 12） | 需用户提供端点凭据、真机与投屏样本 |
+| AC-B4-109 远端 CI | **已取证（远端 8/8 全绿，§55.5）** | 已满足 |
 | U-07 整体 | open | 同上四项条件 |
 | U-08 整体 | open | 同上真实端点/真机条件 |
 
@@ -1184,14 +1184,14 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | **D-B4-P149** | 新增 `KeywordCard`/`CardDetail` 组件，只读 DTO；禁用卡不绑定回调；隐藏态只渲染角标；详情为内联面板 | 与 51 视图契约一一对应；禁用语义与可访问性可在静态层判定 | `app/src/cards/**`；不改 51 视图 |
 | **D-B4-P150** | 屏蔽事实只来自注入（`screen_share`/`emergency_masked`）；本轮不实现真实投屏检测 API | 平台 API 不可离线判定；只消费事实可保持 51 边界 | `ViewFacts` 来源固定；不宣称真机 |
 | **D-B4-P151** | `SettingsFormState::Failed` 保持无载荷 6 态；失败类别与文案由独立 `ProbeReportDto`（5 项）承载，`SettingsView` 仍 8 项 | 不改既有封闭面；修正旧设计稿 `Failed{failure}` 与实现偏差 | 新增 DTO；既有枚举零 diff |
-| **D-B4-P152** | 平台口径仍 Windows 单平台、macOS"不适用（无设备）"；CI mac 编译观察项存废见 C-UI-02，未裁决前零改动 | 删除 mac CI 会与既有范围裁剪 AC 冲突，需独立变更单 | `ci.yml`/`deny.toml`/`platform-mac` 零 diff |
+| **D-B4-P152** | 平台口径 Windows 单平台、macOS“不适用（无设备）”；C-UI-02 已裁决保留 macOS 编译观察（§29.6），`platform-mac` 已于 2026-11-25 删除（§57） | 删除 mac CI 会与既有范围裁剪 AC 冲突，需独立变更单 | `ci.yml`/`deny.toml` 零 diff；`crates/platform-mac` 不存在 |
 | **D-B4-P153** | 不新增 cargo test target（`NEW_TARGETS` 保持 25）；单测落 `app/src-tauri/src/ipc/**` 与 `platform-win` 单测；新增 `scripts/check-ui-integration.sh` 六规则；`check-b4-gates.sh` 仅扩扫描面、规则仍 7 条 | 命令纯函数可直接单测；避免 target 清单与 X-05 口径漂移 | 新增脚本 1 个；`NEW_TARGETS` 不变 |
-| **D-B4-P154** | AC 追加 **111~130（20 条）**、汇总 **130**；U-05 口径改为"离线契约已实现；产品化接入规格已定、待实现（§28）" | 编号连续、不重排；产品化缺口需独立可见 | 本节 + §10.1~§10.3 |
+| **D-B4-P154** | AC 追加 **111~130（20 条）**、汇总 **130**；U-05 口径已改为"离线契约已实现；产品化接入已关闭（§28/§53，2026-11-25）" | 编号连续、不重排；产品化缺口需独立可见 | 本节 + §10.1~§10.3 |
 | **D-B4-P155** | 本轮显式不做：真实联网 E2E、Key 写文件、宣称真机体验、改 macOS 支持口径、卡片存储/审计/回放、真实投屏 API、点击触发检索/LLM | 与 N-UI-01~10 一致；避免以规划替代实现 | 见 §28.6 |
 
 ### §28.3 AC 三态（增量 AC-B4-111~130）
 
-> 编号承接 AC-B4-110，不重排 01~110。规格正文：`ui_integration/spec.md` §7.2/§7.3。当前全部 `pending`（规格已定，待实现）。
+> 编号承接 AC-B4-110，不重排 01~110。规格正文：`ui_integration/spec.md` §7.2/§7.3。2026-11-25 全部 `passed`（U-05 已关闭，§53）。
 
 | AC | 状态 | 证据口径（待实现后取证） |
 |---|---|---|
@@ -1251,10 +1251,10 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 - 本轮修改文件：`.codeartsdoer/specs/ui_integration/spec.md`（新增）、`docs/progress/b4-status.md`（§10.1/§10.2/§10.3 + 本节）。
 - 未修改：任何 `crates/**` 源码、`app/src/**`、`app/src-tauri/src/**`、`Cargo.toml`/`Cargo.lock`、`deny.toml`、`.github/workflows/ci.yml`、既有门禁脚本。
 - 未执行 `git commit`；如需提交本次规格增量，请确认后单独执行（范围仅上述 2 个文档）。
-- 结论：U-05 的**离线契约**已实现；**产品化接入**规格已定、待实现，AC-B4-111~130 全部 `pending`；**不宣称设置向导可用、不宣称产品级卡片已交付、不宣称真机或真实联网已通过**。
+- 结论：U-05 的**离线契约**已实现；**产品化接入**已关闭（§28/§53），AC-B4-111~130 全部 `passed`；**不宣称设置向导可用、不宣称产品级卡片已交付、不宣称真机或真实联网已通过**。
 ## §29 P-UI 落地与门禁收口快照（2026-11-22）
 
-> 本节登记 W-UI-02~18 的实现落地与取证结果。**U-05 整体仍保持 `open`**；不宣称真机、不宣称真实联网。
+> 本节登记 W-UI-02~18 的实现落地与取证结果。**U-05 已于 2026-11-25 关闭（§53）**；本节不宣称真机、不宣称真实联网的历史边界保留。
 
 ### §29.1 提交清单（本地，未 push）
 
@@ -1306,21 +1306,20 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 
 ### §29.5 未关闭项
 
-1. **U-05 整体仍 `open`**：未做真实联网 E2E、未做真机 WebView2 验证、未声明窗口/焦点/投屏已验收。
-2. C-UI-02（macOS CI 编译观察项存废）未裁决；`ci.yml` / `deny.toml` / `platform-mac` 零 diff。
-   - 口径更正（2026-11-23）：已按 §29.6 裁决为"保留"，冲突登记见 §30.6 ERR-01。
-3. C-UI-03（生产探针）默认关闭，AC 仅用替身取证。
-4. 9 个 `#[ignore]` 与 `tests/replay/` 未解锁。
-5. ~~未执行 `git push`~~ → 用户已于 2026-11-22 自行推送；本地 `9791bfa` 与 `origin/main` 同步。
+1. **U-05 已关闭（2026-11-25）**：真实联网 E2E 见 §32 第 9 项 `passed`；真机 WebView2 见 §53（第 7 项 4/4、第 8 项 3/3）。
+2. **C-UI-02 已裁决保留**（§29.6）；`platform-mac` 已于 2026-11-25 删除（§57）；`ci.yml` / `deny.toml` 零 diff。
+3. C-UI-03（生产探针）默认关闭，AC 仅用替身取证（现状不变）。
+4. **`#[ignore]` 为 13 个真实 attribute**（默认特性 12）；仓库根 `tests/replay/` 已于 2026-11-25 授权创建，`crates/application/tests/replay/` 仍不存在。
+5. **已推送**（截至 2026-11-25，本地与 `origin/main` 同步）。
 
 ### §29.6 用户裁决（2026-11-22）
 
 | 项 | 裁决 | 落地 |
 |---|---|---|
 | 推送 | 用户已自行 `push` | `main...origin/main` 无 ahead/behind |
-| C-UI-02 | **保留** macOS CI 编译观察项 | `ci.yml` / `deny.toml` / `platform-mac` 零改动 |
+| C-UI-02 | **保留** macOS CI 编译观察项（2026-11-25 更新：`platform-mac` 已删除，§57） | `ci.yml` / `deny.toml` 零改动 |
 | C-UI-03 | **保持默认关闭**（稳妥口径，AI 选择） | 仅 `--features llm-https` 显式开启；AC 仍用替身取证 |
-| U-05 | 仍 **`open`** | 真实联网 E2E、真机 WebView2、9 个 `#[ignore]`、`tests/replay/` 未解锁 |
+| U-05 | **`closed`（2026-11-25，§53）** | 真实联网 E2E、真机 WebView2 已取证；`#[ignore]` 13 个真实 attribute；`crates/application/tests/replay/` 仍不存在 |
 
 ## §30 仓库审计与清理收口登记（2026-11-23）
 
@@ -1337,12 +1336,12 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | AUD-04 | U-07-42 缓存/outbox | `未完成`（规格/实现/用例已齐备，仅缺真实断网取证） | 真实断网演练：网络恢复 ≤3 秒识别、30 秒补齐率 ≥98% | 断网环境或管理员授权执行演练 | `docs/sdd/spec.md` §7.2；`b4-status.md §56` | 无 | §25.3、§33、§56 |
 | AUD-05 | U-07-43 按需补全实体 | `closed`（2026-11-24） | 三轮独立 200/200 样本、p95 4461/4538/4759 ms，见 §50 | 已满足 | `b4-status.md §50` | 无 | §25.3、§50、§56 |
 | AUD-06 | U-07-52 审计哈希链存储 | `closed`（2026-11-24，方案 B 5 年） | 同库只追加表 + 180 天在线 + 5 年归档；哈希链/篡改/归档用例全绿 | 已满足 | `docs/sdd/spec.md` §7.4；`b4-status.md §56` | 无 | §25.3、§33、§56 |
-| AUD-07 | U-08 真实端点/真机 | `未判定`（9 个 `#[ignore]` 保持） | 端点凭据可用 + 真机验证 + 误触发率与性能记录 | 凭据、真机、样本；`#[ignore]` 不解锁 | `bash scripts/run-llm-live.sh --print-record-roots`（只打印根，不联网） | 无 | §25.3、§29.5-4 |
+| AUD-07 | U-08 真实端点/真机 | `未判定`（12 个 `#[ignore]` 默认特性；开 `llm-https` 后 13） | 端点凭据可用 + 真机验证 + 误触发率与性能记录 | 凭据、真机、样本；`#[ignore]` 不解锁 | `bash scripts/run-llm-live.sh --print-record-roots`（只打印根，不联网） | 无 | §25.3、§29.5-4、§58 |
 | AUD-08 | AC-B4-109 远端 CI | `passed`（仅本地）/ 远端未取证 | 远端 run 结论文本或截图 + 步骤全绿 | push 授权后的远端只读查看权限 | 文档定位 `b4-status.md §25.3`；远端结论需用户提供 | 无 | §25.3 |
 | AUD-09 | C-UI-02 macOS CI 编译观察项 | `closed`（2026-11-25 用户决定删除 platform-mac） | 已删除 `crates/platform-mac` 并从 workspace 移除；`ci.yml` 保留 darwin 编译观察、`deny.toml` 保留两 target | 已满足 | `git diff --quiet HEAD -- .github/workflows/ci.yml deny.toml`；`ls crates/platform-mac` 应不存在 | 见 AUD-16 | §29.6、§57 |
 | AUD-10 | C-UI-03 生产探针 | `已裁决保留`（默认关闭） | 无（仅 `--features llm-https` 显式开启） | 无 | `grep -n "C-UI-03" docs/progress/b4-status.md` | 无 | §29.6 |
-| AUD-11 | 9 个 `#[ignore]` 纪律项 | `未判定`（不解锁） | 不改数量、不改名称；解锁需另行立项 | 明确解锁授权 | `grep -rIn "#\[ignore\]" crates app --include=*.rs \| wc -l` 期望 9 | 无 | §29.5-4、§19-11 |
-| AUD-12 | `tests/replay/` 不存在 | `未判定`（纪律项） | 保持不存在；创建需另行立项 | 明确创建授权 | `find . -type d -name replay -not -path './target/*' \| wc -l` 期望 0 | 无 | §29.5-4 |
+| AUD-11 | 13 个 `#[ignore]` 纪律项（默认特性 12） | `未判定`（不解锁） | 不改数量、不改名称；解锁需另行立项 | 明确解锁授权 | `grep -rnE "^\s*#\[ignore" --include=*.rs crates app \| wc -l` 期望 13（注释里的 `#[ignore]` 字样不计） | 无 | §29.5-4、§19-11、§58 |
+| AUD-12 | `crates/application/tests/replay/` 不存在 | `未判定`（纪律项） | 保持 `crates/application/tests/replay/` 不存在；仓库根 `tests/replay/` 已于 2026-11-25 授权创建（仅语料与取证登记） | 明确创建授权 | `find crates -type d -name replay \| wc -l` 期望 0 | 无 | §29.5-4、§58 |
 | AUD-13 | platform-win WASAPI/UIA/OCR 占位 | `未完成` | 三个能力各有真实实现 + 用例 | 真机音频/UI 自动化/OCR 样本 | 文档定位 `b4-status.md §29.5`；`ls crates/platform-win/src` | 无 | 需求侧 §1.3-2 |
 | AUD-14 | platform-mac 整体占位 | `closed`（2026-11-25，不适用） | 占位已删除，不再需要 macOS 目标实现 | 已满足 | `ls crates/platform-mac` 应不存在；`grep -c "platform-mac" Cargo.toml` 期望 0 | 无 | §57 |
 | AUD-15 | `.codeartsdoer/` 未入库（治理缺口） | `open` | 解除忽略并入库，或明确"永久不入库"并登记理由 | 忽略面变更裁决（Q-07） | `git check-ignore -v .codeartsdoer`；`git ls-files .codeartsdoer \| wc -l` 期望 0 | 无 | `.gitignore:11` |
@@ -1408,7 +1407,7 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 
 | 勘误 | 冲突双方（文件+章节） | 采用口径 | 依据 |
 |---|---|---|---|
-| ERR-01 | `docs/progress/b4-status.md §29.5-2`（"未裁决"）/ `§29.6`（"保留"）/ `docs/progress/handoff-2026-11-22-pui.md §4-2`（"未裁决"） | 保留 macOS CI 编译观察项；`ci.yml`/`deny.toml`/`platform-mac` 零改动 | `§29.6` 用户裁决（2026-11-22）优先于批次状态与交接说明 |
+| ERR-01 | `§29.5-2`（“未裁决”）/ `§29.6`（“保留”）/ `handoff-2026-11-22-pui.md §4-2`（“未裁决”） | **已解决**：保留 macOS CI 编译观察项（§29.6）；`platform-mac` 已于 2026-11-25 删除（§57）；`ci.yml`/`deny.toml` 零改动 | `§29.6` 用户裁决（2026-11-22）+ `§57` 用户裁决（2026-11-25） |
 
 ### §30.7 不宣称清单
 
@@ -2335,3 +2334,44 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 **裁决变更登记**：§29.6 的 C-UI-02「保留、零 diff」及 AUD-09/AUD-14 由用户 2026-11-25 变更——`platform-mac` 由「保留占位」改为「删除」；`ci.yml`/`deny.toml` 维持零 diff，故 C-UI-02 的编译观察仍然成立。§29.5-2 / §29.6 / ERR-01 中的「保留」是 2026-11-22 的当时裁决，按不改写纪律保留，最新口径以本节为准。
 
 **验证**：`cargo check --workspace` rc=0；`cargo test --workspace` rc=0；`scripts/check-mac-scope.sh` 八条规则 rc=0；`check-b4-gates`、`layering`、`claims` 门禁 rc=0。
+## §58 口径与事实一致性审计（2026-11-25）
+
+对 `b4-status.md` / `open-items.md` / `README.md` / `ABOUT.md` 的当前口径逐项核对，结论如下。
+
+### §58.1 已修正（当前台账）
+
+| 项 | 原表述 | 实测 | 修正 |
+|---|---|---|---|
+| AUD-07 | `9 个 #[ignore] 保持` | 真实 attribute **13**（默认特性 12；`llm_live_baseline.rs` 受 `#![cfg(feature="llm-https")]` 整文件门控） | 改为 12/13 |
+| AUD-11 | `9 个` + `grep -rIn "#\[ignore\]" \| wc -l` 期望 9 | 该命令实测 **3**（`\]` 被转义成字面量，只命中注释）；行首属性实测 **13** | 改为 13，命令改 `grep -rnE "^\s*#\[ignore"` |
+| AUD-12 | `tests/replay/ 不存在`，`find . -type d -name replay` 期望 0 | 仓库根 `./tests/replay` 已存在（count=1）；`crates/application/tests/replay` 仍不存在 | 改为只约束 `crates/` 下不存在 |
+
+### §58.2 核对一致（无需改动）
+
+- **IPC 命令数 26**：`generate_handler!` 内 25 个 `ipc::*` + `ipc_version` = 26，与 README 一致。
+- **前端契约 DTO 20**：`app/src/bridge/schema.json` 恰 20 个键；`scripts/check-bindings.mjs` 存在（此前“脚本缺失”是扩展名误判）。
+- **`dto.rs` 定义 25 个 `*Dto`**：比 schema 多 5 个，属后端内部/非跨语言契约，不是漂移。
+- **测试基线 1059**：`README`、`ABOUT`、`§56.7` 一致（§52/§55.3 的 1049/1000 为当时时间线）。
+- **platform-mac**：`crates`/`app`/`Cargo.toml`/`Cargo.lock` 已无该 crate（§57）；`ci.yml`/`deny.toml`/门禁脚本按设计保留相关字符串。
+- **38/39/51**：`README`/`ABOUT`/`open-items` 已改为“三项已关闭”；`§13/§15/§53` 为关闭记录。
+
+### §58.3 历史章节的过时表述（按纪律保留，不重写）
+
+以下为 2026-11-22~24 时间线快照，与当前事实不同；**最新口径以上文及 §13/§15/§53/§56/§57/§58 为准**：
+
+| 位置 | 过时表述 | 当前事实 |
+|---|---|---|
+| §25.3（第 83、85 行） | “39 规格已定待实现”“38/39/51 实体能力 未做” | 38→§15、39→§13、51→§53 均已关闭 |
+| §14（U-04 行）、§16（U-05 行） | “规格已定，待实现” | 已实现并关闭 |
+| §29.5-2（第 1310 行） | “C-UI-02 未裁决” | §29.6 已裁决；2026-11-25 用户改为删除 platform-mac（§57） |
+| D-B4-P152（第 1187 行） | “`ci.yml`/`deny.toml`/`platform-mac` 零 diff” | platform-mac 已删除（§57）；`ci.yml`/`deny.toml` 仍零 diff |
+| P4 出口表（第 323/324 行）、§11 结论（第 391 行）、§16/§19 推断行（第 423/529/549 行） | “U-03/U-05 open”“39 待实现” | 同上，均已关闭 |
+| §29.6（第 1321 行）、ERR-01（第 1411 行） | “保留 platform-mac、零改动” | 2026-11-25 用户决定删除（§57） |
+| §52（第 2108/2111 行）、§55.3（第 2229 行） | “1049 passed”“1000 passed” | 当前基线 1059（新增 10 例） |
+| `open-items` 第 45 行（2026-11-24 本轮变更） | “U-05/U-08 口径与 open 状态不变” | U-05 已于 2026-11-25 关闭（§53） |
+
+### §58.4 未发现漂移的面
+
+- U-07 AUD-02~06 台账（§56.1 已对齐）
+- `open-items` §0/§1/§5（随 §56/§57/§58 同步）
+- 门禁脚本与 `ci.yml`/`deny.toml` 契约（`check-mac-scope` 8/8、`check-b4-gates` 全绿）
