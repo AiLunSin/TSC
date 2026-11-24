@@ -74,7 +74,12 @@ impl AsrPaths {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Recognized {
     Partial(String),
-    Stable(String),
+    /// 稳定句。`timeout_cut` 为真表示脚本因超出时长强制收句，
+    /// 这一句是**半句**（话没说完），上层要把它接到下一句上而不是另起一行。
+    Stable {
+        text: String,
+        timeout_cut: bool,
+    },
 }
 
 /// 实时转写管线状态，由 Tauri managed state 持有（`Arc<AsrPipeline>`）。
@@ -97,6 +102,8 @@ pub struct AsrPipeline {
     audio_ms: AtomicU64,
     stable_lines: AtomicU64,
     last_stable: Mutex<String>,
+    /// 上一句是否为"超时截断的半句"：是则下一句要拼接到同一行。
+    pending_cut: AtomicBool,
     /// 转写时是否自动出卡。默认关：开会时每句都出卡会把卡片区刷成噪音，
     /// 用户要的是"转写成文字 → 自己选中 → 查意思 → 需要时才出卡"。
     auto_cards: AtomicBool,
@@ -124,6 +131,7 @@ impl AsrPipeline {
             audio_ms: AtomicU64::new(0),
             stable_lines: AtomicU64::new(0),
             last_stable: Mutex::new(String::new()),
+            pending_cut: AtomicBool::new(false),
             auto_cards: AtomicBool::new(false),
         }
     }
@@ -299,16 +307,19 @@ impl AsrPipeline {
                 match recognized {
                     // 中间结果只更新界面文本，不抽关键词：半句会产出碎片卡片。
                     Recognized::Partial(text) => recognizer.set_last_text(&text),
-                    Recognized::Stable(text) => {
-                        recognizer.set_last_text(&text);
+                    Recognized::Stable { text, timeout_cut } => {
                         recognizer.stable_lines.fetch_add(1, Ordering::Relaxed);
-                        // 稳定句进全文缓冲：用户回看与选中查询都以这里为准。
-                        recognizer.transcripts.push(&text);
+                        // 上一句如果是超时截断的半句，本句要接在它后面，而不是新起一行。
+                        let continues = recognizer.take_pending_cut();
+                        let line = recognizer.transcripts.push_stable(&text, continues);
+                        // 界面上展示拼接后的整行：否则文本位会随每次续句"跳回去"。
+                        recognizer.set_last_text(&line);
+                        recognizer.set_pending_cut(timeout_cut);
                         // 去重副作用必须保留（脚本收句会重复上一句）；
                         // 但只有显式开启自动出卡时才真的往卡片区塞卡片。
-                        let fresh = recognizer.take_stable_if_new(&text);
+                        let fresh = recognizer.take_stable_if_new(&line);
                         if fresh && recognizer.auto_cards() {
-                            let _ = recognizer.cards.ingest(&text);
+                            let _ = recognizer.cards.ingest(&line);
                         }
                     }
                 }
@@ -466,6 +477,7 @@ impl AsrPipeline {
         self.audio_bytes.store(0, Ordering::Relaxed);
         self.audio_ms.store(0, Ordering::Relaxed);
         self.stable_lines.store(0, Ordering::Relaxed);
+        self.pending_cut.store(false, Ordering::Relaxed);
         if let Ok(mut last) = self.last_stable.lock() {
             last.clear();
         }
@@ -481,6 +493,15 @@ impl AsrPipeline {
             }
             Err(_) => true,
         }
+    }
+
+    /// 取走"上一句是半句"的标记（并被本句消费）。
+    fn take_pending_cut(&self) -> bool {
+        self.pending_cut.swap(false, Ordering::Relaxed)
+    }
+
+    fn set_pending_cut(&self, cut: bool) {
+        self.pending_cut.store(cut, Ordering::Relaxed);
     }
 }
 
@@ -512,7 +533,9 @@ pub fn parse_line(line: &str) -> Option<Recognized> {
         // vosk 的中文结果是"按词带空格"的，展示前先合并中文字符间的空格。
         let text = crate::ipc::transcript::tidy_cjk_spaces(text.trim());
         if !text.is_empty() {
-            return Some(Recognized::Stable(text));
+            // `"cut": "timeout"` 说明这一句是被时长强行截断的半句，上层要拼接。
+            let timeout_cut = value.get("cut").and_then(|item| item.as_str()) == Some("timeout");
+            return Some(Recognized::Stable { text, timeout_cut });
         }
     }
     let partial = value.get("partial").and_then(|item| item.as_str())?.trim();
@@ -749,7 +772,26 @@ mod tests {
     fn parses_stable_and_partial_lines() {
         assert_eq!(
             parse_line(r#"{"text": "灰度范围限定"}"#),
-            Some(Recognized::Stable("灰度范围限定".to_owned()))
+            Some(Recognized::Stable {
+                text: "灰度范围限定".to_owned(),
+                timeout_cut: false,
+            })
+        );
+        // 超时收句一定切出半句：解析时要带上标记，上层好拼接。
+        assert_eq!(
+            parse_line(r#"{"text": "今天的社会仍然比较", "cut": "timeout"}"#),
+            Some(Recognized::Stable {
+                text: "今天的社会仍然比较".to_owned(),
+                timeout_cut: true,
+            })
+        );
+        // 未知的 cut 值按"正常收句"处理，不擅自拼接。
+        assert_eq!(
+            parse_line(r#"{"text": "会议开始", "cut": "other"}"#),
+            Some(Recognized::Stable {
+                text: "会议开始".to_owned(),
+                timeout_cut: false,
+            })
         );
         assert_eq!(
             parse_line(r#"{"partial": "灰度 范围"}"#),
@@ -784,6 +826,16 @@ mod tests {
         assert!(pipeline.take_stable_if_new("灰度范围限定"));
         assert!(!pipeline.take_stable_if_new("灰度范围限定"));
         assert!(pipeline.take_stable_if_new("两地三中心"));
+    }
+
+    /// "上一句是半句"的标记只能用一次：消费后必须复位，否则整场都往一行里拼。
+    #[test]
+    fn pending_cut_is_consumed_once() {
+        let pipeline = pipeline();
+        assert!(!pipeline.take_pending_cut(), "默认不是半句");
+        pipeline.set_pending_cut(true);
+        assert!(pipeline.take_pending_cut());
+        assert!(!pipeline.take_pending_cut());
     }
 
     /// 自动出卡默认关：开会时只积累转写文字，卡片区不该自己长卡片。

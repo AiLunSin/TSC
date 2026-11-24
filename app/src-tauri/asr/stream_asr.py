@@ -1,7 +1,7 @@
 """vosk 流式识别：stdin 读取 16 kHz 单声道 s16le，stdout 输出逐行 JSON。
 
 - 中间结果：{"partial": "..."}
-- 稳定句：{"text": "..."}
+- 稳定句：{"text": "..."}；超时强制收句时带 `"cut": "timeout"`
 
 vosk 只在检测到静音端点（`AcceptWaveform` 返回 True）时才给 final。会议里经常长时间
 连续说话、或音频一直不停，端点迟迟不触发，表现就是"一直在识别却拿不到任何文本"。
@@ -10,7 +10,8 @@ vosk 只在检测到静音端点（`AcceptWaveform` 返回 True）时才给 fina
 - 同一 partial 连续 STABLE_ROUNDS 轮没变化 → 视为一句说完；
 - 一句累计超过 MAX_SEGMENT_SECONDS → 强制收句，避免长句永不落地。
 
-收句后 `Reset()`，从下一段音频重新累积。
+超时收句切出来的一定是**半句**（话还没说完就被时间截断），所以额外标注
+`"cut": "timeout"`，由上层把下一段接在这一行末尾，而不是另起一行。
 """
 
 import json
@@ -22,7 +23,9 @@ SAMPLE_RATE = 16_000
 BLOCK_BYTES = 4096
 # 每轮读取 BLOCK_BYTES 字节，16 kHz s16le 单声道约 128 ms
 STABLE_ROUNDS = 6
-MAX_SEGMENT_SECONDS = 4.0
+# 超时收句阈值：太短会把正常语流切碎（4s 时常切出"仍然比较"这类断尾），
+# 6s 在"实时感"与"句子完整性"之间更平衡；切出来的半句由上层拼接。
+MAX_SEGMENT_SECONDS = 6.0
 
 
 def emit(out, payload) -> None:
@@ -68,8 +71,16 @@ def main() -> None:
         else:
             stable += 1
         segment_ms += chunk_ms
-        if stable >= STABLE_ROUNDS or segment_ms >= MAX_SEGMENT_SECONDS * 1_000:
+        if stable >= STABLE_ROUNDS:
+            # 长时间无变化：当作说完（停顿型断句），正常收句。
             emit(out, {"text": partial})
+            recognizer.Reset()
+            pending = ""
+            stable = 0
+            segment_ms = 0.0
+        elif segment_ms >= MAX_SEGMENT_SECONDS * 1_000:
+            # 时间到：话还没说完被截断，标注出来让上层拼接。
+            emit(out, {"text": partial, "cut": "timeout"})
             recognizer.Reset()
             pending = ""
             stable = 0

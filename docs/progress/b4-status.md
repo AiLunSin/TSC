@@ -1838,4 +1838,33 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 未验证：
 
 - 修完后的「查看详情」真机点击（应在卡片为非遮蔽态时可打开、且不抢焦点）。
-- 4 秒强制收句导致的半句（截图中"仍然比较"被切断）：属实时转写的已知折中，未改阈值。
+- 4 秒强制收句导致的半句（截图中"仍然比较"被切断）：属实时转写的已知折中，未改阈值。（2026-11-24 17:20 已改为 6s + 半句拼接，见 §43）
+
+## §43 收句阈值 4s→6s 与半句自动拼接（2026-11-24）
+
+§42 遗留的"截图中半句被切断"按用户要求处理：把超时收句从 4s 放宽到 6s，并让被切断的半句**接回上一行**，而不是单独占一行。
+
+实现：
+
+- `stream_asr.py`：`MAX_SEGMENT_SECONDS` 4.0 → **6.0**；超时收句改发 `{"text": ..., "cut": "timeout"}`，与"停顿型收句"（同一 partial 连续 6 轮无变化，不带标记）区分开——只有前者代表"话没说完"。
+- `asr.rs`：`Recognized::Stable` 改为结构体变体 `{ text, timeout_cut }`；管线新增 `pending_cut`（上一句是否半句），`take_pending_cut()` 消费式读取，`reset_counters` 一并复位。
+- `transcript.rs`：新增 `push_stable(text, continues) -> String`。`continues` 为真时把本句接到上一行末尾并返回整行文本；界面文本位展示整行（否则每续一句会"跳回"到片段）。
+  - `join_fragments` 去掉 `Reset()` 后重复识别的重叠词（最长 6 字公共前后缀）；
+  - 单行 400 字封顶，避免反复超时把整场会议并成一行；
+  - 中英混排补空格、中文直接连写。
+  - 匹配改为**去空白口径**（`compact`）：转写行已合过词间空格，而选区可能带空格，两边直接 `contains` 会互相错过；`context_for` / `hits` 共用同一 `match_key`。
+- 自动出卡仍只走"稳定句"，但送去抽词的是拼接后的整行（词更完整）；限流仍按词生效。
+
+实测（`py -3` + 真实模型，harness 用完即删）：
+
+- 有停顿的语音（3 段 5.8s 拼接，18.3s）：6 条稳定句全部 `cut=-`，符合"停顿型收句"预期。
+- 连续语音（1.2s 语音片段无缝重复，14.4s）：前两条稳定句为 `cut=timeout`，证明 6s 超时路径生效，且 `Reset()` 后确有重复词（"确认 阿里 余温 确认 阿里 余温"）——正是拼接去重需要处理的形态。
+
+验证：
+
+- `cargo test -p meeting-copilot-desktop --bins`：**79 passed / 0 failed**（新增 6 例：`cut` 标记解析、`pending_cut` 消费一次、半句接回上一行、不续句另起行、重叠词去重、中英混排空格、单行封顶）。
+- `clippy --all-targets --features llm-https -- -D warnings`、`rustfmt --check`、B4 零转录、分层、UI 集成、G2 宣称、`check-bindings`、`scan-secrets-docs` 全绿。
+
+未验证：
+
+- 真实会议里 6s 阈值的手感（连续独白场景）；若仍偏碎，下一步可做"按静音能量自适应"而不是固定秒数。

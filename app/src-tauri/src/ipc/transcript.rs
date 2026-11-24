@@ -12,6 +12,10 @@ use crate::ipc::dto::TranscriptLineDto;
 
 /// 单次会话最多保留的行数：约 600 句，足够一场长会，且不会无限占用内存。
 const MAX_LINES: usize = 600;
+/// 半句拼接后单行的上限：超时反复触发时不会把一整场会议并成一行。
+const MAX_LINE_CHARS: usize = 400;
+/// 拼接时允许丢弃的最大重叠长度：`Reset()` 后通常只重复 1~3 个词。
+const MAX_OVERLAP: usize = 6;
 
 /// 转写全文缓冲。
 #[derive(Debug, Default)]
@@ -24,27 +28,44 @@ impl TranscriptLog {
         Self::default()
     }
 
-    /// 追加一句稳定句；空行与紧邻重复句直接忽略。
-    pub fn push(&self, text: &str) {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            return;
+    /// 稳定句入栈，返回这一行最终的完整文本（拼接后可能是整行）。
+    ///
+    /// `continues` 为真表示上一句是**超时截断的半句**：本句接到上一行末尾，而不是
+    /// 另起一行。识别脚本在时长上限处强制收句，切出来的半句单独成行会让转写读起来
+    /// 断断续续（`…社会仍然比较` / `落后很多` 各占一行）。拼接时去掉重复的重叠词：
+    /// `Reset()` 后常有 1~3 个词被重新识别一次。
+    pub fn push_stable(&self, text: &str, continues: bool) -> String {
+        let text = tidy_cjk_spaces(text.trim());
+        if text.is_empty() {
+            return String::new();
         }
         let Ok(mut lines) = self.lines.lock() else {
-            return;
+            return text;
         };
-        if lines.last().is_some_and(|last| last.text == trimmed) {
-            return;
+        if continues {
+            if let Some(last) = lines.last_mut() {
+                let merged = join_fragments(&last.text, &text);
+                // 反复超时会把一行越接越长；到上限就另起一行，别并成一整篇。
+                if merged.chars().count() <= MAX_LINE_CHARS {
+                    last.text.clone_from(&merged);
+                    last.at_ms = now_ms();
+                    return merged;
+                }
+            }
+        }
+        if lines.last().is_some_and(|last| last.text == text) {
+            return text;
         }
         let index = lines.last().map_or(1, |last| last.index + 1);
         lines.push(TranscriptLineDto {
             index,
-            text: trimmed.to_owned(),
+            text: text.clone(),
             at_ms: now_ms(),
         });
         if lines.len() > MAX_LINES {
             lines.remove(0);
         }
+        text
     }
 
     /// 当前全文快照。
@@ -91,7 +112,7 @@ impl TranscriptLog {
         };
         lines
             .iter()
-            .filter(|line| line.text.contains(key.as_str()))
+            .filter(|line| compact(&line.text).contains(key.as_str()))
             .count()
     }
 }
@@ -100,35 +121,39 @@ fn locate(lines: &[TranscriptLineDto], selection: &str) -> Option<usize> {
     let key = match_key(lines, selection)?;
     lines
         .iter()
-        .position(|line| line.text.contains(key.as_str()))
+        .position(|line| compact(&line.text).contains(key.as_str()))
 }
 
 /// 匹配键：整段 → 单句（长句优先）→ 连续词块（长块优先）。
 ///
-/// ASR 的稳定句带空格（"灰度 范围 限定"），跨行选中时既匹配不到整段，
-/// 也可能没有句读可切，只能靠词块窗口兜底。
+/// 一律在**去空白**的形态上比较：转写行已经合过中文词间空格，而选区可能带空格
+/// （跨行选中时前端用空格连接），两边直接 `contains` 会互相错过。
 fn match_key(lines: &[TranscriptLineDto], selection: &str) -> Option<String> {
-    let whole = selection.trim();
+    let whole = compact(selection);
     if whole.is_empty() {
         return None;
     }
-    if lines.iter().any(|line| line.text.contains(whole)) {
-        return Some(whole.to_owned());
+    if contains_any(lines, &whole) {
+        return Some(whole);
     }
-    let mut sentences = split_sentences(whole);
+    let mut sentences: Vec<String> = split_sentences(selection)
+        .into_iter()
+        .map(compact)
+        .filter(|sentence| sentence.chars().count() >= 2)
+        .collect();
     sentences.sort_by_key(|sentence| std::cmp::Reverse(sentence.chars().count()));
     if let Some(hit) = sentences
         .into_iter()
-        .find(|sentence| sentence.chars().count() >= 2 && contains_any(lines, sentence))
+        .find(|sentence| contains_any(lines, sentence))
     {
-        return Some(hit.to_owned());
+        return Some(hit);
     }
-    let tokens: Vec<&str> = whole.split_whitespace().collect();
+    let tokens: Vec<&str> = selection.split_whitespace().collect();
     let widest = tokens.len().min(8);
     for width in (2..=widest).rev() {
         for chunk in tokens.windows(width) {
-            let key = chunk.join(" ");
-            if contains_any(lines, &key) {
+            let key = compact(&chunk.join(" "));
+            if key.chars().count() >= 2 && contains_any(lines, &key) {
                 return Some(key);
             }
         }
@@ -137,7 +162,14 @@ fn match_key(lines: &[TranscriptLineDto], selection: &str) -> Option<String> {
 }
 
 fn contains_any(lines: &[TranscriptLineDto], needle: &str) -> bool {
-    lines.iter().any(|line| line.text.contains(needle))
+    lines
+        .iter()
+        .any(|line| compact(&line.text).contains(needle))
+}
+
+/// 去掉所有空白：用于"与空格无关"的匹配。
+fn compact(text: &str) -> String {
+    text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
 /// 按中英文句读切分选中文字；片段已去空白，空片段丢弃。
@@ -163,22 +195,26 @@ pub fn transcript_snapshot(
     Ok(state.snapshot())
 }
 
+/// 单个字符是否"中文类"：汉字、中文标点、全角字符。
+///
+/// 用于两处：合并 vosk 的词间空格，以及拼接半句时判断要不要补空格。
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x3000..=0x303F   // 中文标点（、。〈〉《》「」…）
+        | 0x3400..=0x4DBF // 扩展 A
+        | 0x4E00..=0x9FFF // 基本汉字
+        | 0xF900..=0xFAFF // 兼容汉字
+        | 0xFF01..=0xFF5E // 全角字符与标点
+        | 0xFFE0..=0xFFE6 // 全角货币等符号
+    )
+}
+
 /// 去掉**两个中文片段之间**的空格。
 ///
 /// vosk 的中文结果是按词带空格的（`学历 歧视 的 现象`），直接展示像被切碎，
 /// 抽关键词和选中查询也会被空格干扰。这里只在"上一个字和下一个字都是中文/中文标点"
 /// 时丢掉空格：英文短语（`degree discrimination`）、中英混排（`SLA 指标`）保持原样。
 pub fn tidy_cjk_spaces(text: &str) -> String {
-    fn joins(c: char) -> bool {
-        matches!(c as u32,
-            0x3000..=0x303F   // 中文标点（、。〈〉《》「」…）
-            | 0x3400..=0x4DBF // 扩展 A
-            | 0x4E00..=0x9FFF // 基本汉字
-            | 0xF900..=0xFAFF // 兼容汉字
-            | 0xFF01..=0xFF5E // 全角字符与标点
-            | 0xFFE0..=0xFFE6 // 全角货币等符号
-        )
-    }
     let mut out = String::with_capacity(text.len());
     let mut pending_space = false;
     for ch in text.chars() {
@@ -188,7 +224,7 @@ pub fn tidy_cjk_spaces(text: &str) -> String {
         }
         if pending_space {
             pending_space = false;
-            let both_cjk = out.chars().next_back().is_some_and(joins) && joins(ch);
+            let both_cjk = out.chars().next_back().is_some_and(is_cjk) && is_cjk(ch);
             if !both_cjk {
                 out.push(' ');
             }
@@ -198,15 +234,50 @@ pub fn tidy_cjk_spaces(text: &str) -> String {
     out
 }
 
+/// 把续句接到上一行末尾；两段之间的重复词只保留一份。
+///
+/// 超时收句后 `Reset()` 会丢掉解码上下文，下一段常把结尾几个词重新识别一次
+/// （`…仍然比较` + `比较落后`）。这里找最长公共重叠并按字符剪掉。
+fn join_fragments(previous: &str, next: &str) -> String {
+    let prev: Vec<char> = previous.chars().collect();
+    let upcoming: Vec<char> = next.chars().collect();
+    let limit = prev.len().min(upcoming.len()).min(MAX_OVERLAP);
+    let mut overlap = 0;
+    for size in (1..=limit).rev() {
+        if prev[prev.len() - size..] == upcoming[..size] {
+            overlap = size;
+            break;
+        }
+    }
+    let tail = &upcoming[overlap..];
+    let mut out = previous.to_owned();
+    if let Some(first) = tail.first() {
+        // 中英混排要留一个空格（`…看 SLA`），中文之间直接连写。
+        let need_space = out.chars().next_back().is_some_and(|c| !is_cjk(c)) && !is_cjk(*first);
+        if need_space && !out.ends_with(' ') {
+            out.push(' ');
+        }
+    }
+    out.extend(tail.iter());
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// 测试里只关心"新起一行"的场景，省略 `continues` 参数。
+    impl TranscriptLog {
+        fn push_line(&self, text: &str) {
+            self.push_stable(text, false);
+        }
+    }
+
     #[test]
     fn pushes_and_indexes_lines() {
         let log = TranscriptLog::new();
-        log.push("第一句");
-        log.push("第二句");
+        log.push_line("第一句");
+        log.push_line("第二句");
         let lines = log.snapshot();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].index, 1);
@@ -217,18 +288,18 @@ mod tests {
     #[test]
     fn ignores_blank_and_repeated_lines() {
         let log = TranscriptLog::new();
-        log.push("同一句");
-        log.push("同一句");
-        log.push("   ");
+        log.push_line("同一句");
+        log.push_line("同一句");
+        log.push_line("   ");
         assert_eq!(log.snapshot().len(), 1);
     }
 
     #[test]
     fn context_includes_neighbours() {
         let log = TranscriptLog::new();
-        log.push("前面一句");
-        log.push("这里提到了灰度发布");
-        log.push("后面一句");
+        log.push_line("前面一句");
+        log.push_line("这里提到了灰度发布");
+        log.push_line("后面一句");
         let context = log.context_around("灰度");
         assert!(context.contains("前面一句"), "{context}");
         assert!(context.contains("灰度发布"), "{context}");
@@ -239,9 +310,9 @@ mod tests {
     #[test]
     fn context_survives_cross_line_selection() {
         let log = TranscriptLog::new();
-        log.push("第一行 灰度 范围 限定 华中");
-        log.push("第二行 我们 先 看 数据");
-        log.push("第三行 结论 是 通过");
+        log.push_line("第一行 灰度 范围 限定 华中");
+        log.push_line("第二行 我们 先 看 数据");
+        log.push_line("第三行 结论 是 通过");
         let context = log.context_for("灰度 范围 限定 华中 我们 先 看 数据");
         assert!(context.contains("灰度"), "{context}");
         assert!(context.contains("第二行"), "{context}");
@@ -251,9 +322,9 @@ mod tests {
     #[test]
     fn hits_matches_the_same_key_as_context() {
         let log = TranscriptLog::new();
-        log.push("灰度 范围 限定 华中");
-        log.push("其他内容");
-        log.push("灰度 范围 限定 华东");
+        log.push_line("灰度 范围 限定 华中");
+        log.push_line("其他内容");
+        log.push_line("灰度 范围 限定 华东");
         assert_eq!(log.hits("灰度 范围 限定 华中 我们 再 看"), 1);
         assert_eq!(log.hits("整段里没有的句子"), 0);
     }
@@ -279,5 +350,59 @@ mod tests {
         assert_eq!(tidy_cjk_spaces("SLA 指标 看 99.9%"), "SLA 指标看 99.9%");
         assert_eq!(tidy_cjk_spaces("  多  余  空  格  "), "多余空格");
         assert_eq!(tidy_cjk_spaces("中文 ， 标点"), "中文，标点");
+    }
+
+    /// 超时截断的半句要接回上一行，而不是另起一行。
+    #[test]
+    fn continues_previous_line_for_cut_fragment() {
+        let log = TranscriptLog::new();
+        log.push_stable("今天的社会仍然比较", false);
+        let merged = log.push_stable("落后", true);
+        assert_eq!(merged, "今天的社会仍然比较落后");
+        let lines = log.snapshot();
+        assert_eq!(lines.len(), 1, "拼接后仍是一行");
+        assert_eq!(lines[0].text, "今天的社会仍然比较落后");
+    }
+
+    /// 不续句时照旧另起一行。
+    #[test]
+    fn fresh_fragment_starts_new_line() {
+        let log = TranscriptLog::new();
+        log.push_stable("第一句", false);
+        log.push_stable("第二句", false);
+        assert_eq!(log.snapshot().len(), 2);
+    }
+
+    /// `Reset()` 后重复识别的结尾词只能留一份。
+    #[test]
+    fn stitching_drops_repeated_overlap() {
+        let log = TranscriptLog::new();
+        log.push_stable("今天的社会仍然比较", false);
+        assert_eq!(
+            log.push_stable("比较落后很多", true),
+            "今天的社会仍然比较落后很多"
+        );
+        assert_eq!(log.snapshot().len(), 1);
+    }
+
+    /// 中英混排拼接要留空格，中文之间直接连写。
+    #[test]
+    fn stitching_keeps_space_between_english_words() {
+        let log = TranscriptLog::new();
+        log.push_stable("我们看 SLA", false);
+        assert_eq!(
+            log.push_stable("99.9 的达成率", true),
+            "我们看 SLA 99.9 的达成率"
+        );
+    }
+
+    /// 一行接得太长就另起一行，避免整场会议并成一条。
+    #[test]
+    fn stitching_stops_at_line_cap() {
+        let log = TranscriptLog::new();
+        log.push_stable(&"甲".repeat(MAX_LINE_CHARS - 2), false);
+        let merged = log.push_stable("乙乙乙乙", true);
+        assert_eq!(merged, "乙乙乙乙", "超上限应新起一行");
+        assert_eq!(log.snapshot().len(), 2);
     }
 }
