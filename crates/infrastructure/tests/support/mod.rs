@@ -338,6 +338,52 @@ pub fn assert_timeout_within(elapsed: Duration, deadline: Duration) {
     );
 }
 
+/// 读完一个完整 HTTP 请求（头部 + `Content-Length` 声明的正文），上限 64 KiB。
+/// 只用于测试 mock：读到 EOF、超时或非法报文即返回，不向调用方传播错误。
+fn read_http_request(stream: &mut TcpStream) {
+    const MAX: usize = 64 * 1024;
+    let mut buf = Vec::with_capacity(1024);
+    let mut chunk = [0_u8; 4096];
+    let mut expected: Option<usize> = None;
+    loop {
+        match stream.read(&mut chunk) {
+            Ok(0) => return,
+            Ok(n) => {
+                buf.extend_from_slice(&chunk[..n]);
+                if expected.is_none() {
+                    if let Some(pos) = find_bytes(&buf, b"\r\n\r\n") {
+                        let head = String::from_utf8_lossy(&buf[..pos]);
+                        let len = head
+                            .split("\r\n")
+                            .find_map(|line| {
+                                let (key, value) = line.split_once(':')?;
+                                key.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().ok())?
+                            })
+                            .unwrap_or(0);
+                        expected = Some(pos + 4 + len);
+                    }
+                }
+                if let Some(total) = expected {
+                    if buf.len() >= total {
+                        return;
+                    }
+                }
+                if buf.len() >= MAX {
+                    return;
+                }
+            }
+            Err(_) => return,
+        }
+    }
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
 /// 进程内回环端点：每次接受一个连接并返回固定正文。
 pub struct MockServer {
     addr: SocketAddr,
@@ -360,14 +406,21 @@ impl MockServer {
                 match listener.accept() {
                     Ok((mut stream, _)) => {
                         requests_thread.fetch_add(1, Ordering::SeqCst);
-                        let mut buffer = [0_u8; 8192];
-                        let _ = stream.read(&mut buffer);
+                        // 监听 socket 是非阻塞的；accepted socket 是否继承 O_NONBLOCK
+                        // 各平台不一致（Linux 不继承，BSD/macOS 可能继承）。继承时
+                        // read/write 会立即 WouldBlock，导致响应被截断、客户端重试，
+                        // 于是连接数 >1。这里显式回到阻塞并加超时，消除平台差异。
+                        let _ = stream.set_nonblocking(false);
+                        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+                        read_http_request(&mut stream);
                         let response = format!(
                             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                             body.len(),
                             body
                         );
                         let _ = stream.write_all(response.as_bytes());
+                        let _ = stream.flush();
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(5));

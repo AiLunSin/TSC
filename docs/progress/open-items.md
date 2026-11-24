@@ -20,6 +20,7 @@
 - **主栏版式减密（2026-11-24 18:00）**：用户反馈"太密集"。中栏由 1 个 `panel` + `.settings-section` 分隔线拆成 4 张卡片（关键词卡片／联网查资料／完整转写／会议文本），联网查改为默认收起的折叠块（标题行显示状态），选中操作栏提到转写框正下方；面板与卡片内边距、转写行距整体加大；响应式断点 1080→1180px（窄窗口隐藏长期空白的"要点时间轴"，宽度让给主栏）。只动版式，未动 IPC/业务；前端 tsc/eslint/build、六门禁、`check-bindings` 全绿；无头 Edge 截图复核 1082/1440 两档宽度。产物 18:01。**未决**：真机 125%/150% 缩放下的手感。
 - **检索限额与窗口可调（2026-11-24 18:40）**：用户要求"额度不用管、加限额""辅助回复让用户自己调"。① `search.json` 增 `hourlyLimit`（默认 20，0=不限，上限 200），计数落 `search-quota.json`（整小时窗口），先扣后出网，超限返回 `search_quota_exceeded`；② 新命令 `search_clear_key`（`SecureStore::delete`，配置保留），界面加"清除 Key"；③ 新 `assist.json` + `assist_config`/`assist_config_save`，提醒 3~10（默认 5）、上下文 5~20（默认 12），越界夹取且提醒不长于上下文；设置页新增"辅助回复"一节。IPC 23→**26**，DTO 17→**20**；desktop bins **93 passed**；两套 clippy、fmt、六门禁、`check-bindings`、tsc/eslint/build 全绿；产物 18:42。**未决**：真实 Key 下限额的计费口径（本地按次数，非 token）与真实召回质量仍待手测。
 - **本轮闭环（2026-11-25）**：① 本机 WASAPI 音频冒烟 `wasapi::tests::loopback_opens_and_captures_when_audio_is_active` 显式 `--ignored` 跑通，1 passed / 0 failed，rc=0（播放 30 秒双声道正弦波，0.05s 即返回，低于 200×10ms 空转上限，证明首帧即捕获真实环回包，`sample_rate>0`、`sequence>0` 断言通过）；② 12 个 `#[ignore]` 全量盘点，源码字面 13 处，差异来自 `llm_live_baseline.rs` 的 `#![cfg(feature = "llm-https")]` 整文件门控（默认特性 12、开 `llm-https` 13）；③ 仓库根 `tests/replay/` 经授权创建（只放语料与取证登记，`crates/application/tests/replay/` 仍不存在，AC-B4-49/57/63 口径不变）；④ X-AUD-08 口径由 13 更正为 **26**；⑤ 清理 U-05 临时脚本与配置备份（证据截图保留）。详见 `b4-status.md §54`。
+- **本轮闭环（2026-11-25 续）**：远端 run **45439657273**（`25923c4`）的 `rust (x86_64-apple-darwin)` job 在 `llm_gateway_mock::loopback_endpoint_roundtrip` 假红（6 passed / 1 failed，exit 101）。修 `tests/support/mod.rs` 的 `MockServer`（显式阻塞 + 读写超时 + 完整读请求 + flush），并把「连接次数恰为 1」的断言改为 `>= 1` + `outcome.body.is_some()`（连接次数不是契约，重试由网关允许）。本地复测 1049/0/12、两套 infrastructure clippy 与 8 门门禁 rc=0；**远端 darwin 复跑未做，不宣称已转绿**。详见 `b4-status.md §55`。
 - **本机残留**：sqlcipher 编译失败本轮未复现（`cargo test --workspace` 通过）；`git push` 已恢复正常（2026-11-23 多次 `main -> main` 成功）。
 - **执行顺序**：P1 已完成可做部分；P2 已完成（2026-11-23）；P3 规格与实现已完成（2026-11-23；U-07-43 真实 200 样本已于 2026-11-24 达标关闭，见 `b4-status.md §50`）；P4 治理已完成（2026-11-23，见 §8.6）；P5 检索源接入 A~F 已实现并推送（2026-11-24，`f3d66a4`），H-34-G 手工入口已就绪，待真实端点。
 - **工作区整理（2026-11-23，保守批次）**：删除 8 个过期 SBOM 中间产物（7 个 per-crate/app `*.cdx.json` 与 `docs/compliance/sbom/sbom-ci.cdx.json`，均未跟踪且已被 `.gitignore` 覆盖）、`.tmp/archive` 测试日志、16 个临时 `f*/g*` 日志/退出码文件与重复模型压缩包 `model.zip`；当时保留 `target/`、`models/`、`node_modules/`、`.tmp/asr` 模型与 `.tmp/audit` 证据（`target/` 后于 Q-01 清理）。
@@ -63,6 +64,7 @@
 | 项 | 状态 | 缺口 | 关闭条件 |
 |---|---|---|---|
 | AC-B4-109 远端 CI | **已关闭（远端 `success`）** | 无；run #56 的 `compliance` job 为 `success` | 已完成；如需留档，补存 Actions 运行页截图 |
+| 远端 CI darwin job（新增，2026-11-25） | run 45439657273 的 `x86_64-apple-darwin` 在 `loopback_endpoint_roundtrip` 失败；本地测试脚手架已修复（`§55`） | 缺 macOS runner 上的复跑结论 | push 后确认新 run 的 8 个 job 全绿，并核对失败断言的确切值 |
 | AC 汇总 130 | 本地一致 | — | 无 |
 | `#[ignore]` 默认特性 12 个（2026-11-25 复测）；其中 WASAPI 本机冒烟 1 个已跑通，余 11 个待真实端点 | 保持不解锁（不解锁 ≠ 不能显式 `--ignored` 运行） | 真实端点缺位 | 明确解锁授权 + 真实环境（逐类跑法见 §8.9） |
 | `tests/replay/` | **仓库根目录已创建（2026-11-25，用户授权）**：仅语料与取证登记，见 `tests/replay/README.md`；`crates/application/tests/replay/` 仍不存在 | 无（AC-B4-49/57/63 针对后者，口径不变） | 已满足 |

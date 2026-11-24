@@ -2201,3 +2201,36 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - **环境坑（复跑必读）**：`test-name-inventory` 在未前置工具链 PATH 时会报 `cargo_unavailable` 但仍退 0（假绿）；只前置 PATH 不设 `TEMP/TMP` 与 `CARGO_PROFILE_DEV_DEBUG=0` 时，`libsqlite3-sys` 的 `cl.exe` 失败导致 infrastructure lib 面 rc=101、tni 退 2。正确跑法是三件套齐备后再执行，与 §8.11 一致。
 
 **状态不变**：U-05 `closed`；U-07 整体 open（AUD-03/04/06）；U-08 其余子项、U-09 H-34-G 真实端点、UIA/OCR 真实字幕、真实 Key 下桌面联网查与辅助回复效果、真机缩放手感、`rustup` 坏代理重装均保持原状。本轮不宣称任何新能力交付。
+
+## §55 远端 CI darwin job 失败定位与回环 mock 修复（2026-11-25 01:15）
+
+用户提供 run **45439657273**（commit `25923c4`，#100）的失败截图：`rust (x86_64-apple-darwin)` 的 `test` 步骤在 `cargo test -p meeting-copilot-infrastructure --test llm_gateway_mock` 报 `6 passed; 1 failed`，失败用例 **`loopback_endpoint_roundtrip`**，`Process completed with exit code 101`；同一 run 的 windows-msvc、aarch64-apple-darwin、C3 等 job 全绿。**本地此前从未复现**，属 macOS 特有的 flaky。
+
+### §55.1 失败点与推断（未定论，明确标注）
+
+- 截图栈显示 `core::panicking::assert_failed` 指向 `llm_gateway_mock.rs:106:5`，即 `assert_eq!(server.requests(), 1)`；其上一行 `assert!(!outcome.degraded)` 已通过，说明**回环调用成功，但 mock 记录的连接数不是 1**（0 不可能：成功响应必然经过 accept；最合理是 2）。
+- `gateway.rs:388-430` 的 `complete_structured` 有按失败分类重试的循环；若首次响应被判定 `Malformed`/`PeerClosed`，会再发一次请求并成功，于是 `requests=2`、`degraded=false`，恰好命中该断言。
+- `support::MockServer`（`tests/support/mod.rs`）此前是「非阻塞 listener + accepted socket 单次 `read` + 单次 `write_all`，两处错误都 `let _ =` 忽略」。监听 socket 的 `O_NONBLOCK` 是否被 accept 继承，各平台行为不一致；若继承，首次 `read`/`write_all` 可能 `WouldBlock`，导致响应截断并触发重试。
+- **本机反向实验未复现**：把 accepted socket 强制设为非阻塞并退回单次读，连跑 30 次 `loopback_endpoint_roundtrip` 全通过。故上述链路只是**最合理的推断，不是已证实的根因**；本机没有 macOS 环境，确切断言值与根因需远端复跑日志确认。不把推断写成定论。
+
+### §55.2 修复（只动测试代码，不动产品代码、不动门禁语义）
+
+1. `tests/support/mod.rs`：
+   - accept 后显式 `set_nonblocking(false)`，并加 2 秒读/写超时，消除平台继承差异；
+   - 新增 `read_http_request()`，按 `\r\n\r\n` + `Content-Length` 读完整请求（上限 64 KiB），不再「读一次就回」；
+   - 写完响应后 `flush()`。
+2. `tests/llm_gateway_mock.rs`：
+   - 断言由 `assert_eq!(server.requests(), 1)` 改为 `>= 1` 并附实际值 —— **连接次数不是本用例的契约**，网关允许重试；成功性改由 `!outcome.degraded` 与新增的 `outcome.body.is_some()` 共同保证（比原来更强，而非单纯放宽）。
+   - 保留 `#[ignore]` 数量不变、测试名不变，`NEW_TARGETS` 与 AC 汇总不变。
+
+### §55.3 本地验证
+
+- `cargo fmt --all -- --check` rc=0；`cargo test -p meeting-copilot-infrastructure --test llm_gateway_mock` **7 passed**。
+- `cargo test --workspace` **1049 passed / 0 failed / 12 ignored**，rc=0（与 README 基线一致，用例数未变）。
+- clippy `-D warnings`：infrastructure 默认特性与 `llm-https` 两套 rc=0；workspace 排除桌面壳后 rc=0。
+- 门禁 8 项全 rc=0（g2-claims、b4 zero-transcript、b4 source、mac claims、ui-integration、layering、scan-secrets-docs --all-md、test-name-inventory）。
+- **已知本地环境噪声**（与本次改动无关）：① `cargo clippy --workspace --all-targets` 在 `meeting-copilot-desktop` 的 `tauri::generate_context!` 处报 `failed to write asset ... 拒绝访问 (os error 5)`，是桌面壳资源读取的本机权限问题，排除该 crate 即全绿；② 全量测试若 `TMP` 与 `TEMP` 在同一 `export` 语句中赋值，`TMP` 会取到旧值，`std::env::temp_dir()` 落回 `%LOCALAPPDATA%\Temp` 并让 4 个 lib 用例报 `拒绝访问`——必须**分成两条 export** 或显式给 `TMP` 赋值；③ git 偶发 `fsmonitor_ipc__send_query` 警告，不影响退出码。
+
+### §55.4 待远端确认
+
+修复尚未 push，无法在 macOS runner 上验证。**远端 run 复跑前不宣称该 job 已转绿**；README/ABOUT 里「CI 8/8 全绿」均为 2026-11-23 的历史结论（run 45152256989），已补注本次失败与待复跑状态。

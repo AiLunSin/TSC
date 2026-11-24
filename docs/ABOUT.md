@@ -7,7 +7,7 @@ Meeting Copilot 是一个 Windows 桌面 AI 助手：监听会议对话，识别
 ## 当前状态（2026-11-24）
 
 - **仓库**：已公开（GitHub），双许可 MIT OR Apache-2.0。
-- **CI**：8/8 job 全绿（web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）。
+- **CI**：2026-11-23 的 8/8 job 全绿（web、rust×3、test-name-inventory、feature-coverage、compliance、sqlcipher）为历史结论；后续 run 45439657273 的 `x86_64-apple-darwin` job 曾失败，回环 mock 已修复、待远端复跑（`b4-status.md §55`）。
 - **测试基线**：1049 passed / 0 failed / 12 ignored（P-UI 桌面层 93 例、平台层 30 例另 1 个 ignored 冒烟，均可单列运行）；`fmt --check`、`clippy -D warnings`（默认特性与 `llm-https` 两套）、分层/密钥/许可证门禁通过。
 - **历史清理**：历史提交中的本机绝对路径已替换为 `<USER_HOME>` / `<REPO>`；同日完成工作区整理，移除过期 SBOM 中间产物与临时日志，保留可重建的 `target/`、`models/`、`node_modules/` 与 ASR 模型。
 - **能力边界**：离线契约、门控与设置/卡片前端已闭环；系统音频实时转写链路（WASAPI → vosk → 转写文字，按需出卡）已接通；选中查义、联网查证（博查/Tavily 预设，需自备 Key）与大模型辅助回复已接通；通用检索源适配器（U-09 A~F）已实现，U-07-43 的 200 条真实检索样本已用零账号 D 路径三轮取证达标并关闭；U-05 已于 2026-11-25 收口为 `closed`（第 7 项 4/4、第 8 项 3/3，见 `b4-status.md §53`）；UIA 字幕与 OCR 已实现但真实会议字幕文本未取得；桌面联网查在真实 Key 下的召回质量与辅助回复在真实会议里的可用度仍未验收。

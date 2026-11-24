@@ -103,7 +103,12 @@ fn loopback_endpoint_roundtrip() {
         .complete_structured(&insight_request())
         .expect("回环调用");
     assert!(!outcome.degraded, "failure={:?}", outcome.failure);
-    assert_eq!(server.requests(), 1);
+    assert!(outcome.body.is_some(), "必须解析出结构化正文");
+    // 网关允许按失败分类重试，**连接次数不是本用例的契约**：成功性由
+    // `degraded=false` + 结构化正文存在共同保证。CI 上曾出现 macOS 端
+    // 两次连接使 `assert_eq!(requests, 1)` 假红（run 45439657273），
+    // 故只要求至少一次真实请求到达 mock 端点。
+    assert!(server.requests() >= 1, "requests={}", server.requests());
 }
 
 #[test]
