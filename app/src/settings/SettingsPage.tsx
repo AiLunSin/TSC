@@ -256,7 +256,7 @@ export function SettingsPage({ wb }: SettingsPageProps) {
             <span className="tag">{FORM_STATE_TEXT[snapshot.formState] ?? "未知状态"}</span>
           </div>
 
-          <div className="settings-grid">
+          <div className="settings-grid settings-grid-wide">
             <div className="settings-section">
               <h3>{snapshot.sectionsOrder[0]}</h3>
               <input
@@ -277,58 +277,60 @@ export function SettingsPage({ wb }: SettingsPageProps) {
                 </p>
               )}
             </div>
-            <div className="settings-section">
-              <h3>{snapshot.sectionsOrder[1]}</h3>
-              <p className="settings-value">{modelLabel(snapshot.modelChoice)}</p>
-            </div>
-            <div className="settings-section">
-              <h3>{snapshot.sectionsOrder[2]}</h3>
-              <p className="settings-value">{endpointLabel(snapshot.endpointChoice)}</p>
-            </div>
-          </div>
 
-          <div className="settings-section">
-            <h3>{snapshot.sectionsOrder[3]}</h3>
-            <div className="row-actions">
-              <button
-                className="btn btn-ghost"
-                type="button"
-                disabled={!canTestNow || busy}
-                onClick={() => {
-                  void probe();
-                }}
-              >
-                测试连接
-              </button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={!canSaveNow || busy}
-                onClick={() => {
-                  void save();
-                }}
-              >
-                保存设置
-              </button>
-              <button
-                className="btn btn-ghost"
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  void clear();
-                }}
-              >
-                清除设置
-              </button>
-              <button
-                className="btn btn-ghost"
-                type="button"
-                onClick={() => {
-                  void openLog();
-                }}
-              >
-                打开日志
-              </button>
+            <div className="settings-section">
+              <div className="fact-row">
+                <div>
+                  <h3>{snapshot.sectionsOrder[1]}</h3>
+                  <p className="settings-value">{modelLabel(snapshot.modelChoice)}</p>
+                </div>
+                <div>
+                  <h3>{snapshot.sectionsOrder[2]}</h3>
+                  <p className="settings-value">{endpointLabel(snapshot.endpointChoice)}</p>
+                </div>
+              </div>
+              <h3>{snapshot.sectionsOrder[3]}</h3>
+              <div className="row-actions">
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  disabled={!canTestNow || busy}
+                  onClick={() => {
+                    void probe();
+                  }}
+                >
+                  测试连接
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  disabled={!canSaveNow || busy}
+                  onClick={() => {
+                    void save();
+                  }}
+                >
+                  保存设置
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    void clear();
+                  }}
+                >
+                  清除设置
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  type="button"
+                  onClick={() => {
+                    void openLog();
+                  }}
+                >
+                  打开日志
+                </button>
+              </div>
             </div>
           </div>
 
@@ -344,7 +346,7 @@ export function SettingsPage({ wb }: SettingsPageProps) {
           </button>
 
           {advancedVisible ? (
-            <dl className="kv">
+            <dl className="kv kv-inline">
               <div>
                 <dt>探针回执</dt>
                 <dd>
@@ -376,9 +378,6 @@ export function SettingsPage({ wb }: SettingsPageProps) {
           <div className="card-head">
             <h2 className="card-title">界面显示</h2>
           </div>
-          <p className="hint">
-            左侧状态灯与右侧卡片平时只占一列窄条，鼠标移上去才展开文字。想一直看到文字就选「常显」。
-          </p>
           <div className="seg seg-block" role="group" aria-label="文字显示方式">
             <button
               className="seg-btn"
@@ -401,6 +400,7 @@ export function SettingsPage({ wb }: SettingsPageProps) {
               常显
             </button>
           </div>
+          <p className="hint">左侧状态灯与右侧卡片平时只占一列窄条，鼠标移上去才展开文字。</p>
           {wb.labelNotice === null ? null : (
             <p className="notice notice-error" role="status">
               {wb.labelNotice}
@@ -416,134 +416,13 @@ export function SettingsPage({ wb }: SettingsPageProps) {
                   void wb.toggleAutoCards();
                 }}
               />
-              <span>转写时自动出卡（默认关；同一词 90 秒内不重复，每分钟最多 8 张）</span>
+              <span>转写时自动出卡（同一词 90 秒内不重复，每分钟最多 8 张）</span>
             </label>
             <label className="checkline">
               <input type="checkbox" checked={wb.searchAuto} onChange={wb.toggleSearchAuto} />
               <span>生成卡片时自动补来源</span>
             </label>
           </div>
-        </section>
-
-        <section className="settings-card">
-          <div className="card-head">
-            <h2 className="card-title">联网查资料</h2>
-            <span className="tag">{searchStatus}</span>
-          </div>
-          <div className="settings-section">
-            <div className="row-actions">
-              <select
-                className="key-input"
-                aria-label="检索服务"
-                value={wb.searchProvider}
-                onChange={(event) => {
-                  wb.setSearchProvider(event.target.value);
-                }}
-              >
-                <option value="bocha">博查 Bocha（中文）</option>
-                <option value="tavily">Tavily（英文 / 通用）</option>
-              </select>
-              <label className="field field-inline">
-                <span>每小时上限</span>
-                <input
-                  className="key-input key-limit"
-                  type="number"
-                  min={0}
-                  max={200}
-                  step={5}
-                  value={wb.searchLimit}
-                  onChange={(event) => {
-                    const next = Number.parseInt(event.target.value, 10);
-                    wb.setSearchLimit(Number.isNaN(next) ? 0 : next);
-                  }}
-                />
-              </label>
-              <button
-                className="btn btn-primary btn-sm"
-                type="button"
-                disabled={wb.searchBusy}
-                onClick={() => {
-                  void wb.saveSearchConfig();
-                }}
-              >
-                {wb.searchBusy ? "保存中…" : "保存"}
-              </button>
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <label className="field">
-              <span>博查 Key</span>
-              <input
-                className="key-input"
-                type="password"
-                autoComplete="off"
-                placeholder={
-                  wb.searchConfig?.hasKeyBocha === true
-                    ? "已保存，留空不修改"
-                    : "博查 Bocha Key（sk- 开头）"
-                }
-                value={wb.searchKeyBocha}
-                onChange={(event) => {
-                  wb.setSearchKeyBocha(event.target.value);
-                }}
-              />
-            </label>
-            <div className="row-actions">
-              <button
-                className="btn btn-ghost btn-xs"
-                type="button"
-                disabled={wb.searchBusy || wb.searchConfig?.hasKeyBocha !== true}
-                onClick={() => {
-                  void wb.clearSearchKeyFor("bocha");
-                }}
-              >
-                清除博查 Key
-              </button>
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <label className="field">
-              <span>Tavily Key</span>
-              <input
-                className="key-input"
-                type="password"
-                autoComplete="off"
-                placeholder={
-                  wb.searchConfig?.hasKeyTavily === true
-                    ? "已保存，留空不修改"
-                    : "Tavily Key（tvly- 开头）"
-                }
-                value={wb.searchKeyTavily}
-                onChange={(event) => {
-                  wb.setSearchKeyTavily(event.target.value);
-                }}
-              />
-            </label>
-            <div className="row-actions">
-              <button
-                className="btn btn-ghost btn-xs"
-                type="button"
-                disabled={wb.searchBusy || wb.searchConfig?.hasKeyTavily !== true}
-                onClick={() => {
-                  void wb.clearSearchKeyFor("tavily");
-                }}
-              >
-                清除 Tavily Key
-              </button>
-            </div>
-          </div>
-
-          <p className="hint">
-            只有点「联网查」或勾选自动补来源时才会出网：发出去的是选中的词（≤80 字），不发整段转写；
-            Key 存系统凭据，不进配置文件。
-          </p>
-          {wb.searchConfigNotice === null ? null : (
-            <p className="notice" role="status">
-              {wb.searchConfigNotice}
-            </p>
-          )}
         </section>
 
         <section className="settings-card">
@@ -599,11 +478,131 @@ export function SettingsPage({ wb }: SettingsPageProps) {
           )}
         </section>
 
-        <section className="settings-card">
+        <section className="settings-card span-2">
+          <div className="card-head">
+            <h2 className="card-title">联网查资料</h2>
+            <span className="tag">{searchStatus}</span>
+          </div>
+
+          <div className="settings-grid settings-grid-wide">
+            <div className="settings-section">
+              <h3>服务与限额</h3>
+              <div className="row-actions">
+                <select
+                  className="key-input"
+                  aria-label="检索服务"
+                  value={wb.searchProvider}
+                  onChange={(event) => {
+                    wb.setSearchProvider(event.target.value);
+                  }}
+                >
+                  <option value="bocha">博查 Bocha（中文）</option>
+                  <option value="tavily">Tavily（英文 / 通用）</option>
+                </select>
+                <label className="field field-inline">
+                  <span>每小时上限</span>
+                  <input
+                    className="key-input key-limit"
+                    type="number"
+                    min={0}
+                    max={200}
+                    step={5}
+                    value={wb.searchLimit}
+                    onChange={(event) => {
+                      const next = Number.parseInt(event.target.value, 10);
+                      wb.setSearchLimit(Number.isNaN(next) ? 0 : next);
+                    }}
+                  />
+                </label>
+                <button
+                  className="btn btn-primary btn-sm"
+                  type="button"
+                  disabled={wb.searchBusy}
+                  onClick={() => {
+                    void wb.saveSearchConfig();
+                  }}
+                >
+                  {wb.searchBusy ? "保存中…" : "保存"}
+                </button>
+              </div>
+              <p className="hint">
+                只有点「联网查」或勾选自动补来源时才会出网：发出去的是选中的词（≤80 字），不发整段转写；
+                Key 存系统凭据，不进配置文件。
+              </p>
+            </div>
+
+            <div className="settings-section">
+              <h3>检索 Key</h3>
+              <div className="key-line">
+                <span className="key-label">博查</span>
+                <input
+                  className="key-input"
+                  type="password"
+                  autoComplete="off"
+                  aria-label="博查 Key"
+                  placeholder={
+                    wb.searchConfig?.hasKeyBocha === true
+                      ? "已保存，留空不修改"
+                      : "博查 Bocha Key（sk- 开头）"
+                  }
+                  value={wb.searchKeyBocha}
+                  onChange={(event) => {
+                    wb.setSearchKeyBocha(event.target.value);
+                  }}
+                />
+                <button
+                  className="btn btn-ghost btn-xs"
+                  type="button"
+                  disabled={wb.searchBusy || wb.searchConfig?.hasKeyBocha !== true}
+                  onClick={() => {
+                    void wb.clearSearchKeyFor("bocha");
+                  }}
+                >
+                  清除
+                </button>
+              </div>
+              <div className="key-line">
+                <span className="key-label">Tavily</span>
+                <input
+                  className="key-input"
+                  type="password"
+                  autoComplete="off"
+                  aria-label="Tavily Key"
+                  placeholder={
+                    wb.searchConfig?.hasKeyTavily === true
+                      ? "已保存，留空不修改"
+                      : "Tavily Key（tvly- 开头）"
+                  }
+                  value={wb.searchKeyTavily}
+                  onChange={(event) => {
+                    wb.setSearchKeyTavily(event.target.value);
+                  }}
+                />
+                <button
+                  className="btn btn-ghost btn-xs"
+                  type="button"
+                  disabled={wb.searchBusy || wb.searchConfig?.hasKeyTavily !== true}
+                  onClick={() => {
+                    void wb.clearSearchKeyFor("tavily");
+                  }}
+                >
+                  清除
+                </button>
+              </div>
+              {wb.searchConfigNotice === null ? null : (
+                <p className="notice" role="status">
+                  {wb.searchConfigNotice}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="settings-card span-2">
           <div className="card-head">
             <h2 className="card-title">隐私与数据</h2>
           </div>
-          <dl className="kv">
+          <dl className="kv kv-inline">
             <div>
               <dt>自动外发</dt>
               <dd>未接入（仅手动触发）</dd>
