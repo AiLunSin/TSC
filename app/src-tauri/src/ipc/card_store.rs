@@ -4,7 +4,7 @@
 //! 不伪造外部检索来源。
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -22,6 +22,8 @@ use meeting_copilot_domain::model::session::TextRange;
 use meeting_copilot_domain::vo::{
     CardRef, ConclusionText, Confidence, KeywordRef, NormalizedTerm, ReferenceRef, TitleText,
 };
+use meeting_copilot_infrastructure::store::repo::card_snapshot::StoredCard;
+use meeting_copilot_infrastructure::store::SqliteStore;
 
 use crate::ipc::card_gate::{self, LocalGate};
 use crate::ipc::dto::IpcErrorDto;
@@ -37,6 +39,8 @@ const STOPWORDS: &[&str] = &[
 
 const MAX_KEYWORDS_PER_TEXT: usize = 8;
 const MAX_CARDS: usize = 200;
+/// 卡片持久化与补齐共用同一个桌面会话标识。
+const CARD_SESSION_ID: &str = "desktop-local-session";
 
 /// 自动出卡限流：同一个词 90 秒内不重复出卡，整场每分钟最多 8 张。
 ///
@@ -73,15 +77,30 @@ pub struct CardStore {
     privacy: PrivacyMode,
     /// 自动出卡的冷却与分钟额度；手动出卡不查这里。
     auto: Mutex<AutoEmitState>,
+    /// 卡片持久化：出卡落库、启动回灌、清空同步删库；测试可无库。
+    store: Option<Arc<SqliteStore>>,
+    /// 回灌期间不再写库，避免重复插入。
+    restoring: AtomicBool,
 }
 
 impl CardStore {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
-        Self::new_with_privacy(PrivacyMode::from_env())
+        Self::with_store(None, PrivacyMode::from_env())
     }
 
-    /// 显式给定隐私态：测试用固定值，生产由 `new()` 从开发期开关读取。
+    /// 带持久化：重启后卡片仍可见（SPEC 4.3-3 单库；字段级加密）。
+    pub(crate) fn new_persistent(store: Option<Arc<SqliteStore>>) -> Self {
+        Self::with_store(store, PrivacyMode::from_env())
+    }
+
+    /// 显式给定隐私态：测试用固定值，生产由持久化构造从开发期开关读取。
+    #[cfg(test)]
     pub(crate) fn new_with_privacy(privacy: PrivacyMode) -> Self {
+        Self::with_store(None, privacy)
+    }
+
+    fn with_store(store: Option<Arc<SqliteStore>>, privacy: PrivacyMode) -> Self {
         Self {
             cards: Mutex::new(Vec::new()),
             sequence: AtomicU64::new(0),
@@ -89,6 +108,8 @@ impl CardStore {
             tfidf: TfIdf::new(None::<&mut &[u8]>, KeywordExtractConfig::default()),
             privacy,
             auto: Mutex::new(AutoEmitState::default()),
+            store,
+            restoring: AtomicBool::new(false),
         }
     }
 
@@ -253,6 +274,7 @@ impl CardStore {
         let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
         match build_draft(sequence, &title, &excerpt, &gate, self.privacy, sources) {
             Some(draft) => {
+                self.persist(&draft);
                 store.push(CardSnapshotEntry::Draft(draft));
                 Ok(1)
             }
@@ -289,9 +311,67 @@ impl CardStore {
             }
             draft.references = build_references(sequence, sources);
             draft.citation_alignment = CitationAlignment::Passed;
+            // 来源变了，落库副本同步更新。
+            self.persist(&draft.clone());
             return true;
         }
         false
+    }
+
+    /// 出卡/补来源后把卡片落库（字段级加密）；重启后用 `restore` 回灌。
+    fn persist(&self, draft: &KeywordCardDraft) {
+        let Some(store) = &self.store else {
+            return;
+        };
+        if self.restoring.load(Ordering::Relaxed) {
+            return;
+        }
+        let sources: Vec<String> = draft
+            .references
+            .iter()
+            .filter(|reference| reference.trust_tier == ReferenceTrustTier::GeneralWeb)
+            .filter_map(|reference| {
+                reference
+                    .reference_id
+                    .as_str()
+                    .split_once(':')
+                    .map(|(_, site)| site.to_owned())
+            })
+            .collect();
+        let record = StoredCard {
+            card_id: draft.card_id.as_str().to_owned(),
+            title: draft.keyword_text.as_str().to_owned(),
+            explanation: draft
+                .summary
+                .as_ref()
+                .map(|summary| summary.as_str().to_owned())
+                .unwrap_or_default(),
+            sources,
+            created_at_ms: i64::try_from(now_ms()).unwrap_or(i64::MAX),
+        };
+        let _ = store.save_card_snapshot(CARD_SESSION_ID, &record);
+    }
+
+    /// 启动时回灌最近卡片；回灌期间不重复写库。
+    pub fn restore(&self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+        let Ok(records) = store.load_recent_cards(CARD_SESSION_ID, MAX_CARDS) else {
+            return;
+        };
+        if records.is_empty() {
+            return;
+        }
+        self.restoring.store(true, Ordering::Relaxed);
+        for record in records {
+            let _ = self.ingest_explanation_with_sources(
+                &record.title,
+                &record.explanation,
+                &record.sources,
+            );
+        }
+        self.restoring.store(false, Ordering::Relaxed);
     }
 
     /// 清空本次会话的卡片，供界面上的"清空"按钮使用。
@@ -302,6 +382,10 @@ impl CardStore {
             .map_err(|_| IpcErrorDto::new("card_store_unavailable", "卡片存储不可用。", true))?;
         let removed = store.len();
         store.clear();
+        drop(store);
+        if let Some(sqlite) = &self.store {
+            let _ = sqlite.delete_card_snapshots(CARD_SESSION_ID);
+        }
         Ok(removed)
     }
 
@@ -799,5 +883,33 @@ mod tests {
                 ReferenceTrustTier::GeneralWeb
             );
         }
+    }
+
+    /// 卡片落库后，重启（新建 Store 实例）仍能回灌；清空同步删库。
+    #[test]
+    fn cards_survive_restart_through_store() {
+        let sqlite = std::sync::Arc::new(
+            meeting_copilot_infrastructure::store::SqliteStore::open_in_memory().expect("store"),
+        );
+        let first = CardStore::new_persistent(Some(std::sync::Arc::clone(&sqlite)));
+        first
+            .ingest_explanation_with_sources("灰度", "分批次放量。", &["example.com".to_owned()])
+            .expect("card");
+        assert_eq!(
+            sqlite
+                .load_recent_cards("desktop-local-session", 10)
+                .expect("load")
+                .len(),
+            1
+        );
+
+        let second = CardStore::new_persistent(Some(std::sync::Arc::clone(&sqlite)));
+        second.restore();
+        assert_eq!(second.cards().len(), 1);
+        second.clear().expect("clear");
+        assert!(sqlite
+            .load_recent_cards("desktop-local-session", 10)
+            .expect("load")
+            .is_empty());
     }
 }

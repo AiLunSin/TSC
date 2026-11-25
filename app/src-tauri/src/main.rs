@@ -148,7 +148,13 @@ fn main() {
                 .filter(|model| !model.trim().is_empty())
                 .map(|model| vec![model])
                 .unwrap_or_else(|| vec![DEFAULT_MODEL_PRESET.to_owned()]);
-            let cards = Arc::new(ipc::card_store::CardStore::new());
+            // 断网补齐：库密钥在 OS 凭据库；库打不开时补齐停用，检索本身仍可用。
+            let backfill = ipc::backfill::BackfillBridge::open(&config_dir).map(Arc::new);
+            // 卡片持久化与补齐共用同一单库；启动回灌，避免重启后卡片列表清空。
+            let cards = Arc::new(ipc::card_store::CardStore::new_persistent(
+                backfill.as_ref().map(|bridge| bridge.store()),
+            ));
+            cards.restore();
             app.manage(Arc::clone(&cards));
             let transcripts = Arc::new(ipc::transcript::TranscriptLog::new());
             app.manage(Arc::clone(&transcripts));
@@ -165,8 +171,7 @@ fn main() {
             let search_tavily: Arc<dyn SecureStore> = Arc::new(
                 WindowsCredentialStore::with_target_name(SEARCH_CREDENTIAL_TARGET_TAVILY),
             );
-            // 断网补齐：库密钥在 OS 凭据库；库打不开时补齐停用，检索本身仍可用。
-            let backfill = ipc::backfill::BackfillBridge::open(&config_dir).map(Arc::new);
+            // 断网补齐与卡片持久化已在上方装配；这里只构造检索运行态。
             let search_state = Arc::new(ipc::search::SearchState::new(
                 config_dir.clone(),
                 search_bocha,

@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use meeting_copilot_application::proactive::outbox::{EnqueueOutcome, OutboxService};
 use meeting_copilot_application::proactive::recovery::{BACKFILL_RATIO_MIN, BACKFILL_WINDOW_MS};
@@ -62,7 +62,7 @@ struct Window {
 
 /// outbox 落库与恢复窗口统计。
 pub struct BackfillBridge {
-    store: SqliteStore,
+    store: Arc<SqliteStore>,
     /// dedupe_key → 原始词；只在本进程内有效，用于回放时重建查询。
     words: Mutex<HashMap<String, String>>,
     window: Mutex<Window>,
@@ -81,7 +81,7 @@ impl BackfillBridge {
         };
         match SqliteStore::open_with_key(&config, Some(&StoreKey::new(key))) {
             Ok(store) => {
-                let bridge = Self::from_store(store);
+                let bridge = Self::from_store(Arc::new(store));
                 // 重启后把活跃任务的查询词回灌到内存，并清掉已完成任务的残留。
                 bridge.rehydrate();
                 Some(bridge)
@@ -112,13 +112,18 @@ impl BackfillBridge {
         let _ = self.store.purge_backfill_words(SESSION_ID, &keep);
     }
 
-    fn from_store(store: SqliteStore) -> Self {
+    fn from_store(store: Arc<SqliteStore>) -> Self {
         Self {
             store,
             words: Mutex::new(HashMap::new()),
             window: Mutex::new(Window::default()),
             sequence: AtomicU64::new(0),
         }
+    }
+
+    /// 共享同一个单库句柄：卡片持久化与补齐共用一把连接。
+    pub fn store(&self) -> Arc<SqliteStore> {
+        Arc::clone(&self.store)
     }
 
     fn words(&self) -> MutexGuard<'_, HashMap<String, String>> {
@@ -163,7 +168,9 @@ impl BackfillBridge {
             now_ms,
         )
         .ok()?;
-        let outcome = OutboxService::new(&self.store).enqueue(entry).ok()?;
+        let outcome = OutboxService::new(self.store.as_ref())
+            .enqueue(entry)
+            .ok()?;
         let task_id = match outcome {
             EnqueueOutcome::Enqueued(id) | EnqueueOutcome::Merged(id) => id,
         };
@@ -206,7 +213,7 @@ impl BackfillBridge {
         let Ok(entries) = self.store.recoverable() else {
             return;
         };
-        let service = OutboxService::new(&self.store);
+        let service = OutboxService::new(self.store.as_ref());
         for mut entry in entries {
             if entry.dedupe_key.as_str() != dedupe {
                 continue;
@@ -226,7 +233,7 @@ impl BackfillBridge {
 
     /// 到期可回放的任务；同时带回重建查询所需的词（可能缺失）。
     pub fn due_jobs(&self, now_ms: i64) -> Vec<(OutboxEntry, Option<String>)> {
-        let Ok(entries) = OutboxService::new(&self.store).due(now_ms) else {
+        let Ok(entries) = OutboxService::new(self.store.as_ref()).due(now_ms) else {
             return Vec::new();
         };
         let words = self.words();
@@ -249,14 +256,14 @@ impl BackfillBridge {
 
     pub fn mark_done(&self, mut entry: OutboxEntry, now_ms: i64) {
         let dedupe = entry.dedupe_key.as_str().to_owned();
-        let _ = OutboxService::new(&self.store).on_success(&mut entry, now_ms);
+        let _ = OutboxService::new(self.store.as_ref()).on_success(&mut entry, now_ms);
         let _ = self.store.delete_backfill_word(SESSION_ID, &dedupe);
         let _ = self.store.delete_backfill_card(SESSION_ID, &dedupe);
         self.words().remove(&dedupe);
     }
 
     pub fn mark_failed(&self, mut entry: OutboxEntry, now_ms: i64) {
-        let _ = OutboxService::new(&self.store).on_failure(&mut entry, now_ms);
+        let _ = OutboxService::new(self.store.as_ref()).on_failure(&mut entry, now_ms);
     }
 
     pub fn pending_total(&self) -> usize {
@@ -358,7 +365,9 @@ mod tests {
     use super::*;
 
     fn bridge() -> BackfillBridge {
-        BackfillBridge::from_store(SqliteStore::open_in_memory().expect("memory store"))
+        BackfillBridge::from_store(Arc::new(
+            SqliteStore::open_in_memory().expect("memory store"),
+        ))
     }
 
     #[test]
@@ -397,7 +406,7 @@ mod tests {
             0,
         )
         .expect("entry");
-        OutboxService::new(&bridge.store)
+        OutboxService::new(bridge.store.as_ref())
             .enqueue(entry)
             .expect("enqueue");
         let jobs = bridge.due_jobs(0);

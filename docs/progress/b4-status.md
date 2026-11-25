@@ -2393,6 +2393,24 @@ DB：任务 `bf-c904a92ffa8bb150-1795591080973-1 | done | attempts=1`（断网�
 
 **验证**：desktop **100 passed / 0 failed**；infrastructure lib **151 passed**；`clippy -D warnings`、`fmt --check`、B4 门禁 **7/7** 通过。
 
+### §56.10 卡片列表持久化（2026-11-25）
+
+背景：§56.9 只持久化「补齐所需的最小副本」，补齐完成即删；任何重启后卡片列表仍会清空（界面「暂无卡片」）。
+
+**改动**
+
+- v5 迁移（`SCHEMA_VERSION=5`，本机库已迁移）：`card_snapshot(session_id, card_id, payload, created_at_ms)`，载荷字段级 AES-256-GCM。
+- `CardStore` 接入单库：出卡/补来源后 `persist` 落库；启动 `restore()` 回灌最近 ≤200 张；清空卡片同步删库。
+- `BackfillBridge` 改为共享 `Arc<SqliteStore>`，卡片与补齐共用一把连接；库不可用时自动退回纯内存。
+
+**实机取证**
+
+- 出卡后 DB：`card_snapshot` 3 行，`payload` 前缀 `enc:v1:`（密文，无明文标题）；
+- 结束进程并重启：界面「共 3 张」，标题/释义/引用 3 条均恢复；
+- `cargo test` desktop **101 passed / 0 failed**（新增 `cards_survive_restart_through_store`）；infra lib **156 passed**；clippy `-D warnings`、fmt、B4 门禁 **7/7** 通过。
+
+**边界**：按单会话保留，不做跨会话历史管理；沿用 `MAX_CARDS=200`；未接 `cards` 表的 `CardRepository`（`SuggestionCard` 与视图卡片模型不同），本条不影响已关闭的 AUD-04/U-07。
+
 ## §57 platform-mac 占位删除（2026-11-25）
 
 用户 2026-11-25 明确要求删除多余的 `platform-mac` 占位 crate（无 macOS 设备，占位无实现价值）。本轮执行：
