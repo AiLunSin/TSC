@@ -96,7 +96,17 @@ function CardsRail({ wb }: WorkPageProps): JSX.Element {
         >
           清空
         </button>
+        <button
+          className="btn btn-ghost btn-xs"
+          type="button"
+          onClick={() => {
+            void wb.loadQuality();
+          }}
+        >
+          质量
+        </button>
       </div>
+      <p className="cards-empty">{wb.qualityLabel}</p>
       <div className="cards-body">
         {wb.cards.length === 0 ? (
           <p className="cards-empty">
@@ -110,6 +120,9 @@ function CardsRail({ wb }: WorkPageProps): JSX.Element {
                 card={card}
                 onOpen={(id) => {
                   void wb.openCard(id);
+                }}
+                onFeedback={(id, outcome) => {
+                  void wb.sendFeedback(id, outcome);
                 }}
               />
             ))}

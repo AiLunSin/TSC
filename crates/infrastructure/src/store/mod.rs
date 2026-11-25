@@ -13,7 +13,7 @@ pub mod repo;
 
 pub use repo::SqliteStore;
 
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// L1 派生的 32 字节数据库密钥。仅内存持有，日志与 Debug 输出一律脱敏。
 #[derive(Clone, PartialEq, Eq)]

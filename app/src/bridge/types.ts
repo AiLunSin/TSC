@@ -167,6 +167,20 @@ export interface KeywordCardViewDto {
   badgeCount: number;
 }
 
+export interface QualityMetricsDto {
+  autoShown: number;
+  feedback: number;
+  useful: number;
+  useless: number;
+  wrong: number;
+  misTriggerRate: number | null;
+  adoptRate: number | null;
+  latencySamples: number;
+  latencyP50Ms: number | null;
+  latencyP95Ms: number | null;
+  latencyP99Ms: number | null;
+}
+
 export interface CardDetailDto {
   cardId: string;
   title: string;
@@ -211,6 +225,9 @@ export const IPC_COMMANDS = [
   "capture_status",
   "ingest_text",
   "clear_cards",
+  "card_feedback",
+  "card_rendered",
+  "quality_metrics",
   "start_asr",
   "stop_asr",
   "asr_status",

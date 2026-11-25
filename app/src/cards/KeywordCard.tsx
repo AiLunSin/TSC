@@ -32,9 +32,12 @@ export function conclusionText(conclusion: ConclusionDto): string {
   return conclusion.available.text;
 }
 
+type FeedbackOutcome = "useful" | "useless" | "wrong";
+
 interface KeywordCardProps {
   card: KeywordCardViewDto;
   onOpen: (cardId: string) => void;
+  onFeedback: (cardId: string, outcome: FeedbackOutcome) => void;
 }
 
 function timeLabel(triggeredAtMs: number): string {
@@ -47,7 +50,7 @@ function timeLabel(triggeredAtMs: number): string {
  *
  * 窄栏是为了给中间的会议内容让位；展开用行内高度，不用浮层，避免被栏的滚动区裁掉。
  */
-export function KeywordCard({ card, onOpen }: KeywordCardProps) {
+export function KeywordCard({ card, onOpen, onFeedback }: KeywordCardProps) {
   if (!card.bodyVisible || card.body === null) {
     return (
       <li className="kcard kcard-muted">
@@ -87,6 +90,29 @@ export function KeywordCard({ card, onOpen }: KeywordCardProps) {
         >
           {enabled ? "查看详情" : "不可点击"}
         </button>
+        <div className="kcard-foot">
+          <button
+            className="btn btn-ghost btn-xs"
+            type="button"
+            onClick={() => { onFeedback(card.cardId, "useful"); }}
+          >
+            有用
+          </button>
+          <button
+            className="btn btn-ghost btn-xs"
+            type="button"
+            onClick={() => { onFeedback(card.cardId, "useless"); }}
+          >
+            无用
+          </button>
+          <button
+            className="btn btn-ghost btn-xs"
+            type="button"
+            onClick={() => { onFeedback(card.cardId, "wrong"); }}
+          >
+            错误
+          </button>
+        </div>
       </div>
     </li>
   );

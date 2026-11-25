@@ -78,6 +78,20 @@ impl SqliteStore {
             )
             .map_err(sql_error)
     }
+
+    /// 删除单张卡片快照：反馈"错误"后撤回该卡，重启也不再出现。
+    pub fn delete_card_snapshot(
+        &self,
+        session_id: &str,
+        card_id: &str,
+    ) -> Result<usize, StoreError> {
+        self.lock()
+            .execute(
+                "DELETE FROM card_snapshot WHERE session_id = ?1 AND card_id = ?2",
+                rusqlite::params![session_id, card_id],
+            )
+            .map_err(sql_error)
+    }
 }
 
 #[cfg(test)]

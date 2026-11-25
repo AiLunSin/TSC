@@ -26,7 +26,7 @@
 | B2 离线闭环与双通道合并 | 完成：状态机、仲裁、缺口、43 项 AC |
 | B3 理解层（离线内核） | 完成：片段准入、滚动摘要、要点抽取、去重 |
 | B4 门控与关键词卡片 | **已关闭**：AC-B4-01～104 离线通过（AC-B4-45 为 macOS 不适用）；38（卡片合成）、39（引用对齐）、51（点击 UI + 设置向导）三项均已关闭（§15/§13/§53）；「产品级真实会议可用」仍未验收 |
-| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义 + 联网查证 + 辅助回复**：AC-B4-111～130 离线通过；28 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片、检索配置/清 Key、联网查询、辅助回复/窗口设置、界面偏好读写）、3+3 端口、三系统凭据目标（模型 / 博查 / Tavily）、原子 4 键配置、卡片组件已接入；设置页真机 1～6/9/10 通过；卡片渲染第 7 项 4/4、投屏/紧急遮蔽第 8 项 3/3（2026-11-25 三张真机截图 + 1 格代码判定，U-05 `closed`，见 `b4-status.md §53`） |
+| P-UI 设置向导 + 关键词卡片前端 | **离线落地 + 设置页真机 + 会议检测 + 实时转写 + 选中查义 + 联网查证 + 辅助回复 + 质量采集**：AC-B4-111～130 离线通过；31 命令（含版本、打开日志、会议检测、采集状态、文本出卡、实时转写、转写全文、选中释义、释义出卡、自动出卡开关、清空卡片、卡片反馈/可见上报/质量统计、检索配置/清 Key、联网查询、辅助回复/窗口设置、界面偏好读写）、3+3 端口、三系统凭据目标（模型 / 博查 / Tavily）、原子 4 键配置、卡片组件已接入；设置页真机 1～6/9/10 通过；卡片渲染第 7 项 4/4、投屏/紧急遮蔽第 8 项 3/3（2026-11-25 三张真机截图 + 1 格代码判定，U-05 `closed`，见 `b4-status.md §53`） |
 | CI 门禁加固 | 完成：B3/B4/P-UI 静态门禁、许可证、SBOM、密钥扫描 |
 | U-09 检索源接入 | **已关闭（2026-11-25）**：A～F 已实现；H-34-G `smoke_three_rounds` 3/3 真实样本通过、报表"样本不足"；200 条真实样本三轮 200/200（D 路径，§50）。证据 `b4-status.md §60` |
 | 仓库发布 | 完成（2026-11-23）：公开、双许可；CI 最近全绿 run 45447235508（2026-11-25）；后续提交的 CI 失败已修复（`rust` dead_code/needless_return、`zero-transcript` 文档命中），待推送后复跑远端 CI |
@@ -36,7 +36,7 @@
 U-06 13.3 回放本体已交付：`gate/replay.rs` 7 项封闭契约 + `gate_replay_driver` 22 用例；AC-B4-95～104 `passed`。
 
 仍未完成：
-- **U-08**：真机性能（自动提示 p95 ≤6s / p99 ≤10s）、误触发率（≥20 场）与博查/Tavily 真实 Key 召回质量未测。
+- **U-08**：真机性能与误触发率（≥20 场）未测；博查/Tavily 真实 Key 召回质量待人工验收。
 - **桌面联网查与辅助回复**：真实检索 Key 下的中文召回质量未测（需自备博查/Tavily Key）；辅助回复在真实会议里的可用度未测。
 - **平台层**：UIA 字幕真实文本未取得（腾讯会议/飞书窗口 UIA 元素数为 0，当前按降级状态展示）；OCR 未在真实会议字幕上验证。
 
@@ -176,7 +176,7 @@ CI 任务：`web`（lint/typecheck/bindings/build）、`rust`（Windows 与两�
 
 - 默认关闭；端点、模型、凭据只在运行期经环境变量注入，**不写入仓库**。
 - 相关变量统一 `LLM_*` 命名；调用上限与冷却由网关侧约束。
-- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（26 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`clear_cards`、`start_asr`/`stop_asr`/`asr_status`/`set_auto_cards`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`、`search_config`/`search_config_save`/`search_clear_key`/`web_search`、`assist_reply`/`assist_config`/`assist_config_save`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
+- 设置向导契约位于 `crates/ui-bridge/src/settings/`，装配与命令位于 `app/src-tauri/src/ipc/`（31 命令，含 `ipc_version`、`open_log`、`meeting_status`、`capture_status`、`ingest_text`、`clear_cards`、`card_feedback`/`card_rendered`/`quality_metrics`、`start_asr`/`stop_asr`/`asr_status`/`set_auto_cards`、`transcript_snapshot`、`explain_selection`、`ingest_explanation`、`search_config`/`search_config_save`/`search_clear_key`/`web_search`、`assist_reply`/`assist_config`/`assist_config_save`），页面位于 `app/src/settings/`；提供 API Key 输入、预设模型、固定服务地址、一键测试、保存/清除与"打开日志"。
 - 采集状态栏由 `capture_status` 驱动：系统音频通道读取 WASAPI 环回健康度（可用即"就绪"）；字幕文本通道由 UIA 轮询驱动，检测到会议即自动启动（窗口无可读文本时"降级"、无会议窗口时"未启用"）；本地 ASR 读取实时管线运行状态（运行中即"就绪"）。识别进程异常退出时，`asr_status` 第三项回传可见原因（缺 vosk、模型不可读、无音频设备），不再静默失败。
 - UIA 字幕通道只接受"像一句话"的元素（长度、中英文标识符占比、固定控件标签词表三重过滤）；腾讯会议窗口里那些 `DanmuContainer`／`pageContainer`／`最小化` 之类的控件名会被全部丢弃，该通道因此常态为"降级"而不是假装就绪。字幕文本与 ASR 文本**分开存放**：文本位优先展示 ASR，ASR 为空才回退字幕，避免两条通道互相覆盖。
 - 会议检测分两步：先按进程名命中腾讯会议（`wemeetapp.exe`/`TencentMeeting.exe`）、微信（`WeChat.exe`/`Weixin.exe`）、飞书（`Feishu.exe`/`Lark.exe`）、钉钉（`DingTalk.exe`），再按可见窗口过滤——常驻客户端（微信/钉钉）要求窗口标题含会议关键词（会议/通话/视频/语音/直播/共享/Meet/Call/Meeting/Video/Voice），腾讯会议/飞书存在可见窗口即判定；每 2 秒轮询，命中后顶部显示应用名并开始计时。只读取进程名与窗口标题，不读取会议内容。

@@ -6,7 +6,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use jieba_rs::{Jieba, KeywordExtract, KeywordExtractConfig, TfIdf};
 use meeting_copilot_application::gate::keyword::{keyword_card_admission, KeywordCardEnv};
@@ -23,6 +23,10 @@ use meeting_copilot_domain::vo::{
     CardRef, ConclusionText, Confidence, KeywordRef, NormalizedTerm, ReferenceRef, TitleText,
 };
 use meeting_copilot_infrastructure::store::repo::card_snapshot::StoredCard;
+use meeting_copilot_infrastructure::store::repo::quality::{
+    QualityEvent, QualityMetrics, OUTCOME_USEFUL, OUTCOME_USELESS, OUTCOME_WRONG, SOURCE_AUTO,
+    SOURCE_MANUAL,
+};
 use meeting_copilot_infrastructure::store::SqliteStore;
 
 use crate::ipc::card_gate::{self, LocalGate};
@@ -124,6 +128,7 @@ impl CardStore {
     }
 
     fn ingest_inner(&self, text: &str, limited: bool) -> Result<usize, IpcErrorDto> {
+        let started = Instant::now();
         // 转写文本可能带 vosk 的词间空格，抽词和摘要前统一合上。
         let text = crate::ipc::transcript::tidy_cjk_spaces(text.trim());
         let text = text.as_str();
@@ -155,6 +160,7 @@ impl CardStore {
             .map_err(|_| IpcErrorDto::new("card_store_unavailable", "卡片存储不可用。", true))?;
         let mut added = 0usize;
         let mut emitted: Vec<String> = Vec::new();
+        let mut shown: Vec<(String, u64)> = Vec::new();
         for keyword in keywords.into_iter().take(MAX_KEYWORDS_PER_TEXT) {
             if limited {
                 match self.check_auto(&keyword, now)? {
@@ -169,10 +175,12 @@ impl CardStore {
             let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
             match build_draft(sequence, &keyword, &excerpt, &gate, self.privacy, &[]) {
                 Some(draft) => {
+                    let card_id = draft.card_id.as_str().to_owned();
                     store.push(CardSnapshotEntry::Draft(draft));
                     added += 1;
                     if limited {
                         emitted.push(keyword.clone());
+                        shown.push((card_id, now));
                     }
                 }
                 None => continue,
@@ -180,10 +188,111 @@ impl CardStore {
         }
         drop(store);
         // 只给真正出过卡的词记冷却，避免"被门控拦掉的词也算用掉额度"。
+        let latency_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        for (card_id, at_ms) in shown {
+            self.record_shown(&card_id, at_ms, latency_ms);
+        }
         for term in emitted {
             self.record_auto(&term, now);
         }
         Ok(added)
+    }
+
+    /// 自动路径出卡时写质量事件；无库（测试/降级）时静默跳过。
+    fn record_shown(&self, card_id: &str, at_ms: u64, latency_ms: u64) {
+        let Some(store) = &self.store else {
+            return;
+        };
+        let _ = store.record_quality_event(&QualityEvent::shown(card_id, at_ms, latency_ms));
+    }
+
+    /// 记录用户反馈；`wrong` 同时撤回当前卡。返回是否发生撤回。
+    pub fn record_feedback(&self, card_id: &str, outcome: &str) -> Result<bool, IpcErrorDto> {
+        if card_id.trim().is_empty() {
+            return Err(IpcErrorDto::new("invalid_feedback", "卡片不存在。", false));
+        }
+        if !matches!(outcome, OUTCOME_USEFUL | OUTCOME_USELESS | OUTCOME_WRONG) {
+            return Err(IpcErrorDto::new(
+                "invalid_feedback",
+                "反馈取值不合法。",
+                false,
+            ));
+        }
+        let source = match &self.store {
+            Some(store) if store.has_auto_shown(card_id) => SOURCE_AUTO,
+            _ => SOURCE_MANUAL,
+        };
+        if let Some(store) = &self.store {
+            let _ = store.record_quality_event(&QualityEvent::feedback(
+                card_id,
+                outcome,
+                now_ms(),
+                source,
+            ));
+        }
+        let withdrew = outcome == OUTCOME_WRONG && self.withdraw(card_id);
+        Ok(withdrew)
+    }
+
+    /// 前端第一次看到这张自动卡时上报；同卡只保留最新一条可见时延。
+    pub fn mark_rendered(&self, card_id: &str) -> Result<(), IpcErrorDto> {
+        let Some(store) = &self.store else {
+            return Ok(());
+        };
+        let Some(shown_at) = store.auto_shown_at(card_id) else {
+            return Ok(());
+        };
+        let now = now_ms();
+        let shown = u64::try_from(shown_at).unwrap_or(now);
+        // 历史卡回灌后首次加载也会出现在列表里；超过 5 分钟不算"本轮可见时延"。
+        if now.saturating_sub(shown) > 5 * 60 * 1000 {
+            return Ok(());
+        }
+        let latency_ms = now.saturating_sub(shown);
+        let _ = store.record_quality_event(&QualityEvent::rendered(
+            card_id,
+            now,
+            latency_ms,
+            SOURCE_AUTO,
+        ));
+        Ok(())
+    }
+
+    /// 质量统计；`hours=0` 表示不限窗口。无库时返回空指标（界面显示样本不足）。
+    pub fn quality_metrics(&self, hours: Option<u32>) -> Result<QualityMetrics, IpcErrorDto> {
+        let hours = hours.unwrap_or(0).min(24 * 30);
+        let since = if hours == 0 {
+            0
+        } else {
+            now_ms().saturating_sub(u64::from(hours) * 3_600_000)
+        };
+        let since = i64::try_from(since).unwrap_or(i64::MAX);
+        match &self.store {
+            Some(store) => store
+                .quality_metrics(since)
+                .map_err(|_| IpcErrorDto::new("quality_unavailable", "质量统计暂不可用。", true)),
+            None => Ok(QualityMetrics::default()),
+        }
+    }
+
+    /// 从内存与持久化副本同时撤掉一张卡。
+    fn withdraw(&self, card_id: &str) -> bool {
+        let removed = self
+            .cards
+            .lock()
+            .map(|mut cards| {
+                let before = cards.len();
+                cards.retain(|entry| match entry {
+                    CardSnapshotEntry::Draft(draft) => draft.card_id.as_str() != card_id,
+                    _ => true,
+                });
+                before != cards.len()
+            })
+            .unwrap_or(false);
+        if let Some(store) = &self.store {
+            let _ = store.delete_card_snapshot(CARD_SESSION_ID, card_id);
+        }
+        removed
     }
 
     /// 自动路径的额度判定：先清过期窗口，再看分钟上限，最后看同词冷却。
@@ -911,5 +1020,74 @@ mod tests {
             .load_recent_cards("desktop-local-session", 10)
             .expect("load")
             .is_empty());
+    }
+
+    /// 质量链路：自动出卡写 shown，前端可见写 rendered，"错误"反馈撤回卡片。
+    #[test]
+    fn quality_events_are_recorded_and_wrong_feedback_withdraws() {
+        let sqlite = std::sync::Arc::new(SqliteStore::open_in_memory().expect("store"));
+        let cards = CardStore::new_persistent(Some(std::sync::Arc::clone(&sqlite)));
+        let added = cards
+            .ingest("灰度发布下周三开始，由张三负责，先完成监控告警演练，并确认回滚方案。")
+            .expect("ingest");
+        assert!(added >= 1);
+
+        let card_id = cards
+            .cards()
+            .iter()
+            .find_map(|entry| match entry {
+                CardSnapshotEntry::Draft(draft) => Some(draft.card_id.as_str().to_owned()),
+                _ => None,
+            })
+            .expect("card");
+        cards.mark_rendered(&card_id).expect("rendered");
+        let withdrawn = cards
+            .record_feedback(&card_id, OUTCOME_WRONG)
+            .expect("feedback");
+        assert!(withdrawn, "错误反馈应撤回当前卡");
+        assert!(!cards.cards().iter().any(|entry| matches!(
+            entry,
+            CardSnapshotEntry::Draft(draft) if draft.card_id.as_str() == card_id
+        )));
+        assert!(sqlite
+            .load_recent_cards("desktop-local-session", 10)
+            .expect("load")
+            .iter()
+            .all(|record| record.card_id != card_id));
+
+        let metrics = cards.quality_metrics(Some(24)).expect("metrics");
+        assert!(metrics.auto_shown >= 1);
+        assert_eq!(metrics.feedback, 1);
+        assert_eq!(metrics.wrong, 1);
+        assert_eq!(metrics.mis_trigger_rate, Some(1.0));
+        assert_eq!(metrics.latency_samples, 1);
+    }
+
+    /// 手动卡不进误触发率分母，也不记可见时延。
+    #[test]
+    fn manual_card_feedback_is_excluded_from_auto_rates() {
+        let sqlite = std::sync::Arc::new(SqliteStore::open_in_memory().expect("store"));
+        let cards = CardStore::new_persistent(Some(std::sync::Arc::clone(&sqlite)));
+        cards
+            .ingest_explanation_with_sources("灰度", "分批次放量。", &[])
+            .expect("card");
+        let card_id = cards
+            .cards()
+            .iter()
+            .find_map(|entry| match entry {
+                CardSnapshotEntry::Draft(draft) => Some(draft.card_id.as_str().to_owned()),
+                _ => None,
+            })
+            .expect("card");
+        cards.mark_rendered(&card_id).expect("rendered");
+        cards
+            .record_feedback(&card_id, OUTCOME_USELESS)
+            .expect("feedback");
+
+        let metrics = cards.quality_metrics(Some(24)).expect("metrics");
+        assert_eq!(metrics.auto_shown, 0);
+        assert_eq!(metrics.feedback, 0);
+        assert_eq!(metrics.mis_trigger_rate, None);
+        assert_eq!(metrics.latency_samples, 0);
     }
 }

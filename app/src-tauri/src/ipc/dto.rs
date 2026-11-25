@@ -320,3 +320,54 @@ pub struct UiPrefsDto {
 pub struct UiPrefsInputDto {
     pub label_mode: String,
 }
+/// 卡片反馈：`outcome` 只接受 `useful` / `useless` / `wrong`。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CardFeedbackInputDto {
+    pub card_id: String,
+    pub outcome: String,
+}
+
+/// 卡片可见上报：前端第一次渲染出该卡时调用。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CardRenderedInputDto {
+    pub card_id: String,
+}
+
+/// 质量统计：比率为 `null` 表示样本不足，界面不得按 0 展示。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct QualityMetricsDto {
+    pub auto_shown: u64,
+    pub feedback: u64,
+    pub useful: u64,
+    pub useless: u64,
+    pub wrong: u64,
+    pub mis_trigger_rate: Option<f64>,
+    pub adopt_rate: Option<f64>,
+    pub latency_samples: u64,
+    pub latency_p50_ms: Option<u64>,
+    pub latency_p95_ms: Option<u64>,
+    pub latency_p99_ms: Option<u64>,
+}
+
+impl From<meeting_copilot_infrastructure::store::repo::quality::QualityMetrics>
+    for QualityMetricsDto
+{
+    fn from(metrics: meeting_copilot_infrastructure::store::repo::quality::QualityMetrics) -> Self {
+        Self {
+            auto_shown: metrics.auto_shown,
+            feedback: metrics.feedback,
+            useful: metrics.useful,
+            useless: metrics.useless,
+            wrong: metrics.wrong,
+            mis_trigger_rate: metrics.mis_trigger_rate,
+            adopt_rate: metrics.adopt_rate,
+            latency_samples: metrics.latency_samples,
+            latency_p50_ms: metrics.latency_p50_ms,
+            latency_p95_ms: metrics.latency_p95_ms,
+            latency_p99_ms: metrics.latency_p99_ms,
+        }
+    }
+}

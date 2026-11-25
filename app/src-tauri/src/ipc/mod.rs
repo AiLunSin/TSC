@@ -14,6 +14,7 @@ pub mod llm;
 pub mod log;
 pub mod meeting;
 pub mod probe;
+pub mod quality;
 pub mod search;
 pub mod settings;
 pub mod settings_store;

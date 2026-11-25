@@ -2595,3 +2595,39 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 - 不宣称"产品级真实会议可用"的结论发生变化：本轮只改界面组织与显示偏好。
 - 悬停提示为纯 CSS，不引入 JS 定时器；`prefers-reduced-motion` 未单独适配（过渡时长 ≤0.18s）。
 - 偏好按用户一份（`app_config_dir/ui.json`），不做多窗口同步。
+## §62 质量采集最小切片：反馈 / 展示 / 可见时延（2026-11-25）
+
+用户确认先做 63.1 的最小切片，让 U-08 的"误触发率"与"自动出卡时延"有可测出口；完整看板与 63.2 告警不在本轮。
+
+### §62.1 实现
+
+| 层 | 改动 |
+|---|---|
+| 迁移 | `v6_quality.sql`：`quality_event(event_id, event_kind, card_id, source, at_ms, latency_ms, outcome)`；只存卡 ID、枚举与数值，不存正文或关键词原文；`SCHEMA_VERSION` 5→6 |
+| 仓储 | `store/repo/quality.rs`：`record_quality_event`（同卡同事件 upsert）、`has_auto_shown` / `auto_shown_at`、`quality_metrics(since_ms)`；`card_snapshot` 增加单卡删除 |
+| 卡片 | `CardStore::ingest_inner` 自动路径写 `auto_shown`（时延为本次抽词+建卡耗时）；`record_feedback`（`wrong` 撤回当前卡并删快照）；`mark_rendered`（前端首次可见，超过 5 分钟的历史卡忽略）；`quality_metrics`（`hours` 0=不限，上限 30 天） |
+| IPC | `card_feedback` / `card_rendered` / `quality_metrics`；命令数 28→**31**（`generate_handler` 含 `ipc_version`）；前端 `IPC_COMMANDS` 30 项 |
+| 前端 | 卡片增加“有用 / 无用 / 错误”；卡片栏增加“质量”按钮与一行指标；新卡首次出现时上报 `card_rendered`（仅 60 秒内触发的卡） |
+
+### §62.2 统计口径
+
+- 误触发率 = `(useless + wrong) / 有反馈的自动卡`；**未反馈不计入分母**；分母为 0 时比率为 `null`，界面显示“样本不足”。
+- 采纳率 = `useful / 有反馈的自动卡`。
+- 可见时延 = `rendered.at_ms - auto_shown.at_ms`，输出 p50/p95/p99；**不含** ASR 稳定判定、网络检索与前端绘制以外的排队时间。
+- 手动卡（粘贴文本 / 释义出卡）不写 `auto_shown`，其反馈不进自动口径。
+
+### §62.3 验证
+
+- `cargo test -p meeting-copilot-infrastructure --lib quality` → **4 passed / 0 failed**（分母 0、未反馈不计入、手动排除、可见事件 upsert 与百分位）。
+- `cargo test -p meeting-copilot-desktop` → **107 passed / 0 failed**（新增 2 例：自动链路 shown/rendered/wrong 撤回、手动卡排除）。
+- `cargo clippy -p meeting-copilot-desktop --all-targets -- -D warnings` rc=0；`cargo fmt --all` 后 `git diff --check` rc=0。
+- `npm run typecheck` / `npm run lint` / `npm run build` rc=0；`node scripts/check-bindings.mjs` → 22 个 DTO 一致。
+- `bash scripts/check-g2-claims.sh`、`bash scripts/scan-secrets-docs.sh --all-md` rc=0。
+- 真机点测（2026-11-25）：新构建启动后 `auto_shown` / `rendered` / `feedback` 三类事件均能落库，采集链路可用；反馈样本远不足 ≥20 场，本轮**只记录采集链路完成**，不作误触发率或 G4 结论。
+
+### §62.4 边界
+
+- **不是 G4 主动提示时延**：当前自动出卡是纯本地抽词建卡（`card_store.rs`），不检索、不调 LLM；`quality_metrics` 的可见时延只反映“后端出卡 → 前端首次看到”，不能用来宣称 p95 ≤6s / p99 ≤10s。
+- 误触发率仍**未验收**：本轮只补齐采集与统计出口；真机仅完成链路点测，反馈样本远不足 ≥20 场，需用户在真实会议中持续点击“有用/无用/错误”后才能出数。
+- 不做 63.1 完整看板、63.2 告警与自动收敛、三维度图表；`commandCounters` 仍 6 组 12 项（X-AUD-08 计数面不变）。
+- 前端契约 DTO 仍 22（新增 3 个 DTO 在 app 层，不进 `schema.json`）。

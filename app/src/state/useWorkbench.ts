@@ -6,6 +6,7 @@ import type {
   CardDetailDto,
   ExplainResultDto,
   KeywordCardViewDto,
+  QualityMetricsDto,
   SearchConfigDto,
   SearchHitDto,
   SearchResponseDto,
@@ -135,12 +136,26 @@ export function useWorkbench() {
   const [assistNotice, setAssistNotice] = useState<string | null>(null);
   const [labelMode, setLabelMode] = useState<LabelMode>("hover");
   const [labelNotice, setLabelNotice] = useState<string | null>(null);
+  const [quality, setQuality] = useState<QualityMetricsDto | null>(null);
+  const seenCards = useRef<Set<string>>(new Set());
 
   const loadCards = useCallback(async () => {
     try {
       const next = await invokeCommand<KeywordCardViewDto[]>("keyword_cards_snapshot");
       setCards(next);
       setCardError(null);
+      const now = Date.now();
+      for (const card of next) {
+        if (seenCards.current.has(card.cardId)) {
+          continue;
+        }
+        seenCards.current.add(card.cardId);
+        // 回灌的历史卡不补可见时延，只上报本轮新出现的卡。
+        if (now - card.triggeredAtMs > 60_000) {
+          continue;
+        }
+        void invokeCommand("card_rendered", { input: { cardId: card.cardId } }).catch(() => {});
+      }
     } catch {
       setCardError("卡片暂不可用，请稍后重试。");
     }
@@ -539,6 +554,37 @@ export function useWorkbench() {
     setSearchAuto((prev) => !prev);
   }
 
+  const loadQuality = useCallback(async (): Promise<void> => {
+    try {
+      const next = await invokeCommand<QualityMetricsDto>("quality_metrics", { hours: 24 });
+      setQuality(next);
+    } catch {
+      setQuality(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadQuality();
+  }, [loadQuality]);
+
+  async function sendFeedback(
+    cardId: string,
+    outcome: "useful" | "useless" | "wrong",
+  ): Promise<void> {
+    try {
+      const withdrawn = await invokeCommand<boolean>("card_feedback", {
+        input: { cardId, outcome },
+      });
+      if (withdrawn) {
+        setDetail(null);
+      }
+      await loadCards();
+      await loadQuality();
+    } catch {
+      setCardError("反馈暂不可用，请稍后重试。");
+    }
+  }
+
   async function clearCards(): Promise<void> {
     try {
       await invokeCommand<number>("clear_cards");
@@ -580,7 +626,21 @@ export function useWorkbench() {
     }
   }
 
+  const qualityLabel =
+    quality === null
+      ? "质量：暂不可用"
+      : quality.feedback === 0
+        ? quality.autoShown === 0
+          ? "质量：样本不足（无自动卡）"
+          : `质量：样本不足（自动 ${String(quality.autoShown)} 张，待反馈）`
+        : `误触发 ${String(Math.round((quality.misTriggerRate ?? 0) * 100))}% · 反馈 ${String(
+            quality.feedback,
+          )} · p95 ${quality.latencyP95Ms === null ? "—" : `${String(quality.latencyP95Ms)}ms`}`;
+
   return {
+    qualityLabel,
+    loadQuality,
+    sendFeedback,
     cards,
     cardError,
     detail,
