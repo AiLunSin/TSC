@@ -83,7 +83,7 @@
 | AC-B4-58~64 39 引用对齐校验 | **已完成（2026-11-22，§13 关闭）**：AC-B4-58~64 全部 `passed` |
 | 13.3 回放本体 | **已完成（2026-11-22，§20 P9 关闭）**：AC-B4-95~104 `passed`；`crates/application/tests/replay/` 仍不存在（AC-B4-57 口径） |
 | 38 / 39 / 41.5 / 42 / 43 / 51 / 52 实体能力 | 38→§15、39→§13、51→§53 均已关闭；41.5/42/43/52 已实现并提交（`c96f381`），U-07-43/U-07-52 已关闭 |
-| 真实检索源连通 / 真实 LLM 冷却 | 未判定（`#[ignore]` 13 个真实 attribute，默认特性 12） |
+| 真实检索源连通 / 真实 LLM 冷却 | H-34-G 3 次手工检索 2026-11-25 通过、真实熔断冷却已取证（§60）；`ac23` 429 未触发；`#[ignore]` 计数不变 |
 
 ## §6 复跑方法
 
@@ -261,7 +261,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | U-05 | 51 点击 UI 与设置向导 | **已关闭（2026-11-25，§53）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；点击 UI 与设置向导离线契约已实现（`keyword_card_view` 19 例、`llm_settings_view` 18 例）；**产品化缺口**（Windows 安全存储、非敏感配置、既有网关探针、保存/清除执行、Tauri 前端渲染与 IPC）见 §28，AC-B4-111~130 全部 `passed`。归属：51（`crates/ui-bridge/src/**`）→ 平台（`crates/platform-win/src/secure_store.rs`）→ 装配层（`app/src-tauri/src/ipc/**`）→ 前端（`app/src/**`）；不建 52 存储/回放目录；`NEW_TARGETS` 保持 25 |
 | U-06 | 13.3 回放本体 | **已关闭（P9，§23）**：`spec.md` §5.11/§6.29/§7.16 与 `requirements.md` §15 已定义驱动契约（7 项封闭）、双层用例（报告层零文本/执行层借用）、装载校验（3 错误/升序）、只调 4 函数、记录核验（14 字段）、失败报告（2 项/5 码）、确定性（两次/乱序/100 次）、零转录、与 200 例并存、`tests/replay/` 不解禁与 `NEW_TARGETS` 24→25；已实现 `gate/replay.rs` + `gate_replay_driver`（22 例），AC-B4-95~104 全部 `passed` | 13.3（`gate/replay.rs` + `tests/gate_replay_driver.rs` + `gate_replay_driver` target；不改 `tests/gate_replay.rs`、不建 `tests/replay/`、不新增依赖） |
 | U-07 | 41.5 / 42 / 43 / 52 | **已实现并提交（`c96f381`）**；43、52、42 均已关闭（42 断网与重启补齐见 §56.8/§56.9，AUD-04 `closed`） | 对应章节 |
-| U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | `#[ignore]` 13 个真实 attribute（默认特性 12），不宣称 G4 |
+| U-08 | 真实端点 / 真机 | **部分取证**：H-34-G 3/3 与真实熔断冷却已取证（§60）；6s/10s p95、误触发率、桌面博查/Tavily 召回质量仍未判定 | `#[ignore]` 计数不变；不宣称 G4 |
 
 ### §10.2 口径约束
 
@@ -2509,3 +2509,42 @@ GitHub Actions API 复核（2026-11-25）：
 
 - 不把本次文档同步写成 CI 已恢复；`rust` 与 `feature-coverage` 仍失败，修复与复跑后需另起小节关闭。
 - 不回溯改写 §52/§55.3/§58 的历史基线数字，最新口径以本节为准。
+## §60 U-08 真实端点取证：H-34-G 三次手工检索与真实熔断冷却（2026-11-25）
+
+用户要求把 U-08 里"H-34-G 3 次手工检索待真实端点、真实 LLM 冷却未取得结论"两项落地（"使用 ds"）；本轮用真实端点完成这两项，**真机性能与误触发率仍不测**。
+
+### §60.1 H-34-G `smoke_three_rounds`（3 次真实手工检索）
+
+- 入口：`crates/infrastructure/tests/search_live.rs::smoke_three_rounds`；编排脚本 `scripts/run-u07-43-samples.sh --smoke-only`。
+- 端点：D 路径（本机必应 RSS 桥 → `{"results":[{url,title}]}` → cloudflared 免账号 quick tunnel，真实公网 HTTPS）。**不是博查/Tavily 真实 Key 召回验收**。
+- 结果：`1 passed / 0 failed`；报告 `.tmp/u07-43/smoke.json`：
+  `{"providers":1,"samples":3,"real_samples":3,"cache_hits":0,"timeouts":0,"failures":0,"p50_ms":2159,"p95_ms":2159,"p99_ms":2159,"status":"样本不足","target":200}`
+- 审计：测试断言哈希链校验通过、记录数 ≥1；runner 每次成功写 1 条 `outbound_query provider=… qlen=… result=success`，摘要只含 `qlen` 与结果，不含查询原文；3 次成功对应 3 条。
+- 首次失败根因：新建 quick tunnel 域名存在 DNS 负缓存/传播延迟，脚本自检通过后 Rust 进程解析失败（桥日志只有一条 `/search`，三条查询全部未出网）。等待 DNS 生效后复跑通过；这是运行环境坑，不是检索适配器缺陷。
+- 关闭口径：U-09 的 H-34-G 手工验收与 200 条真实样本（§50，三轮 200/200）均已具备，**U-09 关闭**。
+
+### §60.2 真实 LLM 冷却（真实端点 + 真实凭据）
+
+- 端点：DeepSeek `https://api.deepseek.com/chat/completions`，模型 `deepseek-flash`；凭据从 Windows 凭据管理器 `meeting-copilot/llm-api-key` 读入进程环境，不落盘、不写入记录。
+- 方法：同一进程内先用真实模型调用 1 次确认连通，再切到不可用模型名连续制造 3 次最终失败，观察第 4 次是否进入冷却，并等待 61 秒验证恢复。探针为一次性 `examples/cooldown_probe.rs`，取证后已删除，未改任何测试用例与 `#[ignore]` 计数。
+- 结果（`.tmp/u07-43/cooldown-probe.log`，退出码 0）：
+  - `seq=1` 真实模型：`degraded=false`、`status=200`、`total_ms=1010` → `baseline_reachable=true`
+  - `seq=10/11/12` 不可用模型：`degraded=true`、`cause=Failed(InvalidSchema)`、`attempts=2`、`status=400`
+  - `seq=20`：`degraded=true`、`cause=Cooling`、`attempts=0`、`status=None`、`total_ms=0` → `cooling_observed=true`
+  - 等待 61 秒后 `seq=21`：`cause=Failed(InvalidSchema)`、`attempts=2` → 冷却窗口结束、重新放行
+  - `RESULT baseline_reachable=true cooling_observed=true cooling_hits=1 cooling_after_60s=false attempted_after_60s=true`
+- 口径：验证的是**熔断冷却**（连续 3 次最终失败 → 60 秒 `DegradeCause::Cooling` → 自动恢复），**不是 429 限流冷却**；`ac23` 本轮仍未触发。
+
+### §60.3 U-08 遗留（保持 `open`）
+
+- 真机性能：自动提示 p95 ≤6 s / p99 ≤10 s，未在真机长会中测量。
+- 误触发率：需 ≥20 场内测样本，未测。
+- 桌面联网查：博查/Tavily 真实 Key 下的中文召回质量与配额口径未测（H-34-G 的 D 路径不等于两家预设验收）。
+- 429 限流观测：未触发，不作限流冷却结论。
+
+### §60.4 不宣称
+
+- 不宣称 G4 达标、自动提示 6 s/10 s p95 达标、误触发率 ≤30%。
+- 不宣称博查/Tavily 在桌面端的真实召回质量已验收。
+- 不宣称 429 限流冷却已验证；只宣称熔断冷却的真实端点取证。
+- 本节口径优先于 §31/§34/§54/§56 中「U-08 真实检索与冷却未判定」的旧状态描述；历史小节原文不回溯改写。
