@@ -19,7 +19,7 @@ export CARGO="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/cargo.e
 export RUSTC="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/rustc.exe"
 export RUSTDOC="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/rustdoc.exe"
 # 本清单所有相对路径以项目根为基准：
-cd C:/Users/11403/Desktop/xiangmu/TSC/TSC
+cd <REPO>
 ```
 
 - `$CARGO` 用于需要固定 toolchain 的取证；`cargo` 直接调用等价（PATH 已前置）。

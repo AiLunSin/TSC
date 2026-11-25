@@ -511,12 +511,12 @@ guard
 
 - [ ] **T-AUD-24 B-5 越界校验与目录内容存档**
   - 目标：在执行任何外层删除前，证明路径落在会话工作区内且无交付文件。
-  - 做什么：校验 `WS_ROOT` 前缀为 `C:/Users/11403/Desktop/xiangmu/TSC`；`ls -R` 存档 `.screenshots` 与 `.codeartsdoer/temp/accept`；确认 `.screenshots` 下仅空 `.tmp`；确认 `temp/accept` 仅临时文件；记录外层 `.codeartsdoer` 顶层条目清单用于事后比对。
-  - 禁止：禁止操作 `C:/Users/11403` 主目录、系统目录、仓库外其他项目；禁止触碰 `.codeartsdoer/{.codebase,skills,mcp,rule,agents}`；禁止递归删除 `.codeartsdoer`。
+  - 做什么：校验 `WS_ROOT` 前缀为 `<REPO>`；`ls -R` 存档 `.screenshots` 与 `.codeartsdoer/temp/accept`；确认 `.screenshots` 下仅空 `.tmp`；确认 `temp/accept` 仅临时文件；记录外层 `.codeartsdoer` 顶层条目清单用于事后比对。
+  - 禁止：禁止操作 `<USER_HOME>` 主目录、系统目录、仓库外其他项目；禁止触碰 `.codeartsdoer/{.codebase,skills,mcp,rule,agents}`；禁止递归删除 `.codeartsdoer`。
   - 命令：
     ```bash
-    WS_ROOT="C:/Users/11403/Desktop/xiangmu/TSC"
-    case "$WS_ROOT" in "C:/Users/11403/Desktop/xiangmu/TSC") echo "IN_WORKSPACE OK";; *) echo "OUT_OF_SCOPE(!)"; exit 1;; esac
+    WS_ROOT="<REPO>"
+    case "$WS_ROOT" in "<REPO>") echo "IN_WORKSPACE OK";; *) echo "OUT_OF_SCOPE(!)"; exit 1;; esac
     ls -R "$WS_ROOT/.screenshots" 2>/dev/null || echo "no .screenshots"
     find "$WS_ROOT/.screenshots" -mindepth 1 | sort | tee "$AUDIT_OUT/b5-screenshots.txt"
     find "$WS_ROOT/.codeartsdoer/temp/accept" -type f 2>/dev/null | tee "$AUDIT_OUT/b5-accept.txt" | wc -l
@@ -532,7 +532,7 @@ guard
   - 禁止：不得使用通配删除外层目录；不得在 `.codeartsdoer` 下执行任何 `rm -rf *`；发现任何交付文件立即停并上报（"遇到缺依据先停"）。
   - 命令：
     ```bash
-    WS_ROOT="C:/Users/11403/Desktop/xiangmu/TSC"
+    WS_ROOT="<REPO>"
     rmdir "$WS_ROOT/.screenshots/.tmp" 2>/dev/null
     rmdir "$WS_ROOT/.screenshots" 2>/dev/null
     rm -rf "$WS_ROOT/.codeartsdoer/temp/accept"

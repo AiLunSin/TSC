@@ -37,7 +37,7 @@ export RUSTFMT="$HOME/.rustup/toolchains/stable-x86_64-pc-windows-msvc/bin/rustf
 - `cargo fmt --all --check` 需要 PATH 前置的 rustfmt；若局部环境仍失败，用 `RUSTFMT` 显式指定后再跑。
 - `TEMP/TMP` 必须落在仓库 `.tmp/test-temp`（`.tmp/` 已在 `.gitignore`）。
 - 所有 `--rule=` 系列允许退出 2 表示"扫描面缺失"，**本轮验收不允许出现 2**（出现 2 即目录/文件未按任务落地）。
-- 命令统一在项目根 `C:\Users\11403\Desktop\xiangmu\TSC\TSC` 下执行（git-bash 中为 `/c/Users/11403/Desktop/xiangmu/TSC/TSC`）。
+- 命令统一在项目根 `<REPO>` 下执行（git-bash 中同为仓库根）。
 
 ### 0.3 执行纪律（违反即不得合并）
 
