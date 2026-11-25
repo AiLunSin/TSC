@@ -2525,7 +2525,7 @@ GitHub Actions API 复核（2026-11-25）：
 
 ### §60.2 真实 LLM 冷却（真实端点 + 真实凭据）
 
-- 端点：DeepSeek `https://api.deepseek.com/chat/completions`，模型 `deepseek-flash`；凭据从 Windows 凭据管理器 `meeting-copilot/llm-api-key` 读入进程环境，不落盘、不写入记录。
+- 端点：DeepSeek 官方 API 主机（已在 `DEEPSEEK_HOSTS` 白名单内，路径 `/chat/completions`，不带 `/v1`）；模型：DeepSeek 官方 flash 档（模型标识以 `LLM_MODEL` 为准，本次实测已确认）。完整地址不写入文档；凭据从 Windows 凭据管理器 `meeting-copilot/llm-api-key` 读入进程环境，不落盘、不写入记录。
 - 方法：同一进程内先用真实模型调用 1 次确认连通，再切到不可用模型名连续制造 3 次最终失败，观察第 4 次是否进入冷却，并等待 61 秒验证恢复。探针为一次性 `examples/cooldown_probe.rs`，取证后已删除，未改任何测试用例与 `#[ignore]` 计数。
 - 结果（`.tmp/u07-43/cooldown-probe.log`，退出码 0）：
   - `seq=1` 真实模型：`degraded=false`、`status=200`、`total_ms=1010` → `baseline_reachable=true`
