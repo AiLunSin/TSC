@@ -18,6 +18,8 @@ use meeting_copilot_domain::vo::{CardRef, InsightRef, SessionId, UtteranceRef};
 
 use super::{StoreConfig, StoreError, StoreKey, SCHEMA_VERSION};
 
+pub mod backfill_card;
+mod backfill_word;
 mod cache;
 mod codec;
 mod feedback;
@@ -28,6 +30,7 @@ const SCHEMA_V2_CACHE_OUTBOX: &str = include_str!("../migrations/v2_cache_outbox
 const SCHEMA_V2_FEEDBACK: &str = include_str!("../migrations/v2_feedback.sql");
 const SCHEMA_V2_AUDIT: &str = include_str!("../migrations/v2_audit.sql");
 const SCHEMA_V3_AUDIT_HARDENING: &str = include_str!("../migrations/v3_audit_hardening.sql");
+const SCHEMA_V4_BACKFILL_WORD: &str = include_str!("../migrations/v4_backfill_word.sql");
 
 /// 字段级密文前缀；无前缀行视为旧版明文，仅用于兼容读取。
 const FIELD_CIPHER_PREFIX: &str = "enc:v1:";
@@ -330,7 +333,13 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
         conn.pragma_update(None, "user_version", 3)
             .map_err(sql_error)?;
     }
-    debug_assert_eq!(SCHEMA_VERSION, 3);
+    if version < 4 {
+        conn.execute_batch(SCHEMA_V4_BACKFILL_WORD)
+            .map_err(sql_error)?;
+        conn.pragma_update(None, "user_version", 4)
+            .map_err(sql_error)?;
+    }
+    debug_assert_eq!(SCHEMA_VERSION, 4);
     Ok(())
 }
 

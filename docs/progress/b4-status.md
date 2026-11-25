@@ -260,7 +260,7 @@ AC 三态（`passed` / `not-applicable` / `pending`）：
 | U-04 | 39 引用对齐校验 | **已关闭（2026-11-22，§13）**：`spec.md` §5.7/§6.14~6.15/§7.12 与 `requirements.md` §11 已定义 `Passed`/`Failed`/`Unknown` 三态（`Unknown→Unverified` 唯一投影）、引用只存 ID+4 档信任+2 态可访问+发布时间、零转录/离线/确定性边界与 AC-B4-58~64；已实现 `citation.rs` + `citation/align.rs` + `citation_align`（12 passed），AC-B4-58~64 全部 `passed` | 39（domain 契约 `citation.rs` + application 只读校验 `citation/align.rs` + `citation_align` target；不建 UI/合成/回放目录） |
 | U-05 | 51 点击 UI 与设置向导 | **已关闭（2026-11-25，§53）**：点击 UI——`spec.md` §5.9/§6.19~6.23/§7.14 与 `requirements.md` §13 已定义视图模型 10/4/5/6/2/2 字段、点击只降不升、投屏/遮蔽正文隐藏、撤回不复活、零转录/平台边界与 AC-B4-75~84；设置向导——`spec.md` §5.10/§6.24~6.28/§7.15 与 `requirements.md` §14 已定义 `SettingsView` 8 项、`SettingsFacts` 6 项、`SettingsInput` 5 项、固定无载荷掩码、一步式默认（只填 Key 即可测）、模型预设+自定义（≤128 字符）、端点仅注入清单下标（不扩白名单）、单飞测试状态机 6 态/5 事件、8 类失败人话化、明文不出内存与 AC-B4-85~94；点击 UI 与设置向导离线契约已实现（`keyword_card_view` 19 例、`llm_settings_view` 18 例）；**产品化缺口**（Windows 安全存储、非敏感配置、既有网关探针、保存/清除执行、Tauri 前端渲染与 IPC）见 §28，AC-B4-111~130 全部 `passed`。归属：51（`crates/ui-bridge/src/**`）→ 平台（`crates/platform-win/src/secure_store.rs`）→ 装配层（`app/src-tauri/src/ipc/**`）→ 前端（`app/src/**`）；不建 52 存储/回放目录；`NEW_TARGETS` 保持 25 |
 | U-06 | 13.3 回放本体 | **已关闭（P9，§23）**：`spec.md` §5.11/§6.29/§7.16 与 `requirements.md` §15 已定义驱动契约（7 项封闭）、双层用例（报告层零文本/执行层借用）、装载校验（3 错误/升序）、只调 4 函数、记录核验（14 字段）、失败报告（2 项/5 码）、确定性（两次/乱序/100 次）、零转录、与 200 例并存、`tests/replay/` 不解禁与 `NEW_TARGETS` 24→25；已实现 `gate/replay.rs` + `gate_replay_driver`（22 例），AC-B4-95~104 全部 `passed` | 13.3（`gate/replay.rs` + `tests/gate_replay_driver.rs` + `gate_replay_driver` target；不改 `tests/gate_replay.rs`、不建 `tests/replay/`、不新增依赖） |
-| U-07 | 41.5 / 42 / 43 / 52 | **已实现并提交（`c96f381`）**；43、52 已关闭；42 断网演练通过（§56.8），重启补齐边界未覆盖（AUD-04 `部分完成`） | 对应章节 |
+| U-07 | 41.5 / 42 / 43 / 52 | **已实现并提交（`c96f381`）**；43、52、42 均已关闭（42 断网与重启补齐见 §56.8/§56.9，AUD-04 `closed`） | 对应章节 |
 | U-08 | 真实端点 / 真机 | 未判定；真实检索源、真实 LLM 冷却、6s/10s p95、误触发率 | `#[ignore]` 13 个真实 attribute（默认特性 12），不宣称 G4 |
 
 ### §10.2 口径约束
@@ -323,7 +323,7 @@ AC 三态（增量）：
 | U-03 / U-05 | **closed**（U-03 →§15；U-05 →§53，2026-11-25） |
 | U-04 39 引用对齐校验 | **closed**（§13；`citation.rs` + `citation/align.rs` + `citation_align` 12 passed，AC-B4-58~64 passed） |
 | U-06 13.3 回放本体 | **closed**（P9，§23；`crates/application/tests/replay/` 保持不存在） |
-| U-07 41.5/42/43/52 | **已实现并提交（`c96f381`）**；42 断网演练通过（§56.8），重启补齐边界未覆盖（AUD-04 `部分完成`） |
+| U-07 41.5/42/43/52 | **已实现并提交（`c96f381`）**；42 断网与重启补齐通过（§56.8/§56.9，AUD-04 `closed`） |
 | U-08 真实端点/真机 | open（9 ignored，不宣称 G4） |
 
 新增偏差：
@@ -1038,7 +1038,7 @@ AC 三态：
 | 项 | 状态 | 所需条件 |
 |---|---|---|
 | U-07-41.5 负反馈加权 | **已实现并提交（`c96f381`）**，AUD-03 已关闭（§56.2） | 已满足 |
-| U-07-42 缓存/outbox | **已实现并提交（`c96f381`）**；`NetProbe`/`RecoveryCoordinator`、outbox 落库与恢复回放均已接线（2026-11-25，§56.7/§56.8） | 2026-11-25 断网演练通过（恢复识别 1001 ms、30 秒补齐 1/1）；重启后补齐边界未覆盖（AUD-04 记 `部分完成`） |
+| U-07-42 缓存/outbox | **已实现并提交（`c96f381`）**；`NetProbe`/`RecoveryCoordinator`、outbox 落库、恢复回放与重启后重建均接线（2026-11-25，§56.7/§56.8/§56.9） | **已关闭（2026-11-25）**：断网演练 1001 ms / 1:1，重启补齐 1/1，`meets_budget=true`；仅单会话单任务链路 |
 | U-07-43 按需补全实体 | **已关闭（2026-11-24，§50）**：三轮 200/200 达标 | 已满足 |
 | U-07-52 审计哈希链存储 | **已关闭（2026-11-24，方案 B 5 年，§33）** | 已满足 |
 | U-08 真实端点 / 真机 | 未判定，`#[ignore]` 13 个真实 attribute（默认特性 12） | 需用户提供端点凭据、真机与投屏样本 |
@@ -1331,9 +1331,9 @@ lib 侧失败还会掩盖 test-target 告警：临时允许 `map_or_identity` �
 | 编号 | 事项 | 状态 | 关闭条件 | 所需用户条件 | 取证命令/定位 | 冲突 | 来源 |
 |---|---|---|---|---|---|---|---|
 | AUD-01 | U-05 整体 | `closed`（2026-11-25，§53） | 真机第 1~6/9/10 项、第 7 项 4/4、第 8 项 3/3 已取证；联网 E2E 见 §32 第 9 项 passed | 已满足 | `docs/progress/b4-status.md §53` | 无 | §29.5、§19、§53 |
-| AUD-02 | U-07 整体 | `open`（AUD-04 重启补齐边界未覆盖） | AUD-04 的真实断网演练记录（网络恢复 ≤3 秒识别、恢复后 30 秒补齐率 ≥98%）；重启场景需另测 | 断网环境或管理员授权执行演练 | `docs/progress/b4-status.md §56.8` | 无 | §25.3、§56 |
+| AUD-02 | U-07 整体 | `closed`（2026-11-25，AUD-04 重启补齐取证见 §56.9） | AUD-04 的断网与重启补齐记录均已取得 | 已满足 | `docs/progress/b4-status.md §56.9` | 无 | §25.3、§56 |
 | AUD-03 | U-07-41.5 负反馈加权 | `closed`（2026-11-25 台账对齐） | 规格见 `docs/sdd/spec.md` §7.1；实现 `c96f381`；加权/硬抑制/三维统计用例全绿 | 已满足 | `docs/sdd/spec.md` §7.1；`b4-status.md §56` | 无 | §25.3、§33、§56 |
-| AUD-04 | U-07-42 缓存/outbox | `部分完成`（2026-11-25 演练：恢复识别 1001 ms、30 秒补齐 1/1；§56.8） | 断网演练两项已通过；「进程重启后 30 秒补齐」未覆盖（不保存查询原文） | 已完成一次断网演练；重启场景需卡片/转写落库后另测 | `docs/sdd/spec.md` §7.2；`b4-status.md §56.8` | 无 | §25.3、§33、§56 |
+| AUD-04 | U-07-42 缓存/outbox | `closed`（2026-11-25）：断网 1001 ms / 1:1；重启后 1/1、`meets_budget=true`（§56.9） | 断网演练与重启补齐均已通过；仅单会话单任务链路 | 已满足 | `docs/sdd/spec.md` §7.2；`b4-status.md §56.8`、`§56.9` | 无 | §25.3、§33、§56 |
 | AUD-05 | U-07-43 按需补全实体 | `closed`（2026-11-24） | 三轮独立 200/200 样本、p95 4461/4538/4759 ms，见 §50 | 已满足 | `b4-status.md §50` | 无 | §25.3、§50、§56 |
 | AUD-06 | U-07-52 审计哈希链存储 | `closed`（2026-11-24，方案 B 5 年） | 同库只追加表 + 180 天在线 + 5 年归档；哈希链/篡改/归档用例全绿 | 已满足 | `docs/sdd/spec.md` §7.4；`b4-status.md §56` | 无 | §25.3、§33、§56 |
 | AUD-07 | U-08 真实端点/真机 | `未判定`（12 个 `#[ignore]` 默认特性；开 `llm-https` 后 13） | 端点凭据可用 + 真机验证 + 误触发率与性能记录 | 凭据、真机、样本；`#[ignore]` 不解锁 | `bash scripts/run-llm-live.sh --print-record-roots`（只打印根，不联网） | 无 | §25.3、§29.5-4、§58 |
@@ -1542,7 +1542,7 @@ U-05 判定：**保持 open**。第 7、8 项缺真实会议与投屏样本，�
 | 项 | 落地 | 验证 | 状态 |
 |---|---|---|---|
 | U-07-41.5 负反馈加权 | `domain/model/feedback.rs`、`application/proactive/feedback.rs`、`store/repo/feedback.rs`、`metrics/feedback.rs` | 两次 dismissed 1000→750→500；adopted +100 上限 1000；reported 撤回 + 7 天抑制；三维统计分母 0 显示“样本不足” | 实现完成 |
-| U-07-42 缓存/outbox | `domain/model/proactive.rs`、`application/proactive/{cache,outbox,backfill,degrade_queue}.rs`、`store/repo/{cache,outbox}.rs`、v2 迁移 | 24h TTL；2,001 条淘汰最久未用；20 MiB 上限；重启后 pending+failed 集合一致；3 次退避转 dead；500 条上限 | 实现完成；2026-11-25 真实断网演练通过（§56.8），重启补齐边界未覆盖 |
+| U-07-42 缓存/outbox | `domain/model/proactive.rs`、`application/proactive/{cache,outbox,backfill,degrade_queue}.rs`、`store/repo/{cache,outbox}.rs`、v2 迁移 | 24h TTL；2,001 条淘汰最久未用；20 MiB 上限；重启后 pending+failed 集合一致；3 次退避转 dead；500 条上限 | **已关闭（2026-11-25）**：断网与重启补齐均通过（§56.8/§56.9） |
 | U-07-43 按需补全 | `application/proactive/{outbound_guard,on_demand_probe}.rs`、`store/repo/on_demand.rs` | 仅启用源/HTTPS/主机一致；环回/私网/链路本地拒绝；跨主机重定向拒绝；199 样本“样本不足”，200 样本才评估 p95 | 机制完成，真实样本 **0/200** |
 | U-07-52 审计哈希链 | `store/migrations/v2_audit.sql`、`audit/store.rs`、`audit/retention.rs` | 篡改定位到具体 `audit-*`；10 线程 ×10 并发 100 条链连续；UPDATE/未归档 DELETE 被拒；整月归档校验后移出在线行 | 已关闭（2026-11-24）：方案 B 5 年，个人自用简化确认 |
 
@@ -2253,9 +2253,9 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 | 台账项 | 原状态 | 现状态 | 依据 |
 |---|---|---|---|
 | AUD-01 | `open` | `closed` | U-05 于 2026-11-25 关闭（§53） |
-| AUD-02 | `open` | `open`（AUD-04 重启补齐边界未覆盖） | 关闭条件收敛为 AUD-04 的重启场景补齐 |
+| AUD-02 | `open` | `closed`（2026-11-25，§56.9） | AUD-04 断网与重启补齐均已取证 |
 | AUD-03 | `未完成`（规格层明确不做） | `closed` | 规格 `spec.md §7.1`；实现 `c96f381`；用例全绿 |
-| AUD-04 | `未完成` | `部分完成`（2026-11-25 演练通过，§56.8） | 恢复识别 1001 ms、30 秒补齐 1/1；「进程重启后 30 秒补齐」未覆盖（不保存查询原文） |
+| AUD-04 | `未完成` | `closed`（2026-11-25，§56.8/§56.9） | 断网 1001 ms / 1:1；重启后 1/1、`meets_budget=true` |
 | AUD-05 | `未完成` | `closed` | U-07-43 于 2026-11-24 关闭（§50） |
 | AUD-06 | `未完成` | `closed` | U-07-52 于 2026-11-24 关闭，方案 B（在线 180 天 + 归档 5 年） |
 
@@ -2285,8 +2285,9 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 
 ### §56.5 不宣称
 
-- 不宣称 U-07 整体已关闭：AUD-04 的「重启后补齐」边界未覆盖（§56.8）。
-- 术语修正（§56.8）：演练实测为「网络恢复识别 1001 ms、30 秒窗口补齐 1/1」，但探测方式是到检索端点的 **TCP 可达性探测**，不等于「真实检索请求」；不得改写为「真实请求驱动已实测」。
+- U-07 整体已于 2026-11-25 关闭（AUD-04 重启补齐取证见 §56.9）。
+- 不宣称「跨网络/长时间稳定」：演练为单会话单任务链路。
+- 术语修正（§56.8）：探测方式是到检索端点的 **TCP 可达性探测**，不等于「真实检索请求」；不得改写为「真实请求驱动已实测」。
 - 本轮不新增 AC、不新增 target、不改 `#[ignore]` 数量、不改门禁语义。
 ### §56.6 运行时接线缺口（2026-11-25 复核，AUD-04 的真实前置）
 
@@ -2302,7 +2303,7 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 | 应用层接线（IPC / 采集链路 / 「已离线」状态） | **部分接线（2026-11-25）** | `SearchState` 持 `NetProbe`，`web_search` 与出卡自动补来源均上报真实结果；离线时失败文案改为「当前已离线；网络恢复后可重试」；状态与时延写 `search` 日志；未新增 IPC/DTO（契约不变） |
 | outbox 落库与自动补齐（断网期任务持久化、恢复后回放出卡） | **已接线（2026-11-25，§56.8）** | `BackfillBridge` 先落 `pending` 再外发；恢复后 30 s 窗口串行回放并把来源补回卡片；真实断网演练 1/1，见 §56.8 |
 
-**结论（2026-11-25 二次更新，以 §56.8 为准）**：`NetProbe`、outbox 落库与恢复回放均已接线；真实断网演练实测「恢复识别 1001 ms、30 秒补齐 1/1」。因不保存查询原文，进程重启后无法重建查询，「重启后 30 秒补齐」未覆盖，AUD-04 记 `部分完成`、U-07 保持 `open`。
+**结论（2026-11-25 三次更新，以 §56.9 为准）**：`NetProbe`、outbox 落库、恢复回放与重启后重建均接线；断网演练「恢复识别 1001 ms、30 秒补齐 1/1」，重启演练「1/1、`meets_budget=true`」。AUD-04 关闭，U-07 整体关闭；仅单会话单任务链路，不宣称跨网络/长时间稳定。
 
 **不影响已有结论**：U-07-43 的 200 条真实样本由 `tests/search_live.rs` 直接驱动 `OnDemandRunner`，不依赖上述应用层接线；U-07-52 的审计哈希链已接入存储层。
 
@@ -2355,9 +2356,42 @@ main_container ... time_item label_wrap left_padding 15:37-16:37 ... 最小化 �
 - 进程重启后 outbox 任务仍在（`pending/failed` 集合不变），但按 7.2.1-11 不保存查询原文，重启后无法重建查询、不会自动回放，会如实记 `failed`；「重启后 30 秒补齐」尚未满足。
 - 单次演练仅 1 条任务，不宣称「跨网络/长时间稳定」；脚本计划的两轮只成功一轮，第二轮未取得出卡按钮，不影响单条链路结论。
 
-**状态**：AUD-04 的演练项（≤3 秒识别 + 30 秒补齐率）已通过；因重启补齐边界未覆盖，AUD-04 记为 `部分完成`，U-07 整体保持 `open`。
+**状态（§56.8 时点）**：AUD-04 的演练项（≤3 秒识别 + 30 秒补齐率）已通过；当时重启补齐边界未覆盖。该边界已由 §56.9 关闭。
 
 **验证**：`cargo test -p meeting-copilot-desktop --features llm-https` **99 passed / 0 failed**；`clippy -D warnings` 通过；在线同词连续出卡 3 次生成 3 条不同 `task_id` 且均 `done`。
+
+### §56.9 重启后补齐取证与 AUD-04 关闭（2026-11-25）
+
+§56.8 的边界「重启后 30 秒补齐未覆盖」由本节关闭。
+
+**改动**
+
+- v4 迁移（`SCHEMA_VERSION=4`，本机库已迁移）新增两表，载荷均为字段级 AES-256-GCM：
+  - `backfill_word(session_id, dedupe_key, payload, created_at_ms)`：待补查询词；
+  - `backfill_card(session_id, dedupe_key, payload, created_at_ms)`：断网卡片的最小副本（标题 + 释义）。
+- `BackfillBridge`：`enqueue_card` 先落词与卡片副本再外发；启动 `open` 时 `rehydrate` 回灌活跃词并清理已完成残留；`mark_done` / `settle(ok)` 完成即删；`due_jobs` 在内存缺失时从加密词表兜底读取。
+- 回放补来源：内存里没有卡片时，用 `backfill_card` 副本重建再补来源；重建成功才计入 `done`。
+- 出卡顺序：先出卡（断网也能拿到卡片）→ 落库 → 外发 → 补来源。
+
+**真实演练（断网出卡 → 结束进程 → 恢复网络 → 重启）**
+
+```
+07:18:00 WARN  search: 检索网络不可用
+07:18:30 INFO  meeting_copilot_desktop: bootstrapped protocol=1
+07:18:31 INFO  search: 检索网络已恢复 latency_ms=-1
+07:18:31 INFO  search: 开启断网补齐窗口 pending=1
+07:18:31 INFO  search: 断网补齐完成 total=1 done=1 failed=0 ratio=1.0 elapsed_ms=0 window_ms=30000 meets_budget=true
+```
+
+DB：任务 `bf-c904a92ffa8bb150-1795591080973-1 | done | attempts=1`（断网失败 1 次 → 重启后回放成功）；`backfill_word` / `backfill_card` 均为 0 行（完成即删）；界面「共 1 张」重建卡片。
+
+**口径**：重启后启动即在线 → 首个 tick 开 30 s 窗口并完成回放（`elapsed_ms=0`，远小于 30 s），补齐率按「真正补上来源」计 1/1 = 100%。
+
+**边界**：仅覆盖本机单会话、单任务链路，不宣称跨网络/长时间稳定。`latency_ms=-1` 是冷启动时没有「上一次失败」可比较的正常值，恢复识别语义不适用于重启冷启动。
+
+**状态**：AUD-04 关闭（演练项与重启补齐均通过）；AUD-02 随之关闭；U-07 整体关闭。
+
+**验证**：desktop **100 passed / 0 failed**；infrastructure lib **151 passed**；`clippy -D warnings`、`fmt --check`、B4 门禁 **7/7** 通过。
 
 ## §57 platform-mac 占位删除（2026-11-25）
 

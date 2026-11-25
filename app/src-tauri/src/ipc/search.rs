@@ -297,11 +297,11 @@ impl SearchState {
         self.outbox.is_some()
     }
 
-    /// 断网补齐：把「出卡自动补来源」任务先落库，再允许外发（SPEC 7.2.1-5）。
-    pub fn outbox_enqueue(&self, word: &str) -> Option<TaskId> {
+    /// 出卡自动补来源：在落词之外再落一份最小卡片副本，进程重启后据此重建卡片。
+    pub fn outbox_enqueue_card(&self, word: &str, explanation: &str) -> Option<TaskId> {
         self.outbox
             .as_ref()
-            .and_then(|outbox| outbox.enqueue(word, unix_now_ms()))
+            .and_then(|outbox| outbox.enqueue_card(word, explanation, unix_now_ms()))
     }
 
     /// 真实检索结束后结算对应任务：成功标记 done，失败进入退避等待恢复。
@@ -388,7 +388,21 @@ impl SearchState {
                         .filter(|site| !site.is_empty())
                         .take(3)
                         .collect();
-                    let attached = self.cards.attach_sources(&word, &sites);
+                    let attached = if self.cards.attach_sources(&word, &sites) {
+                        true
+                    } else if let Some(record) = outbox.load_card(&word) {
+                        // 进程重启后内存卡片已丢失：用加密副本重建，再算补齐成功。
+                        self.cards
+                            .ingest_explanation_with_sources(
+                                &record.title,
+                                &record.explanation,
+                                &sites,
+                            )
+                            .map(|added| added > 0)
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    };
                     outbox.mark_done(entry, now_ms);
                     outbox.on_job_finished(attached);
                 }

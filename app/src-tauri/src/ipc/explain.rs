@@ -162,7 +162,7 @@ pub fn ingest_explanation(
     search: State<'_, Arc<SearchState>>,
     input: IngestExplanationInputDto,
 ) -> Result<usize, IpcErrorDto> {
-    let mut sources = input.sources.clone();
+    let sources = input.sources.clone();
     let config = search.config();
     if sources.is_empty() && config.auto && config.ready {
         let (network, latency_ms) = search.network_snapshot();
@@ -172,32 +172,41 @@ pub fn ingest_explanation(
             latency_ms = latency_ms.unwrap_or(-1),
             "出卡自动补来源：准备出网"
         );
+        // 先出卡（无来源），断网也能拿到卡片；再落词与卡片副本，最后外发补来源。
+        let added = cards.ingest_explanation_with_sources(&input.word, &input.explanation, &[])?;
+        if added == 0 {
+            return Ok(0);
+        }
         // SPEC 7.2.1-5：先落库为 pending，再允许外发；落库失败时不外发。
-        let queued = search.outbox_enqueue(&input.word);
+        let queued = search.outbox_enqueue_card(&input.word, &input.explanation);
         if queued.is_none() && search.outbox_ready() {
             tracing::warn!(target: "search", "outbox 落库失败，跳过自动补来源（本地要点模式）");
-        } else {
-            match search.query(&input.word) {
-                Ok(response) => {
-                    sources = response
-                        .hits
-                        .iter()
-                        .map(|hit| hit.site.clone())
-                        .filter(|site| !site.is_empty())
-                        .take(3)
-                        .collect();
-                    if queued.is_some() {
-                        search.outbox_settle(&input.word, true);
-                    }
+            return Ok(added);
+        }
+        match search.query(&input.word) {
+            Ok(response) => {
+                let sites: Vec<String> = response
+                    .hits
+                    .iter()
+                    .map(|hit| hit.site.clone())
+                    .filter(|site| !site.is_empty())
+                    .take(3)
+                    .collect();
+                if !sites.is_empty() {
+                    cards.attach_sources(&input.word, &sites);
                 }
-                Err(_) => {
-                    // 失败保留在 outbox，等网络恢复后由回放窗口补齐。
-                    if queued.is_some() {
-                        search.outbox_settle(&input.word, false);
-                    }
+                if queued.is_some() {
+                    search.outbox_settle(&input.word, true);
+                }
+            }
+            Err(_) => {
+                // 失败保留在 outbox，等网络恢复后由回放窗口补齐。
+                if queued.is_some() {
+                    search.outbox_settle(&input.word, false);
                 }
             }
         }
+        return Ok(added);
     }
     cards.ingest_explanation_with_sources(&input.word, &input.explanation, &sources)
 }
