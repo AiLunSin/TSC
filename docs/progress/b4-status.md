@@ -2646,3 +2646,20 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 - 窄窗口：≤1080px 卡片本身单列，但整行卡内部仍保持双列，避免右半边空着。
 
 验证：`tsc` / `eslint` / `vite build` rc=0，`check-ui-integration` 六规则 0 命中；1240×820 与 1000×760 两档截图复核（`.tmp/ui-shots/`，未入库）。
+
+### §61.7 "改了前端但窗口还是旧版"的根因与补救（2026-11-25 18:45）
+
+用户在重启桌面程序后仍看到改版前的界面。根因有两层：
+
+1. Tauri 在**编译期**由 `tauri-codegen` 把 `app/dist` 压成 brotli 资源嵌进 exe；只改前端、不重编桌面 crate（或增量编译复用旧的宏展开结果）时，exe 里仍是旧资源。`app/src-tauri/build.rs` 原先只调用 `tauri_build::build()`，未声明对 `../dist` 的依赖，cargo 无从得知前端变了。
+2. WebView2 可能缓存 `tauri://localhost/index.html`，即使 exe 换了也可能先拿到旧页面。
+
+处理：
+
+- `build.rs` 增 `cargo:rerun-if-changed=../dist`（含 `index.html`、`assets`），前端一变就触发桌面 crate 重编。
+- 新增 `scripts/build-desktop.sh`：`npm run build` → `cargo clean -p meeting-copilot-desktop` → `cargo build --features llm-https`，一条命令保证资源重新嵌入；`DOWNLOAD.md` 第 3 节与 §8.1 引用该脚本。
+- 本轮已按此流程重编 `target/debug/meeting-copilot-desktop.exe`（18:44），并把 `%LOCALAPPDATA%\com.meetingcopilot.desktop\EBWebView` 改名为 `EBWebView.bak-20261125-ui` 以清掉旧页面缓存（可回滚）。
+- FAQ 中"编译成功但界面还是旧的"一行补上两条处置：脚本重编、改名缓存目录。
+
+边界：脚本默认带 `llm-https`（与真机使用的构建一致）；`--release` 参数可出 release 版。未改 `tauri.conf.json` 与 CSP。
+

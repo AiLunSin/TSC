@@ -186,7 +186,12 @@ cargo build -p meeting-copilot-desktop --features llm-https
 说明：
 
 - `npm ci` 安装前端依赖，`npm run build` 生成界面文件。
-- `cargo build ... --features llm-https` 编译桌面程序，并**启用真实网络传输**。不加这个参数，AI 释义和联网查会提示"未启用传输"。
+- `cargo build ... --features llm-https` 编译桌面程序，并**启用真实网络传输**。
+- **只改过前端、界面却没变**：Tauri 把界面文件在编译期压进 exe，个别情况下增量编译会继续用旧资源。最稳的做法是用仓库自带脚本一次做完（构建前端 → 清桌面 crate → 重编）：
+
+```bash
+bash scripts/build-desktop.sh
+```不加这个参数，AI 释义和联网查会提示"未启用传输"。
 - 第一次编译会下载大量 Rust 依赖，屏幕会滚动很久，属于正常现象；不要中途关窗口。
 - 如果 PowerShell 报 `npm.ps1 无法加载，因为在此系统上禁止运行脚本`，把上面的 `npm` 换成 `npm.cmd`，或先执行：
 
@@ -386,7 +391,7 @@ $env:LLM_MODEL = "deepseek-chat"
 | `npm` 不是内部或外部命令 | Node 没装或 PATH 没生效 | 重装 Node LTS，重开 PowerShell |
 | `npm.ps1 无法加载` | PowerShell 执行策略限制 | 用 `npm.cmd`，或执行 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | 编译中 MSVC 内存不足 / 写 PDB 失败 | 调试信息占用太大 | 同一窗口先执行 `$env:CARGO_PROFILE_DEV_DEBUG='0'`，再重跑 `cargo build` |
-| 编译成功但界面还是旧的 | Tauri 复用了旧的 `dist` | 执行 `cargo clean -p meeting-copilot-desktop` 后重新编译 |
+| 编译成功但界面还是旧的 | Tauri 把界面压进 exe，增量编译复用了旧资源；或 WebView2 缓存了旧 index.html | ① 用 `bash scripts/build-desktop.sh` 重编（内含 `cargo clean -p`）；② 关掉程序后把 `%LOCALAPPDATA%\com.meetingcopilot.desktop\EBWebView` 改名备份，再启动 |
 
 ### 7.2 转写阶段
 
@@ -465,7 +470,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 
 ### 8.3 卸载
 
-1. 打开程序，设置页点 **清除设置**；联网查折叠块按需点 **清除博查 Key** / **清除 Tavily Key**。
+1. 打开程序，设置页点 **清除设置**；「联网查资料」卡按需点两行 Key 旁的 **清除**。
 2. 关闭程序。
 3. 删除整个 `C:\TSC` 文件夹。
 4. 可选：删除 `%APPDATA%\com.meetingcopilot.desktop` 和 `%LOCALAPPDATA%\com.meetingcopilot.desktop`。
