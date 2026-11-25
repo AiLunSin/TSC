@@ -2548,3 +2548,50 @@ GitHub Actions API 复核（2026-11-25）：
 - 不宣称博查/Tavily 在桌面端的真实召回质量已验收。
 - 不宣称 429 限流冷却已验证；只宣称熔断冷却的真实端点取证。
 - 本节口径优先于 §31/§34/§54/§56 中「U-08 真实检索与冷却未判定」的旧状态描述；历史小节原文不回溯改写。
+
+## §61 界面改版：工作页 / 设置页两页与窄栏悬停显示（2026-11-25）
+
+用户 2026-11-25 要求优化界面：分两页（工作 / 设置）；工作页左侧状态平时只显示灯色、鼠标移上去才显示文字（可在设置里改为常显）；中间为工作区；右侧卡片区与左侧一致，平时只显示关键词；所有配置项收进设置页。
+
+### §61.1 前端改动
+
+| 文件 | 改动 |
+|---|---|
+| `app/src/App.tsx` | 只保留壳层：品牌、会议检测、计时、工作/设置页签、"暂停提示"；页面切换不销毁工作台状态 |
+| `app/src/state/useWorkbench.ts` | 新增：把原 `App.tsx` 的全部轮询与动作（转写、卡片、释义、检索、辅助回复）抽成一个 hook，两页共用同一份状态 |
+| `app/src/pages/WorkPage.tsx` | 新增：左窄栏（会议检测 / 实时转写 / 三条采集通道 / 隐私三态）＋ 中栏实时转写、释义 / 联网结果 / AI 提醒结果、手动粘贴折叠块 ＋ 右窄栏卡片 |
+| `app/src/cards/KeywordCard.tsx` | 改为"关键词条目"：平时只露关键词，`hover` / `:focus-within` 展开类型、结论、引用、置信度与"查看详情"；隐藏态（`bodyVisible=false`）仍只渲染条数角标 |
+| `app/src/settings/SettingsPage.tsx` | 改名实义为完整设置页：模型与凭据、界面显示（悬停 / 常显、自动出卡、自动补来源）、联网查资料、辅助回复窗口、隐私与数据 |
+| `app/src/styles.css` | 全量重写：两页壳层、窄栏与浮出提示、卡片行内展开、设置卡片栅格；删除原"要点时间轴"占位栏样式 |
+
+口径：显示方式只有 `hover`（默认）与 `always` 两值；`always` 时左栏 196px、右栏 292px（≤1180px 时 172/254），`hover` 时左 56px、右 200px（≤1180px 时 184）。展开用行内高度而不是浮层，避免被栏的滚动容器裁切；键盘 `Tab` 到卡片按钮时同样展开。
+
+### §61.2 后端：界面偏好
+
+前端门禁 `--rule=frontend-offline` 禁止 `localStorage` / `sessionStorage` / `indexedDB`，因此显示方式不能存在前端，只能落后端：
+
+- 新增 `app/src-tauri/src/ipc/ui_prefs.rs`：`ui.json`（`schemaVersion` + `labelMode`），临时文件 + 同目录替换；损坏、版本不符或未知取值一律回 `hover`，写失败只回一条可重试短句。
+- 新增命令 `ui_prefs` / `ui_prefs_save`，与 `assist.json` 同一套存储范式，不改 `settings.json` 的"恰 4 键"契约。
+- DTO：`UiPrefsDto` / `UiPrefsInputDto`（各 1 字段），`schema.json` 与 `types.ts` 同步。
+
+### §61.3 计数变化
+
+| 项 | 原 | 现 | 说明 |
+|---|---|---|---|
+| IPC 命令 | 26 | **28** | 新增 `ui_prefs`、`ui_prefs_save`；`CommandCounters` 仍 6 组 12 项（X-AUD-08 的计数面裁决不变） |
+| 前端契约 DTO | 20 | **22** | `check-bindings.mjs` 输出 22 |
+
+README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 20"为 2026-11-25 当时快照，按不改写纪律保留，最新口径以本节为准。
+
+### §61.4 验证
+
+- `npm run typecheck`、`npm run lint`、`npm run build` 均 rc=0（产物 257 KB JS / 17 KB CSS）。
+- `node scripts/check-bindings.mjs` → 22 个 DTO 一致；`bash scripts/check-ui-integration.sh` → 六规则 0 命中（`settings-ux` 的 `sectionsOrder` / `canTest` / `canSave` / `type="password"` / `advancedCollapsed` 与 `card-render`、`body-hidden` 口径全部保留）。
+- `cargo fmt --check -p meeting-copilot-desktop` rc=0；`cargo clippy -p meeting-copilot-desktop --all-targets` rc=0（0 告警）；`cargo test -p meeting-copilot-desktop ui_prefs` → **4 passed / 0 failed**（缺失回默认、往返保存、未知值夹回、损坏回默认）。
+- 视觉核对：本机以假数据注入渲染真实 `App`，在 1240×820（应用默认窗口）下截取"工作页悬停 / 工作页常显 / 设置页"三张（`.tmp/ui-shots/`，未入库）；仅用于布局与可读性核对，不作为产品验收。
+
+### §61.5 边界
+
+- 不宣称"产品级真实会议可用"的结论发生变化：本轮只改界面组织与显示偏好。
+- 悬停提示为纯 CSS，不引入 JS 定时器；`prefers-reduced-motion` 未单独适配（过渡时长 ≤0.18s）。
+- 偏好按用户一份（`app_config_dir/ui.json`），不做多窗口同步。

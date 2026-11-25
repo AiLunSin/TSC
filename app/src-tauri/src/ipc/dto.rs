@@ -306,3 +306,17 @@ impl IpcErrorDto {
         }
     }
 }
+
+/// 界面偏好：状态灯与卡片的文字显示方式，只有 `hover` / `always` 两个取值。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UiPrefsDto {
+    pub label_mode: String,
+}
+
+/// 保存界面偏好。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UiPrefsInputDto {
+    pub label_mode: String,
+}

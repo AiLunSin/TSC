@@ -19,6 +19,7 @@ pub mod settings;
 pub mod settings_store;
 pub mod state;
 pub mod transcript;
+pub mod ui_prefs;
 
 use tauri::State;
 

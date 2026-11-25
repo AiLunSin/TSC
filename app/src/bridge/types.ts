@@ -80,6 +80,15 @@ export interface SearchHitDto {
   url: string;
 }
 
+/** 界面偏好：状态灯与卡片的文字显示方式（`hover` / `always`）。 */
+export interface UiPrefsDto {
+  labelMode: string;
+}
+
+export interface UiPrefsInputDto {
+  labelMode: string;
+}
+
 export interface SearchResponseDto {
   provider: string;
   hits: SearchHitDto[];
@@ -216,6 +225,8 @@ export const IPC_COMMANDS = [
   "assist_reply",
   "assist_config",
   "assist_config_save",
+  "ui_prefs",
+  "ui_prefs_save",
 ] as const;
 
 export type IpcCommand = (typeof IPC_COMMANDS)[number];

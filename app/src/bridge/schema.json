@@ -135,5 +135,11 @@
   "AssistConfigInputDto": [
     "tipLines",
     "contextLines"
+  ],
+  "UiPrefsDto": [
+    "labelMode"
+  ],
+  "UiPrefsInputDto": [
+    "labelMode"
   ]
 }

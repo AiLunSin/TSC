@@ -42,11 +42,16 @@ function timeLabel(triggeredAtMs: number): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+/**
+ * 卡片栏条目：平时只露关键词，鼠标移上来再展开正文与操作。
+ *
+ * 窄栏是为了给中间的会议内容让位；展开用行内高度，不用浮层，避免被栏的滚动区裁掉。
+ */
 export function KeywordCard({ card, onOpen }: KeywordCardProps) {
   if (!card.bodyVisible || card.body === null) {
     return (
-      <li className="card card-hidden">
-        <span className="badge">有 {card.badgeCount} 条</span>
+      <li className="kcard kcard-muted">
+        <span className="kcard-badge">有 {card.badgeCount} 条</span>
       </li>
     );
   }
@@ -59,26 +64,30 @@ export function KeywordCard({ card, onOpen }: KeywordCardProps) {
       : (DISABLED_REASON_TEXT[card.disabledReason] ?? "暂不可点击");
 
   return (
-    <li className={enabled ? "card" : "card card-disabled"}>
-      <div className="card-top">
-        <span className="kind">{kindLabel(card.keywordKind)}</span>
-        <span className="time">{timeLabel(card.triggeredAtMs)}</span>
+    <li className={enabled ? "kcard" : "kcard kcard-disabled"}>
+      <span className="kcard-key" title={body.title}>
+        {body.title}
+      </span>
+      <div className="kcard-more">
+        <div className="kcard-meta">
+          <span className={`kcard-kind kind-${card.keywordKind}`}>{kindLabel(card.keywordKind)}</span>
+          <span className="kcard-time">{timeLabel(card.triggeredAtMs)}</span>
+        </div>
+        <p className="kcard-conclusion">{conclusionText(body.conclusion)}</p>
+        <div className="kcard-foot">
+          <span>引用 {body.referenceIds.length} 条</span>
+          <span>置信度 {(body.confidence * 100).toFixed(0)}%</span>
+        </div>
+        {enabled ? null : <p className="kcard-reason">{reason}</p>}
+        <button
+          className="btn btn-ghost btn-xs"
+          type="button"
+          aria-disabled={!enabled}
+          onClick={enabled ? () => { onOpen(card.cardId); } : undefined}
+        >
+          {enabled ? "查看详情" : "不可点击"}
+        </button>
       </div>
-      <h3>{body.title}</h3>
-      <p>{conclusionText(body.conclusion)}</p>
-      <footer>
-        <span className="source">引用 {body.referenceIds.length} 条</span>
-        <span className="trust">置信度 {(body.confidence * 100).toFixed(0)}%</span>
-      </footer>
-      {enabled ? null : <p className="card-reason">{reason}</p>}
-      <button
-        className="card-open"
-        type="button"
-        aria-disabled={!enabled}
-        onClick={enabled ? () => { onOpen(card.cardId); } : undefined}
-      >
-        {enabled ? "查看详情" : "不可点击"}
-      </button>
     </li>
   );
 }
