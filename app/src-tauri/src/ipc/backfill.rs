@@ -11,11 +11,14 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use meeting_copilot_application::proactive::outbox::{EnqueueOutcome, OutboxService};
+#[cfg(any(feature = "llm-https", test))]
 use meeting_copilot_application::proactive::recovery::{BACKFILL_RATIO_MIN, BACKFILL_WINDOW_MS};
 use meeting_copilot_application::settings::{SecretBytes, SecureStore};
 use meeting_copilot_domain::model::card::DedupeKey;
 use meeting_copilot_domain::model::enums::TriggerKind;
-use meeting_copilot_domain::model::proactive::{OutboxEntry, BACKFILL_CONCURRENCY};
+use meeting_copilot_domain::model::proactive::OutboxEntry;
+#[cfg(any(feature = "llm-https", test))]
+use meeting_copilot_domain::model::proactive::BACKFILL_CONCURRENCY;
 use meeting_copilot_domain::port::proactive::OutboxStore;
 use meeting_copilot_domain::vo::{SessionId, TaskId};
 use meeting_copilot_infrastructure::crypto::generate_master;
@@ -32,6 +35,7 @@ const TOPIC_CLUSTER: &str = "desktop-search-source";
 const SESSION_ID: &str = "desktop-local-session";
 
 /// 一次恢复窗口的取证结果；`meets_budget` 以「真正补上来源」的比例判定。
+#[cfg(any(feature = "llm-https", test))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BackfillReport {
     pub total: usize,
@@ -42,7 +46,9 @@ pub struct BackfillReport {
     pub meets_budget: bool,
 }
 
+#[cfg(any(feature = "llm-https", test))]
 impl BackfillReport {
+    #[cfg(feature = "llm-https")]
     pub fn ratio(&self) -> f64 {
         if self.total == 0 {
             1.0
@@ -52,6 +58,7 @@ impl BackfillReport {
     }
 }
 
+#[cfg(any(feature = "llm-https", test))]
 #[derive(Debug, Default)]
 struct Window {
     start_ms: Option<i64>,
@@ -65,6 +72,7 @@ pub struct BackfillBridge {
     store: Arc<SqliteStore>,
     /// dedupe_key → 原始词；只在本进程内有效，用于回放时重建查询。
     words: Mutex<HashMap<String, String>>,
+    #[cfg(any(feature = "llm-https", test))]
     window: Mutex<Window>,
     /// 任务 ID 唯一化：同一去重键可以反复失败/重试，主键不能复用。
     sequence: AtomicU64,
@@ -116,6 +124,7 @@ impl BackfillBridge {
         Self {
             store,
             words: Mutex::new(HashMap::new()),
+            #[cfg(any(feature = "llm-https", test))]
             window: Mutex::new(Window::default()),
             sequence: AtomicU64::new(0),
         }
@@ -132,6 +141,7 @@ impl BackfillBridge {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    #[cfg(any(feature = "llm-https", test))]
     fn window(&self) -> MutexGuard<'_, Window> {
         self.window
             .lock()
@@ -195,6 +205,7 @@ impl BackfillBridge {
     }
 
     /// 重启后按词取回卡片副本；没有副本时返回 `None`。
+    #[cfg(feature = "llm-https")]
     pub fn load_card(&self, word: &str) -> Option<BackfillCardRecord> {
         let dedupe = dedupe_of(word.trim());
         self.store
@@ -232,6 +243,7 @@ impl BackfillBridge {
     }
 
     /// 到期可回放的任务；同时带回重建查询所需的词（可能缺失）。
+    #[cfg(any(feature = "llm-https", test))]
     pub fn due_jobs(&self, now_ms: i64) -> Vec<(OutboxEntry, Option<String>)> {
         let Ok(entries) = OutboxService::new(self.store.as_ref()).due(now_ms) else {
             return Vec::new();
@@ -254,6 +266,7 @@ impl BackfillBridge {
             .collect()
     }
 
+    #[cfg(any(feature = "llm-https", test))]
     pub fn mark_done(&self, mut entry: OutboxEntry, now_ms: i64) {
         let dedupe = entry.dedupe_key.as_str().to_owned();
         let _ = OutboxService::new(self.store.as_ref()).on_success(&mut entry, now_ms);
@@ -262,10 +275,12 @@ impl BackfillBridge {
         self.words().remove(&dedupe);
     }
 
+    #[cfg(feature = "llm-https")]
     pub fn mark_failed(&self, mut entry: OutboxEntry, now_ms: i64) {
         let _ = OutboxService::new(self.store.as_ref()).on_failure(&mut entry, now_ms);
     }
 
+    #[cfg(any(feature = "llm-https", test))]
     pub fn pending_total(&self) -> usize {
         self.store
             .recoverable()
@@ -274,6 +289,7 @@ impl BackfillBridge {
     }
 
     /// 网络恢复时开启补齐窗口。
+    #[cfg(any(feature = "llm-https", test))]
     pub fn begin_window(&self, now_ms: i64, total: usize) {
         let mut window = self.window();
         window.start_ms = Some(now_ms);
@@ -282,10 +298,12 @@ impl BackfillBridge {
         window.failed = 0;
     }
 
+    #[cfg(feature = "llm-https")]
     pub fn window_open(&self) -> bool {
         self.window().start_ms.is_some()
     }
 
+    #[cfg(any(feature = "llm-https", test))]
     pub fn on_job_finished(&self, ok: bool) {
         let mut window = self.window();
         if window.start_ms.is_none() {
@@ -299,6 +317,7 @@ impl BackfillBridge {
     }
 
     /// 窗口关闭或到期时产出报告；比例按成功补齐数计算。
+    #[cfg(any(feature = "llm-https", test))]
     pub fn poll_report(&self, now_ms: i64) -> Option<BackfillReport> {
         let mut window = self.window();
         let start = window.start_ms?;

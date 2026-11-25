@@ -226,6 +226,7 @@ pub struct SearchState {
     bocha: Arc<dyn SecureStore>,
     tavily: Arc<dyn SecureStore>,
     /// 回放补齐时把来源补回到已生成的卡片上。
+    #[cfg(feature = "llm-https")]
     cards: Arc<CardStore>,
     /// 断网补齐桥；数据库打不开时为 `None`（补齐停用，检索本身仍可用）。
     outbox: Option<Arc<BackfillBridge>>,
@@ -241,10 +242,13 @@ impl SearchState {
         cards: Arc<CardStore>,
         outbox: Option<Arc<BackfillBridge>>,
     ) -> Self {
+        #[cfg(not(feature = "llm-https"))]
+        let _ = cards;
         Self {
             store: SearchStore::new(dir),
             bocha,
             tavily,
+            #[cfg(feature = "llm-https")]
             cards,
             outbox,
             probe: Mutex::new(NetProbe::new()),
@@ -319,7 +323,6 @@ impl SearchState {
         #[cfg(not(feature = "llm-https"))]
         {
             let _ = now_ms;
-            return;
         }
         #[cfg(feature = "llm-https")]
         {
@@ -366,6 +369,7 @@ impl SearchState {
     }
 
     /// 回放窗口内的待补任务：串行执行（≤3 并发上限自然满足），每条都结算并更新卡片来源。
+    #[cfg(feature = "llm-https")]
     fn pump_backfill(&self, now_ms: i64) {
         let Some(outbox) = &self.outbox else {
             return;
@@ -428,6 +432,7 @@ impl SearchState {
     }
 
     /// 回放用的一次检索：补齐是系统补发，不再重复扣界面限额。
+    #[cfg(feature = "llm-https")]
     fn run_query_once(&self, word: &str) -> Result<Vec<SearchHitDto>, IpcErrorDto> {
         let provider = self.store.load().provider();
         let Some(key) = self.read_key_for(provider)? else {
