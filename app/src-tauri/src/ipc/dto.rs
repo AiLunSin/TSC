@@ -192,20 +192,24 @@ pub struct IngestExplanationInputDto {
     pub sources: Vec<String>,
 }
 
-/// 检索配置：6 项。`ready` 表示"已选服务 + 已存 Key + 构建带传输"三者齐备。
+/// 检索配置：8 项。`ready` 表示"已选服务 + 该服务已存 Key + 构建带传输"三者齐备。
+/// `hasKey` 为当前服务是否有 Key；`hasKeyBocha`/`hasKeyTavily` 供设置界面分别显示。
 /// `hourlyLimit = 0` 表示不限额；`usedThisHour` 供界面显示"本小时已用 N 次"。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchConfigDto {
     pub provider: String,
     pub has_key: bool,
+    pub has_key_bocha: bool,
+    pub has_key_tavily: bool,
     pub auto: bool,
     pub ready: bool,
     pub hourly_limit: u32,
     pub used_this_hour: u32,
 }
 
-/// 保存检索配置；`key` 留空表示沿用已存凭据，`clearKey` 为真时删除已存凭据。
+/// 保存检索配置；`key` 留空表示沿用当前服务已存凭据，`clearKey` 为真时删除当前服务凭据。
+/// `keyBocha`/`keyTavily` 分别写各自服务的凭据，留空不改；`clearKeyBocha`/`clearKeyTavily` 为真时各自删除。
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchConfigInputDto {
@@ -215,6 +219,14 @@ pub struct SearchConfigInputDto {
     pub hourly_limit: u32,
     #[serde(default)]
     pub clear_key: bool,
+    #[serde(default)]
+    pub key_bocha: String,
+    #[serde(default)]
+    pub key_tavily: String,
+    #[serde(default)]
+    pub clear_key_bocha: bool,
+    #[serde(default)]
+    pub clear_key_tavily: bool,
 }
 
 /// 辅助回复的窗口设置：提醒只看最近几"句"，回应参考最近几"句"。

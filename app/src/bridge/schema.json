@@ -94,6 +94,8 @@
   "SearchConfigDto": [
     "provider",
     "hasKey",
+    "hasKeyBocha",
+    "hasKeyTavily",
     "auto",
     "ready",
     "hourlyLimit",
@@ -120,7 +122,11 @@
     "key",
     "auto",
     "hourlyLimit",
-    "clearKey"
+    "clearKey",
+    "keyBocha",
+    "keyTavily",
+    "clearKeyBocha",
+    "clearKeyTavily"
   ],
   "AssistConfigDto": [
     "tipLines",

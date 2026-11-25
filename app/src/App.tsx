@@ -113,7 +113,8 @@ export default function App() {
   const [explainNotice, setExplainNotice] = useState<string | null>(null);
   const [searchConfig, setSearchConfig] = useState<SearchConfigDto | null>(null);
   const [searchProvider, setSearchProvider] = useState("bocha");
-  const [searchKey, setSearchKey] = useState("");
+  const [searchKeyBocha, setSearchKeyBocha] = useState("");
+  const [searchKeyTavily, setSearchKeyTavily] = useState("");
   const [searchAuto, setSearchAuto] = useState(false);
   const [searchLimit, setSearchLimit] = useState(20);
   const [searchBusy, setSearchBusy] = useState(false);
@@ -334,17 +335,22 @@ export default function App() {
       const config = await invokeCommand<SearchConfigDto>("search_config_save", {
         input: {
           provider: searchProvider,
-          key: searchKey,
+          key: "",
           auto: searchAuto,
           hourlyLimit: searchLimit,
           clearKey: false,
+          keyBocha: searchKeyBocha,
+          keyTavily: searchKeyTavily,
+          clearKeyBocha: false,
+          clearKeyTavily: false,
         },
       });
       setSearchConfig(config);
       setSearchProvider(config.provider);
       setSearchAuto(config.auto);
       setSearchLimit(config.hourlyLimit);
-      setSearchKey("");
+      setSearchKeyBocha("");
+      setSearchKeyTavily("");
       setSearchConfigNotice(
         config.ready ? "已保存，联网查可用。" : "已保存，但当前构建或 Key 还不足以联网。",
       );
@@ -355,15 +361,35 @@ export default function App() {
     }
   }
 
-  // 清除检索凭据：配置（服务名、限额）保留，Key 从系统凭据里删掉。
-  async function clearSearchKey(): Promise<void> {
+  // 清除指定服务的检索凭据：配置（服务名、限额）保留，Key 从系统凭据里删掉。
+  // 清当前服务走 search_clear_key（不要求仍有 Key）；清另一家走保存并只清那一家的 Key。
+  async function clearSearchKeyFor(which: "bocha" | "tavily"): Promise<void> {
     setSearchBusy(true);
     setSearchConfigNotice(null);
     try {
-      const config = await invokeCommand<SearchConfigDto>("search_clear_key");
+      const config =
+        which === searchProvider
+          ? await invokeCommand<SearchConfigDto>("search_clear_key")
+          : await invokeCommand<SearchConfigDto>("search_config_save", {
+              input: {
+                provider: searchProvider,
+                key: "",
+                auto: searchAuto,
+                hourlyLimit: searchLimit,
+                clearKey: false,
+                keyBocha: "",
+                keyTavily: "",
+                clearKeyBocha: which === "bocha",
+                clearKeyTavily: which === "tavily",
+              },
+            });
       setSearchConfig(config);
-      setSearchKey("");
-      setSearchConfigNotice("已清除检索 Key，联网查会提示先配置。");
+      if (which === "bocha") {
+        setSearchKeyBocha("");
+      } else {
+        setSearchKeyTavily("");
+      }
+      setSearchConfigNotice(which === "bocha" ? "已清除博查 Key。" : "已清除 Tavily Key。");
     } catch (error) {
       setSearchConfigNotice(errorMessage(error, "清除失败，请稍后重试。"));
     } finally {
@@ -701,18 +727,7 @@ export default function App() {
                       <option value="bocha">博查 Bocha（中文）</option>
                       <option value="tavily">Tavily（英文/通用）</option>
                     </select>
-                    <input
-                      className="key-input"
-                      type="password"
-                      autoComplete="off"
-                      placeholder={
-                        searchConfig?.hasKey === true ? "已保存，留空不修改" : "检索服务 Key"
-                      }
-                      value={searchKey}
-                      onChange={(event) => {
-                        setSearchKey(event.target.value);
-                      }}
-                    />
+
                     <label className="field field-inline">
                       <span>每小时上限</span>
                       <input
@@ -738,15 +753,59 @@ export default function App() {
                     >
                       {searchBusy ? "保存中…" : "保存"}
                     </button>
+                    </div>
+                  <div className="settings-actions">
+                    <span className="hint">博查 Key</span>
+                    <input
+                      className="key-input"
+                      type="password"
+                      autoComplete="off"
+                      placeholder={
+                        searchConfig?.hasKeyBocha === true
+                          ? "已保存，留空不修改"
+                          : "博查 Bocha Key（sk- 开头）"
+                      }
+                      value={searchKeyBocha}
+                      onChange={(event) => {
+                        setSearchKeyBocha(event.target.value);
+                      }}
+                    />
                     <button
                       className="btn"
                       type="button"
-                      disabled={searchBusy || searchConfig?.hasKey !== true}
+                      disabled={searchBusy || searchConfig?.hasKeyBocha !== true}
                       onClick={() => {
-                        void clearSearchKey();
+                        void clearSearchKeyFor("bocha");
                       }}
                     >
-                      清除 Key
+                      清除博查 Key
+                    </button>
+                  </div>
+                  <div className="settings-actions">
+                    <span className="hint">Tavily Key</span>
+                    <input
+                      className="key-input"
+                      type="password"
+                      autoComplete="off"
+                      placeholder={
+                        searchConfig?.hasKeyTavily === true
+                          ? "已保存，留空不修改"
+                          : "Tavily Key（tvly- 开头）"
+                      }
+                      value={searchKeyTavily}
+                      onChange={(event) => {
+                        setSearchKeyTavily(event.target.value);
+                      }}
+                    />
+                    <button
+                      className="btn"
+                      type="button"
+                      disabled={searchBusy || searchConfig?.hasKeyTavily !== true}
+                      onClick={() => {
+                        void clearSearchKeyFor("tavily");
+                      }}
+                    >
+                      清除 Tavily Key
                     </button>
                   </div>
                   <label className="checkline">

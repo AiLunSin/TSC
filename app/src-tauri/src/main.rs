@@ -12,7 +12,7 @@ use meeting_copilot_application::settings::{
     CardSnapshotEntry, CardSnapshotSource, SecureStore, ViewFactsSnapshot, ViewFactsSource,
 };
 use meeting_copilot_platform_win::secure_store::{
-    WindowsCredentialStore, SEARCH_CREDENTIAL_TARGET,
+    WindowsCredentialStore, SEARCH_CREDENTIAL_TARGET_BOCHA, SEARCH_CREDENTIAL_TARGET_TAVILY,
 };
 use meeting_copilot_ui_bridge::settings::SettingsFormState;
 use meeting_copilot_ui_bridge::IPC_PROTOCOL_VERSION;
@@ -59,6 +59,13 @@ fn active_view(privacy: crate::privacy::PrivacyMode) -> ViewFactsSnapshot {
         emergency_masked: privacy.emergency_masked,
         visible_card_count: 0,
     }
+}
+
+fn now_unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
 }
 
 fn build_state(
@@ -151,14 +158,28 @@ fn main() {
                 Arc::clone(&transcripts),
                 asr_paths,
             )));
-            // 检索凭据与模型凭据分开存：两个目标名互不覆盖。
-            let search_secure: Arc<dyn SecureStore> = Arc::new(
-                WindowsCredentialStore::with_target_name(SEARCH_CREDENTIAL_TARGET),
+            // 检索凭据与模型凭据分开存；博查与 Tavily 也各存一份，切换服务不互相覆盖。
+            let search_bocha: Arc<dyn SecureStore> = Arc::new(
+                WindowsCredentialStore::with_target_name(SEARCH_CREDENTIAL_TARGET_BOCHA),
             );
-            app.manage(Arc::new(ipc::search::SearchState::new(
+            let search_tavily: Arc<dyn SecureStore> = Arc::new(
+                WindowsCredentialStore::with_target_name(SEARCH_CREDENTIAL_TARGET_TAVILY),
+            );
+            // 断网补齐：库密钥在 OS 凭据库；库打不开时补齐停用，检索本身仍可用。
+            let backfill = ipc::backfill::BackfillBridge::open(&config_dir).map(Arc::new);
+            let search_state = Arc::new(ipc::search::SearchState::new(
                 config_dir.clone(),
-                search_secure,
-            )));
+                search_bocha,
+                search_tavily,
+                Arc::clone(&cards),
+                backfill,
+            ));
+            app.manage(Arc::clone(&search_state));
+            let ticker = Arc::clone(&search_state);
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                ticker.tick(now_unix_ms());
+            });
             app.manage(Arc::new(ipc::assist::AssistState::new(config_dir.clone())));
             app.manage(build_state(config_dir, presets, cards.clone()));
             tracing::info!(

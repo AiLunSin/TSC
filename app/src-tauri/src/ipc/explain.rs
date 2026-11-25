@@ -172,14 +172,31 @@ pub fn ingest_explanation(
             latency_ms = latency_ms.unwrap_or(-1),
             "出卡自动补来源：准备出网"
         );
-        if let Ok(response) = search.query(&input.word) {
-            sources = response
-                .hits
-                .iter()
-                .map(|hit| hit.site.clone())
-                .filter(|site| !site.is_empty())
-                .take(3)
-                .collect();
+        // SPEC 7.2.1-5：先落库为 pending，再允许外发；落库失败时不外发。
+        let queued = search.outbox_enqueue(&input.word);
+        if queued.is_none() && search.outbox_ready() {
+            tracing::warn!(target: "search", "outbox 落库失败，跳过自动补来源（本地要点模式）");
+        } else {
+            match search.query(&input.word) {
+                Ok(response) => {
+                    sources = response
+                        .hits
+                        .iter()
+                        .map(|hit| hit.site.clone())
+                        .filter(|site| !site.is_empty())
+                        .take(3)
+                        .collect();
+                    if queued.is_some() {
+                        search.outbox_settle(&input.word, true);
+                    }
+                }
+                Err(_) => {
+                    // 失败保留在 outbox，等网络恢复后由回放窗口补齐。
+                    if queued.is_some() {
+                        search.outbox_settle(&input.word, false);
+                    }
+                }
+            }
         }
     }
     cards.ingest_explanation_with_sources(&input.word, &input.explanation, &sources)

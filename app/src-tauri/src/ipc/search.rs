@@ -11,9 +11,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use meeting_copilot_application::proactive::net_probe::{NetProbe, NetworkState};
 use meeting_copilot_application::settings::{PortError, SecureStore};
+use meeting_copilot_domain::vo::TaskId;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use crate::ipc::backfill::BackfillBridge;
+use crate::ipc::card_store::CardStore;
 use crate::ipc::dto::{
     IpcErrorDto, SearchConfigDto, SearchConfigInputDto, SearchHitDto, SearchInputDto,
     SearchResponseDto,
@@ -38,6 +41,9 @@ const MAX_HITS: usize = 5;
 /// 检索超时：比模型短，用户等的是"顺手查一下"。
 #[cfg(feature = "llm-https")]
 const TIMEOUT_MS: u64 = 8_000;
+/// 检索只允许这两家固定端点出网，与 `SearchProvider::endpoint` 一一对应。
+#[cfg(feature = "llm-https")]
+const SEARCH_HOSTS: &[&str] = &["api.bochaai.com", "api.tavily.com"];
 
 /// 检索服务预设。只给固定端点，不接受任意地址，避免把查询发到不可控主机。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,20 +220,42 @@ impl SearchStore {
     }
 }
 
-/// 检索运行态：配置 + 独立凭据 + 网络状态。由 Tauri 管理，不放进 `AppState`。
+/// 检索运行态：配置 + 两家各自的独立凭据 + 网络状态 + 断网补齐。由 Tauri 管理，不放进 `AppState`。
 pub struct SearchState {
     pub store: SearchStore,
-    pub secure: Arc<dyn SecureStore>,
-    /// 由真实检索结果驱动的网络状态机（SPEC 7.2.1-7、DESIGN 2.10.2）。
+    bocha: Arc<dyn SecureStore>,
+    tavily: Arc<dyn SecureStore>,
+    /// 回放补齐时把来源补回到已生成的卡片上。
+    cards: Arc<CardStore>,
+    /// 断网补齐桥；数据库打不开时为 `None`（补齐停用，检索本身仍可用）。
+    outbox: Option<Arc<BackfillBridge>>,
+    /// 由真实检索结果与可达性探测共同驱动的网络状态机（SPEC 7.2.1-7、DESIGN 2.10.2）。
     probe: Mutex<NetProbe>,
 }
 
 impl SearchState {
-    pub fn new(dir: impl Into<PathBuf>, secure: Arc<dyn SecureStore>) -> Self {
+    pub fn new(
+        dir: impl Into<PathBuf>,
+        bocha: Arc<dyn SecureStore>,
+        tavily: Arc<dyn SecureStore>,
+        cards: Arc<CardStore>,
+        outbox: Option<Arc<BackfillBridge>>,
+    ) -> Self {
         Self {
             store: SearchStore::new(dir),
-            secure,
+            bocha,
+            tavily,
+            cards,
+            outbox,
             probe: Mutex::new(NetProbe::new()),
+        }
+    }
+
+    /// 取对应服务的凭据存储：博查与 Tavily 各自独立，切换服务不必重填另一家的 Key。
+    fn secure_for(&self, provider: SearchProvider) -> &Arc<dyn SecureStore> {
+        match provider {
+            SearchProvider::Bocha => &self.bocha,
+            SearchProvider::Tavily => &self.tavily,
         }
     }
 
@@ -264,8 +292,144 @@ impl SearchState {
         }
     }
 
-    fn read_key(&self) -> Result<Option<String>, IpcErrorDto> {
-        let stored = self.secure.read().map_err(|_| {
+    /// 断网补齐是否可用（单库已打开）；用于区分"未配置"与"落库失败"。
+    pub fn outbox_ready(&self) -> bool {
+        self.outbox.is_some()
+    }
+
+    /// 断网补齐：把「出卡自动补来源」任务先落库，再允许外发（SPEC 7.2.1-5）。
+    pub fn outbox_enqueue(&self, word: &str) -> Option<TaskId> {
+        self.outbox
+            .as_ref()
+            .and_then(|outbox| outbox.enqueue(word, unix_now_ms()))
+    }
+
+    /// 真实检索结束后结算对应任务：成功标记 done，失败进入退避等待恢复。
+    pub fn outbox_settle(&self, word: &str, ok: bool) {
+        if let Some(outbox) = &self.outbox {
+            outbox.settle(word, ok, unix_now_ms());
+        }
+    }
+
+    /// 后台节拍：离线时探测可达性，恢复后开启 30 秒补齐窗口并回放。
+    ///
+    /// 探测只做到端点的 TCP 可达性（不发送检索请求、不消耗额度）；
+    /// 外发是否成功仍以真实检索结果为准（`observe_network`）。
+    pub fn tick(&self, now_ms: i64) {
+        #[cfg(not(feature = "llm-https"))]
+        {
+            let _ = now_ms;
+            return;
+        }
+        #[cfg(feature = "llm-https")]
+        {
+            let provider = self.store.load().provider();
+            let should_probe = self
+                .probe
+                .lock()
+                .map(|probe| probe.state() == NetworkState::Unknown || probe.should_probe(now_ms))
+                .unwrap_or(false);
+            if should_probe {
+                let reachable = probe_reachable(provider);
+                let mut recovered = false;
+                if let Ok(mut probe) = self.probe.lock() {
+                    probe.mark_probed(now_ms);
+                    let changed = probe.on_result(reachable, now_ms);
+                    let online = probe.state() == NetworkState::Online;
+                    if changed {
+                        match probe.state() {
+                            NetworkState::Online => tracing::info!(
+                                target: "search",
+                                latency_ms = probe.recovery_latency_ms().unwrap_or(-1),
+                                "检索网络已恢复"
+                            ),
+                            NetworkState::Offline => {
+                                tracing::warn!(target: "search", "检索网络不可用")
+                            }
+                            NetworkState::Unknown => {}
+                        }
+                    }
+                    recovered = changed && online;
+                }
+                if recovered {
+                    if let Some(outbox) = &self.outbox {
+                        let total = outbox.pending_total();
+                        if total > 0 && !outbox.window_open() {
+                            outbox.begin_window(now_ms, total);
+                            tracing::info!(target: "search", pending = total, "开启断网补齐窗口");
+                        }
+                    }
+                }
+            }
+            self.pump_backfill(now_ms);
+        }
+    }
+
+    /// 回放窗口内的待补任务：串行执行（≤3 并发上限自然满足），每条都结算并更新卡片来源。
+    fn pump_backfill(&self, now_ms: i64) {
+        let Some(outbox) = &self.outbox else {
+            return;
+        };
+        if !outbox.window_open() {
+            return;
+        }
+        for (entry, word) in outbox.due_jobs(now_ms) {
+            let Some(word) = word else {
+                // 进程重启后没有查询文本可重建：任务保留在库，但不谎报补齐成功。
+                outbox.mark_failed(entry, now_ms);
+                outbox.on_job_finished(false);
+                continue;
+            };
+            match self.run_query_once(&word) {
+                Ok(hits) if !hits.is_empty() => {
+                    let sites: Vec<String> = hits
+                        .iter()
+                        .map(|hit| hit.site.clone())
+                        .filter(|site| !site.is_empty())
+                        .take(3)
+                        .collect();
+                    let attached = self.cards.attach_sources(&word, &sites);
+                    outbox.mark_done(entry, now_ms);
+                    outbox.on_job_finished(attached);
+                }
+                _ => {
+                    outbox.mark_failed(entry, now_ms);
+                    outbox.on_job_finished(false);
+                }
+            }
+        }
+        if let Some(report) = outbox.poll_report(now_ms) {
+            tracing::info!(
+                target: "search",
+                total = report.total,
+                done = report.done,
+                failed = report.failed,
+                ratio = report.ratio(),
+                elapsed_ms = report.elapsed_ms,
+                window_ms = report.window_ms,
+                meets_budget = report.meets_budget,
+                "断网补齐完成"
+            );
+        }
+    }
+
+    /// 回放用的一次检索：补齐是系统补发，不再重复扣界面限额。
+    fn run_query_once(&self, word: &str) -> Result<Vec<SearchHitDto>, IpcErrorDto> {
+        let provider = self.store.load().provider();
+        let Some(key) = self.read_key_for(provider)? else {
+            return Err(IpcErrorDto::new(
+                "search_not_configured",
+                "尚未配置联网检索：在「联网查资料」里填入检索 Key 后再试。",
+                false,
+            ));
+        };
+        let outcome = run_search(provider, &key, word);
+        self.observe_network(&outcome);
+        outcome
+    }
+
+    fn read_key_for(&self, provider: SearchProvider) -> Result<Option<String>, IpcErrorDto> {
+        let stored = self.secure_for(provider).read().map_err(|_| {
             IpcErrorDto::new("search_key_unavailable", "检索凭据存储不可用。", true)
         })?;
         Ok(stored
@@ -273,20 +437,46 @@ impl SearchState {
             .filter(|key| !key.trim().is_empty()))
     }
 
-    /// 清除凭据：失败说明存储不可用，不假装成功。
-    pub fn clear_key(&self) -> Result<SearchConfigDto, IpcErrorDto> {
-        self.secure
+    fn write_key(&self, provider: SearchProvider, raw: &str) -> Result<(), IpcErrorDto> {
+        let secret =
+            meeting_copilot_application::settings::SecretBytes::new(raw.as_bytes().to_vec());
+        self.secure_for(provider)
+            .write(&secret)
+            .map_err(|_| IpcErrorDto::new("search_key_unwritable", "检索 Key 保存失败。", true))
+    }
+
+    fn delete_key(&self, provider: SearchProvider) -> Result<(), IpcErrorDto> {
+        self.secure_for(provider)
             .delete()
-            .map_err(|_| IpcErrorDto::new("search_key_unwritable", "检索 Key 清除失败。", true))?;
+            .map_err(|_| IpcErrorDto::new("search_key_unwritable", "检索 Key 清除失败。", true))
+    }
+
+    /// 清除当前服务的凭据：失败说明存储不可用，不假装成功。
+    pub fn clear_key(&self) -> Result<SearchConfigDto, IpcErrorDto> {
+        self.delete_key(self.store.load().provider())?;
         Ok(self.config())
     }
 
     pub fn config(&self) -> SearchConfigDto {
         let file = self.store.load();
-        let has_key = self.read_key().unwrap_or(None).is_some();
+        let has_key_bocha = self
+            .read_key_for(SearchProvider::Bocha)
+            .unwrap_or(None)
+            .is_some();
+        let has_key_tavily = self
+            .read_key_for(SearchProvider::Tavily)
+            .unwrap_or(None)
+            .is_some();
+        let provider = file.provider();
+        let has_key = match provider {
+            SearchProvider::Bocha => has_key_bocha,
+            SearchProvider::Tavily => has_key_tavily,
+        };
         SearchConfigDto {
-            provider: file.provider().as_str().to_owned(),
+            provider: provider.as_str().to_owned(),
             has_key,
+            has_key_bocha,
+            has_key_tavily,
             auto: file.auto,
             ready: has_key && cfg!(feature = "llm-https"),
             hourly_limit: file.hourly_limit,
@@ -294,8 +484,8 @@ impl SearchState {
         }
     }
 
-    /// 保存：留空 Key 表示沿用现有凭据，`clearKey` 表示删掉已存凭据；
-    /// 限额超过上限按上限记，0 表示不限额。
+    /// 保存：留空 Key 表示沿用该服务现有凭据，`clearKey*` 表示删掉该服务已存凭据；
+    /// `keyBocha`/`keyTavily` 分别写各自服务，留空不动。限额超过上限按上限记，0 表示不限额。
     pub fn save_config(
         &self,
         input: &SearchConfigInputDto,
@@ -303,19 +493,28 @@ impl SearchState {
         let provider = SearchProvider::parse(&input.provider).ok_or_else(|| {
             IpcErrorDto::new("search_provider_invalid", "不支持的检索服务。", false)
         })?;
-        let raw_key = input.key.trim();
+        if input.clear_key_bocha {
+            self.delete_key(SearchProvider::Bocha)?;
+        }
+        if input.clear_key_tavily {
+            self.delete_key(SearchProvider::Tavily)?;
+        }
         if input.clear_key {
-            self.secure.delete().map_err(|_| {
-                IpcErrorDto::new("search_key_unwritable", "检索 Key 清除失败。", true)
-            })?;
-        } else if !raw_key.is_empty() {
-            let secret = meeting_copilot_application::settings::SecretBytes::new(
-                raw_key.as_bytes().to_vec(),
-            );
-            self.secure.write(&secret).map_err(|_| {
-                IpcErrorDto::new("search_key_unwritable", "检索 Key 保存失败。", true)
-            })?;
-        } else if self.read_key()?.is_none() {
+            self.delete_key(provider)?;
+        }
+        let legacy_key = input.key.trim();
+        if !legacy_key.is_empty() {
+            self.write_key(provider, legacy_key)?;
+        }
+        let bocha_key = input.key_bocha.trim();
+        if !bocha_key.is_empty() {
+            self.write_key(SearchProvider::Bocha, bocha_key)?;
+        }
+        let tavily_key = input.key_tavily.trim();
+        if !tavily_key.is_empty() {
+            self.write_key(SearchProvider::Tavily, tavily_key)?;
+        }
+        if self.read_key_for(provider)?.is_none() {
             return Err(IpcErrorDto::new(
                 "search_key_missing",
                 "请先填入检索服务的 Key。",
@@ -367,7 +566,7 @@ impl SearchState {
         }
         let file = self.store.load();
         let provider = file.provider();
-        let Some(key) = self.read_key()? else {
+        let Some(key) = self.read_key_for(provider)? else {
             return Err(IpcErrorDto::new(
                 "search_not_configured",
                 "尚未配置联网检索：在「联网查资料」里填入检索 Key 后再试。",
@@ -384,6 +583,17 @@ impl SearchState {
             hits,
         })
     }
+}
+
+/// 到检索端点的 TCP 可达性：只做连接，不发请求、不消耗检索额度。
+#[cfg(feature = "llm-https")]
+fn probe_reachable(provider: SearchProvider) -> bool {
+    let (host, _) = provider.endpoint();
+    meeting_copilot_infrastructure::search::tcp_reachable(
+        host,
+        443,
+        std::time::Duration::from_millis(800),
+    )
 }
 
 /// 真正出网的一次检索；非 `llm-https` 构建直接说明未启用。
@@ -423,7 +633,7 @@ fn run_search(
     request.secure = true;
 
     let transport: Arc<dyn HttpTransport> = Arc::new(BearerTransport::new(
-        Arc::new(TlsTransport::new()),
+        Arc::new(TlsTransport::with_allowed_hosts(SEARCH_HOSTS)),
         SecretString::new(key.to_owned()),
     ));
     let cancel = CancelToken::new();

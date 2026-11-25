@@ -43,6 +43,8 @@ export interface ExplainResultDto {
 export interface SearchConfigDto {
   provider: string;
   hasKey: boolean;
+  hasKeyBocha: boolean;
+  hasKeyTavily: boolean;
   auto: boolean;
   ready: boolean;
   hourlyLimit: number;
@@ -55,6 +57,10 @@ export interface SearchConfigInputDto {
   auto: boolean;
   hourlyLimit: number;
   clearKey: boolean;
+  keyBocha: string;
+  keyTavily: string;
+  clearKeyBocha: boolean;
+  clearKeyTavily: boolean;
 }
 
 export interface AssistConfigDto {

@@ -8,7 +8,9 @@ pub mod http_json;
 pub mod profile_store;
 pub mod registry;
 
-pub use health::{classify_transport, test_connection, HealthMonitor, FAILURE_THRESHOLD};
+pub use health::{
+    classify_transport, tcp_reachable, test_connection, HealthMonitor, FAILURE_THRESHOLD,
+};
 pub use http_json::HttpJsonProvider;
 pub use profile_store::{
     parse_https_endpoint, ProfileError, ProfileStore, ProviderEntry, SearchAdapter,

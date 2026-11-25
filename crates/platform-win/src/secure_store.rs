@@ -5,8 +5,17 @@ use meeting_copilot_application::settings::{PortError, SecretBytes, SecureStore}
 /// 模型服务的凭据目标名。
 pub const CREDENTIAL_TARGET: &str = "meeting-copilot/llm-api-key";
 
-/// 联网检索服务的凭据目标名。与模型 Key 分开存，互不覆盖。
+/// 联网检索服务的凭据目标名（旧版单 Key，仅为迁移保留，新装配按服务分开）。
 pub const SEARCH_CREDENTIAL_TARGET: &str = "meeting-copilot/search-api-key";
+
+/// 博查检索的凭据目标名：与 Tavily 分开存，切换服务时互不覆盖。
+pub const SEARCH_CREDENTIAL_TARGET_BOCHA: &str = "meeting-copilot/search-api-key-bocha";
+
+/// Tavily 检索的凭据目标名：与博查分开存，切换服务时互不覆盖。
+pub const SEARCH_CREDENTIAL_TARGET_TAVILY: &str = "meeting-copilot/search-api-key-tavily";
+
+/// 本地单库密钥的目标名：32 字节原始密钥，只经 OS 凭据库持有，不落配置文件。
+pub const DB_KEY_TARGET: &str = "meeting-copilot/db-key";
 
 /// 凭据存储实现；非 Windows 目标统一返回 `Unsupported`。
 pub struct WindowsCredentialStore {

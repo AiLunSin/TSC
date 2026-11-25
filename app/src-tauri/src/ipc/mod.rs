@@ -2,6 +2,7 @@
 
 pub mod asr;
 pub mod assist;
+pub mod backfill;
 pub mod capture;
 mod card_gate;
 pub mod card_store;

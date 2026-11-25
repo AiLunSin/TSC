@@ -4,6 +4,8 @@
 //! TlsFailure / Unreachable`。连续失败达到阈值置 `Unavailable`，成功即恢复。
 
 use std::collections::HashMap;
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::Duration;
 
 use meeting_copilot_domain::model::enums::ProviderHealth;
 use meeting_copilot_domain::port::search::{
@@ -15,6 +17,18 @@ use crate::llm::transport::TransportError;
 
 /// 连续失败达到该次数即标记不可用。
 pub const FAILURE_THRESHOLD: u8 = 3;
+
+/// 到 `host:port` 的 TCP 可达性：只建连接、立即关闭，不发请求、不消耗检索额度。
+///
+/// 供断网恢复识别使用；外发是否成功仍以真实检索结果为准。
+pub fn tcp_reachable(host: &str, port: u16, timeout: Duration) -> bool {
+    let Ok(addresses) = (host, port).to_socket_addrs() else {
+        return false;
+    };
+    addresses
+        .into_iter()
+        .any(|address| TcpStream::connect_timeout(&address, timeout).is_ok())
+}
 
 #[derive(Debug, Default)]
 pub struct HealthMonitor {

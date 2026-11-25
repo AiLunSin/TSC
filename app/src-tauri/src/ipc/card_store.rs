@@ -260,6 +260,40 @@ impl CardStore {
         }
     }
 
+    /// 把补齐检索到的站点写回已生成的卡片；找不到卡片或来源为空时返回 `false`。
+    ///
+    /// 只补来源，不改写释义与门控结论；用于断网恢复后的自动回放（SPEC 7.2.1-8/10）。
+    pub fn attach_sources(&self, word: &str, sources: &[String]) -> bool {
+        if sources.is_empty() {
+            return false;
+        }
+        let word = crate::ipc::transcript::tidy_cjk_spaces(word.trim());
+        let Ok(mut store) = self.cards.lock() else {
+            return false;
+        };
+        let sequence = self.sequence.load(Ordering::Relaxed);
+        for entry in store.iter_mut().rev() {
+            let CardSnapshotEntry::Draft(draft) = entry else {
+                continue;
+            };
+            if draft.keyword_text.as_str() != word {
+                continue;
+            }
+            // 已经补过网页来源的卡不再重复补；同词多张断网卡按“最近一张未补”依次补齐。
+            let already_web = draft
+                .references
+                .iter()
+                .any(|reference| reference.trust_tier == ReferenceTrustTier::GeneralWeb);
+            if already_web {
+                continue;
+            }
+            draft.references = build_references(sequence, sources);
+            draft.citation_alignment = CitationAlignment::Passed;
+            return true;
+        }
+        false
+    }
+
     /// 清空本次会话的卡片，供界面上的"清空"按钮使用。
     pub fn clear(&self) -> Result<usize, IpcErrorDto> {
         let mut store = self
@@ -740,5 +774,30 @@ mod tests {
             draft.references[0].trust_tier,
             ReferenceTrustTier::UserGenerated
         );
+    }
+
+    /// 同词多张断网卡按“最近一张未补”依次补齐，已补过的卡不重复补。
+    #[test]
+    fn attach_sources_fills_each_offline_card_once() {
+        let store = CardStore::new_with_privacy(PrivacyMode::default());
+        for _ in 0..2 {
+            store
+                .ingest_explanation_with_sources("灰度", "分批次放量。", &[])
+                .expect("card");
+        }
+        assert!(store.attach_sources("灰度", &["example.com".to_owned()]));
+        assert!(store.attach_sources("灰度", &["ops.example.org".to_owned()]));
+        assert!(!store.attach_sources("灰度", &["third.example.net".to_owned()]));
+        let cards = store.cards();
+        assert_eq!(cards.len(), 2);
+        for card in &cards {
+            let CardSnapshotEntry::Draft(draft) = card else {
+                panic!("应为草案卡");
+            };
+            assert_eq!(
+                draft.references[0].trust_tier,
+                ReferenceTrustTier::GeneralWeb
+            );
+        }
     }
 }
