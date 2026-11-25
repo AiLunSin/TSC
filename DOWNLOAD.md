@@ -261,7 +261,7 @@ $env:LLM_MODEL = "deepseek-chat"
 
 1. 主界面找到 **联网查资料（可选）**，点标题展开。
 2. 选择服务：**博查 Bocha（中文）** 或 **Tavily（英文/通用）**。
-3. 粘贴对应服务的 Key。
+3. 在「博查 Key」「Tavily Key」两栏分别粘贴对应服务的 Key（用哪家填哪家，留空不修改）。
 4. 每小时上限默认 20 次，`0` 表示不限，最大 200。
 5. 点 **保存**。
 
@@ -455,7 +455,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 
 ### 8.3 卸载
 
-1. 打开程序，设置页点 **清除设置**；联网查折叠块点 **清除 Key**。
+1. 打开程序，设置页点 **清除设置**；联网查折叠块按需点 **清除博查 Key** / **清除 Tavily Key**。
 2. 关闭程序。
 3. 删除整个 `C:\TSC` 文件夹。
 4. 可选：删除 `%APPDATA%\com.meetingcopilot.desktop` 和 `%LOCALAPPDATA%\com.meetingcopilot.desktop`。
@@ -463,7 +463,8 @@ cargo build -p meeting-copilot-desktop --features llm-https
 
 ```text
 meeting-copilot/llm-api-key
-meeting-copilot/search-api-key
+meeting-copilot/search-api-key-bocha
+meeting-copilot/search-api-key-tavily
 ```
 
 程序没有安装包，所以不会写注册表，也没有"程序和功能"里的卸载项。

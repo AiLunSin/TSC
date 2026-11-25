@@ -2450,3 +2450,44 @@ DB：任务 `bf-c904a92ffa8bb150-1795591080973-1 | done | attempts=1`（断网�
 - U-07 AUD-02~06 台账（§56.1 已对齐）
 - `open-items` §0/§1/§5（随 §56/§57/§58 同步）
 - 门禁脚本与 `ci.yml`/`deny.toml` 契约（`check-mac-scope` 8/8、`check-b4-gates` 全绿）
+
+## §59 文档口径同步与 CI 回归复核（2026-11-25）
+
+用户要求更新 README 并核对文档口径，把「仍未完成」中已完成的事项删去。本轮只改文档，不改源码、不改门禁语义、不新增能力宣称。
+
+### §59.1 当前事实
+
+| 项 | 当前口径 |
+|---|---|
+| 全量基线 | `cargo test --workspace` **1070 passed / 0 failed / 12 ignored**（P-UI 桌面层 **100 例**、平台层 **30 例**另 1 个 ignored 冒烟） |
+| 格式 | `cargo fmt --all -- --check` rc=0 |
+| Clippy | `cargo clippy --workspace --all-targets -- -D warnings` **失败**：desktop 报 `dead_code`（`BackfillReport`、`Window` 字段、`BackfillBridge` 多个方法、`SearchState.cards`、`pump_backfill`/`run_query_once`）与 `needless_return`（`search.rs:322`） |
+| U-07 / AUD-04 | 已于 2026-11-25 关闭（§56.9）；不再列入「仍未完成」 |
+| U-05 | 已于 2026-11-25 关闭（§53）；口径不变 |
+| 38/39/51 | 三项已关闭（§13/§15/§53）；移出「仍未完成」，改为「口径限制」说明 |
+
+### §59.2 远端 CI 回归
+
+GitHub Actions API 复核（2026-11-25）：
+
+| run | 提交 | 结论 | 失败 job |
+|---|---|---|---|
+| 45563081102 | `9121685` | failure | `rust` 三平台、`feature-coverage` |
+| 45569353786 | `702ac0e` | failure | `rust (x86_64-pc-windows-msvc)`、`rust (x86_64-apple-darwin)`、`rust (aarch64-apple-darwin)`、`feature-coverage` |
+| 45447235508 | `bda1840` | success | —（最近一次 8/8 全绿） |
+
+- 根因按本地复现为 clippy `-D warnings` 未通过；`feature-coverage` 依赖 `rust` 的产物，随 `rust` 失败而失败。
+- 本次未修复代码，README/ABOUT/open-items 已改为「最近一次全绿 run 45447235508；后续 run 失败待修复」，不再宣称当前 8/8。
+- 基线数字由 §58 的 1059 更新为 **1070**；差异来自 `9121685` 与 `702ac0e` 新增用例（桌面层 93→100）。
+
+### §59.3 文档同步范围
+
+- `README.md`：当前定位补 U-07 关闭；CI 状态改为最近全绿 + 后续失败；全量基线 1059→1070、桌面层 93→100；凭据口径由「双系统」改为「三系统（模型 / 博查 / Tavily）」；检索 Key 目标拆为 `search-api-key-bocha` / `search-api-key-tavily`；「仍未完成」删去 U-07/AUD-04 与已关闭的 38/39/51，新增 CI 回归项与「口径限制」段；Rust 环境说明更新为 rustup 已重装恢复。
+- `docs/ABOUT.md`：CI、基线、U-07 交付项、凭据目标同上同步；「未交付」删去 U-07，保留 U-08/平台层/CI 回归。
+- `docs/progress/open-items.md`：标题日期更新；§0 增加 CI 回归行；U-07-42 标记已关闭；§8.1 基线改 1070/桌面层 100。
+- `DOWNLOAD.md`：联网查改为博查/Tavily 两栏 Key；卸载清理改为两个检索凭据目标。
+
+### §59.4 边界
+
+- 不把本次文档同步写成 CI 已恢复；`rust` 与 `feature-coverage` 仍失败，修复与复跑后需另起小节关闭。
+- 不回溯改写 §52/§55.3/§58 的历史基线数字，最新口径以本节为准。
