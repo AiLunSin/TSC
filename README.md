@@ -70,8 +70,6 @@ Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那�
 
 Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/TSC/releases)，按要不要实时转写挑：
 
-> 完整版需要仓库配置模型地址才会构建，没配的那次发版只出精简版。以 Releases 页面上实际有的文件为准。
-
 | 安装包 | 体积 | 装完能直接转写 | 还要自己装 |
 |---|---|---|---|
 | `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 65 MB（模型压缩后约 42 MB） | 能 | 无 |
@@ -138,7 +136,7 @@ bash scripts/scan-secrets.sh
 
 CI 分六组：web、rust（Windows 加两个 Darwin 交叉编译）、用例名差集、特性覆盖、合规（许可证 / SBOM / 密钥扫描 / 分层）、sqlcipher。
 
-发版：`git tag v0.1.0 && git push origin v0.1.0`。`release` 工作流在 Windows 机器上编译精简版与完整版两个安装包、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。完整版需要仓库 secret `ASR_MODEL_URL`（模型 zip 直链），没配就只出精简版。
+发版：`git tag v0.1.0 && git push origin v0.1.0`。`release` 工作流在 Windows 机器上编译精简版与完整版两个安装包、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。模型在构建时从 vosk 官方直链下载；仓库如果配了 secret `ASR_MODEL_URL`，会优先用它（换镜像或内网源时用）。
 
 README 里的动图和截图不是手工截的：`bash scripts/readme-capture/render-demo-gif.sh` 会用真实前端加一份假 IPC 重新渲染，改界面之后重跑即可。
 

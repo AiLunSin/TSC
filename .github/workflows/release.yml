@@ -3,7 +3,8 @@ name: release
 # 打 tag 出两个安装包：
 #   lite —— 只有程序本体，最省流量；实时转写要用户自备 Python + vosk + 模型
 #   full —— 程序 + 识别模型 + 内嵌 Python 与 vosk，装完就能转写
-# 模型体积大且不入库，full 需要仓库 secret ASR_MODEL_URL（模型 zip 直链）。
+# 模型体积大且不入库，构建时现下。默认用官方直链（见 VOSK_MODEL_URL），
+# 仓库配了 secret ASR_MODEL_URL 则优先用它（镜像/内网源）。
 
 on:
   push:
@@ -21,6 +22,8 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   PYTHON_EMBED_URL: "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
+  # vosk 官方的中文小模型，41.9 MB，公开直链、版本固定。
+  VOSK_MODEL_URL: "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip"
 
 jobs:
   plan:
@@ -30,18 +33,22 @@ jobs:
       # 作业级 if 在矩阵展开之前求值，拿不到 matrix 上下文，
       # 所以连"构建哪几个变体"也在这里定好，矩阵直接吃这个 JSON。
       variants: ${{ steps.check.outputs.variants }}
+      model_url: ${{ steps.check.outputs.model_url }}
     steps:
       - id: check
         env:
-          MODEL_URL: ${{ secrets.ASR_MODEL_URL }}
+          SECRET_MODEL_URL: ${{ secrets.ASR_MODEL_URL }}
         run: |
-          if [ -n "${MODEL_URL}" ]; then
-            echo "已配置 ASR_MODEL_URL，构建 lite + full"
-            echo 'variants=[{"variant":"lite","config":""},{"variant":"full","config":"src-tauri/tauri.asr-full.conf.json"}]' >> "$GITHUB_OUTPUT"
+          # 没配 secret 就用官方直链：完整版本来就该是默认能出的，
+          # 让"忘了配 secret"变成"少一个包"不是好设计。
+          url="${SECRET_MODEL_URL:-$VOSK_MODEL_URL}"
+          echo "model_url=${url}" >> "$GITHUB_OUTPUT"
+          if [ -n "${SECRET_MODEL_URL}" ]; then
+            echo "模型源：仓库 secret ASR_MODEL_URL"
           else
-            echo "未配置 ASR_MODEL_URL，只构建 lite"
-            echo 'variants=[{"variant":"lite","config":""}]' >> "$GITHUB_OUTPUT"
+            echo "模型源：官方直链 ${url}"
           fi
+          echo 'variants=[{"variant":"lite","config":""},{"variant":"full","config":"src-tauri/tauri.asr-full.conf.json"}]' >> "$GITHUB_OUTPUT"
 
   windows-installer:
     name: windows (${{ matrix.variant }})
@@ -53,12 +60,12 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -78,7 +85,7 @@ jobs:
       - name: install tauri cli
         run: npm install -g @tauri-apps/cli@^2 --no-audit --no-fund
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: matrix.variant == 'full'
         with:
           python-version: "3.11"
@@ -87,11 +94,14 @@ jobs:
       - name: prepare full payload
         if: matrix.variant == 'full'
         shell: pwsh
+        env:
+          ASR_MODEL_URL: ${{ needs.plan.outputs.model_url }}
         run: |
           $asr = "app/src-tauri/asr"
           New-Item -ItemType Directory -Force -Path $asr | Out-Null
 
-          Invoke-WebRequest -Uri "${{ secrets.ASR_MODEL_URL }}" -OutFile model.zip
+          Write-Host "模型源：$env:ASR_MODEL_URL"
+          Invoke-WebRequest -Uri "$env:ASR_MODEL_URL" -OutFile model.zip
           Expand-Archive model.zip -DestinationPath $asr -Force
           if (-not (Test-Path "$asr/vosk-model-small-cn-0.22")) {
             throw "模型解压后目录名不是 vosk-model-small-cn-0.22"
@@ -132,7 +142,7 @@ jobs:
             Copy-Item -Destination $target
           Get-Item $target | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.variant }}
           path: dist-installer/*.exe
@@ -141,9 +151,12 @@ jobs:
   publish:
     name: publish draft release
     needs: windows-installer
+    # 两个变体是独立构建的：full 挂了不该连累已经打好的 lite。
+    # 正文按实际产物生成，缺哪个一眼能看出来；真全挂了下面的 sha256sum 会失败收场。
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: installer-*
           path: release-files
