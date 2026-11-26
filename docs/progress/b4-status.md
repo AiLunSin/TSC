@@ -2799,3 +2799,41 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 **识别质量观察（不是 bug）：** 第二句出现"灰度→维度"、"华东→华中"的偏差。原因是第一句在端点处收句后识别器重置，第二句少了前半段上下文；测试音频只有 5.8 s，且重采样用了最简单的线性插值。换成真实会议音频（连续语流、48 kHz 环回）表现会不同，这条留待真实会议取证。
 
 **流水线补强。** `smoke install` 原来只跑 `import vosk`，模型包被截断也照样通过；现在改为 `Model(<安装目录>/asr/vosk-model-small-cn-0.22)` 真加载一次，失败即中止发布。
+
+
+### §63.5 打包版转写一个字都不出：verbatim 路径前缀（2026-11-26）
+
+§63.4 只测到"脚本 + 模型 + 解释器能跑"，没测"应用点开始转写之后"。补测时暴露一个会让**所有真实用户**装了等于没装的 bug。
+
+**怎么发现的。** 用 `target/release` 目录（exe 与 `asr/` 同级，等价于安装后的布局）启动应用，借 WebView2 的远程调试端口在页面里点「开始实时转写」，再看 `%LOCALAPPDATA%\meeting-copilot\asr.log`：
+
+```text
+start script=\\?\C:\...\target\release\asr\stream_asr.py model=\\?\C:\...\asr\vosk-model-small-cn-0.22
+python.vosk_ok \\?\C:\...\asr\python\python.exe []
+spawn.ok pid=26224
+capture.opened health=Ready
+py.stderr ERROR (VoskAPI:Model()) Folder '\\?\C:\...' does not contain model files.
+py.stderr Exception: Failed to create a model
+recognizer.eof lines=0 chunks=0 stable=0
+```
+
+解释器选对了、WASAPI 环回也开了，但 vosk 打不开模型目录，进程 1 秒内退出。用户看到的就是"开始转写 → 音频在走 → 一个字都没有"。
+
+**根因。** 打包态 `app.path().resource_dir()` 返回 verbatim 路径（`\\?\C:\...`）。Rust 的 `is_file()` / `is_dir()` 认这个前缀，所以 `AsrPaths::resolve` 一路通过；但跨进程传给 Python 后，vosk 的 Kaldi 层按字符串开目录，不识别前缀。开发态路径由 `DEV_ROOT`（`env!("CARGO_MANIFEST_DIR")`）拼接，天然没有前缀——这个坑只在安装包里出现，之前所有本地验证都绕过了它。
+
+**修复。** `AsrPaths` 增加 `simplify_path()`：剥离 `\\?\`（`\\?\UNC\` 还原成 `\\server\share`），`resolve` 的三个返回点统一过一遍，`script` / `model` / `python` 都不再携带前缀。新增回归用例 `verbatim_prefix_is_stripped_for_child_process`，构造 `\\?\<tmp>` 作为 resource_dir，断言解析结果不带前缀。
+
+**修复后同一路径复测：**
+
+```text
+start script=C:\...\asr\stream_asr.py model=C:\...\asr\vosk-model-small-cn-0.22
+python.vosk_ok C:\...\asr\python\python.exe []
+spawn.ok / capture.opened health=Ready
+capture.chunks=400 audio=4.0s stable=1
+```
+
+页面转写区出现「我们确认阿里云方案」，状态栏「音频 5.8s（585 片）/ 写入 183KB / 稳定句 1」——真实音频经系统环回进去、经自带解释器与模型识别、文本回到界面。这是第一次把"下载完整版 → 装上 → 点开始 → 出字"整条链跑通。
+
+**影响面。** 已发布的 `v0.1.1`（精简版与完整版）都带这个 bug：完整版会缺资源报错退出，精简版即使用户自己放了模型也一样。修复随下一个 tag 发布。
+
+**验证方法沉淀。** 借 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` 起应用，用 CDP 执行页面脚本（点按钮、读 DOM），比 UI 自动化可靠（`Add-Type`、`Reflection.Assembly` 在本机都被拦）。注意：进程随启动它的 shell 结束而退出，启动、点按、读日志要放在同一次调用里。
