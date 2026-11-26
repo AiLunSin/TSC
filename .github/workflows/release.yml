@@ -200,8 +200,11 @@ jobs:
           }
 
           if ("${{ matrix.variant }}" -eq "full") {
-            & (Join-Path $dst "asr/python/python.exe") -c "import vosk"
-            if ($LASTEXITCODE -ne 0) { throw "安装后的内嵌解释器无法 import vosk" }
+            # 只查 import vosk 不够：模型包截断时解释器照样能用。这里真加载一次模型。
+            $py = Join-Path $dst "asr/python/python.exe"
+            $model = Join-Path $dst "asr/vosk-model-small-cn-0.22"
+            & $py -X utf8 -c "import sys; from vosk import Model; Model(sys.argv[1])" $model
+            if ($LASTEXITCODE -ne 0) { throw "安装后的内嵌解释器无法加载模型" }
           }
 
           Write-Host "安装后结构核对通过：$($expect -join ', ')"

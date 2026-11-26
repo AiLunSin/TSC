@@ -9,7 +9,7 @@
 | `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB | 装完就能用 | 无 |
 | `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 要自己配 | Python 3.8+、`pip install vosk`、识别模型 |
 
-完整版装完占约 120 MB（程序 + 内嵌解释器 + 模型），精简版约 12 MB。
+完整版装完占约 145 MB（程序 11 MB + 内嵌解释器 69 MB + 模型 65 MB），精简版约 12 MB。
 
 先去 [Releases](https://github.com/AiLunSin/meeting-glossary/releases) 看有没有包：
 
