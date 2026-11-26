@@ -189,7 +189,7 @@ jobs:
             echo "**只想开会时查词、不打算一直开着转写**：装精简版。手动粘贴出卡、选中查义、联网查、AI 提醒都能用。"
             echo
             if ls *-full-*.exe >/dev/null 2>&1; then
-              echo "**想装完就能听会**：装完整版。vosk 模型和一份内嵌 Python 都在包里，装完不需要再装 Python，也不需要联网下模型（约 65 MB）。"
+              echo "**想装完就能听会**：装完整版。vosk 模型和一份内嵌 Python 都在包里，装完不需要再装 Python，也不需要联网下模型。"
               echo
             fi
             echo "## 安装说明"
@@ -204,7 +204,7 @@ jobs:
           } > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: ${{ inputs.tag || github.ref_name }}

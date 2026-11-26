@@ -72,8 +72,8 @@ Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://gi
 
 | 安装包 | 体积 | 装完能直接转写 | 还要自己装 |
 |---|---|---|---|
-| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 65 MB（模型压缩后约 42 MB） | 能 | 无 |
-| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 5 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB（模型压缩后约 42 MB） | 能 | 无 |
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
 
 两个版本界面和功能完全一样，差别只在转写的依赖：完整版把 vosk 模型和一份内嵌 Python 打进包，装完就能听；精简版只带程序本体，模型和解释器自己准备。只想开会时选词查意思、或者用粘贴生成卡片，精简版就够。
 

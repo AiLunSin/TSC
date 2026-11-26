@@ -6,8 +6,8 @@
 
 | 安装包 | 体积 | 实时转写 | 还要额外准备 |
 |---|---|---|---|
-| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 65 MB | 装完就能用 | 无 |
-| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 5 MB | 要自己配 | Python 3.8+、`pip install vosk`、识别模型 |
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB | 装完就能用 | 无 |
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 要自己配 | Python 3.8+、`pip install vosk`、识别模型 |
 
 先去 [Releases](https://github.com/AiLunSin/TSC/releases) 看有没有包：
 
