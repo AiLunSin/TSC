@@ -5,7 +5,7 @@
 Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那一下才联网
 
 <p>
-  <a href="https://github.com/AiLunSin/TSC/actions/workflows/ci.yml"><img src="https://github.com/AiLunSin/TSC/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/AiLunSin/meeting-glossary/actions/workflows/ci.yml"><img src="https://github.com/AiLunSin/meeting-glossary/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6" alt="Platform">
   <img src="https://img.shields.io/badge/rust-1.89%2B-000000" alt="Rust">
@@ -68,7 +68,7 @@ Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那�
 
 ## 安装
 
-Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/TSC/releases)，按要不要实时转写挑：
+Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/meeting-glossary/releases)，按要不要实时转写挑：
 
 | 安装包 | 体积 | 装完能直接转写 | 还要自己装 |
 |---|---|---|---|

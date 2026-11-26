@@ -9,7 +9,7 @@
 | `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB | 装完就能用 | 无 |
 | `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 要自己配 | Python 3.8+、`pip install vosk`、识别模型 |
 
-先去 [Releases](https://github.com/AiLunSin/TSC/releases) 看有没有包：
+先去 [Releases](https://github.com/AiLunSin/meeting-glossary/releases) 看有没有包：
 
 - **装完整版**：双击安装 → 打开程序 → 直接跳到第 5 节。第 1～4 节都不用看。
 - **装精简版**：先做 1.5 节（Python 与 vosk）和第 2 节（模型，放进程序的 `asr` 文件夹），再跳到第 5 节。第 3、4 节是编译，不用看。
@@ -125,7 +125,7 @@ py -3 -c "import vosk; print('vosk OK')"
 
 打开项目主页：
 
-https://github.com/AiLunSin/TSC
+https://github.com/AiLunSin/meeting-glossary
 
 点绿色 **Code** → **Download ZIP**，解压后把文件夹放到：
 
@@ -138,7 +138,7 @@ C:\TSC
 如果你装过 Git，也可以直接：
 
 ```powershell
-git clone https://github.com/AiLunSin/TSC.git C:\TSC
+git clone https://github.com/AiLunSin/meeting-glossary.git C:\TSC
 ```
 
 检查：
@@ -523,4 +523,4 @@ meeting-copilot/search-api-key-tavily
 - 这是开发预览版，"产品级真实会议可用"尚未验收；请先在小范围、非关键会议中试用。
 - 许可证为 MIT OR Apache-2.0；问题可以在 GitHub Issues 反馈：
 
-https://github.com/AiLunSin/TSC/issues
+https://github.com/AiLunSin/meeting-glossary/issues
