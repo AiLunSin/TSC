@@ -17,7 +17,7 @@ Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那�
 
 > Real-time meeting glossary for Windows. Select a phrase in the live transcript and get an explanation; local-first, nothing leaves the machine unless you click. Rust + Tauri 2.
 >
-> 仓库名 `TSC` 是项目代号，产品名叫会议副驾（Meeting Copilot）。
+> 仓库名 `meeting-glossary` 沿用了早期代号；产品名叫会议副驾（Meeting Copilot）。
 
 ## 为什么做这个
 
@@ -54,6 +54,8 @@ Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那�
 | 选中查义 | 选中不超过 200 字，点「查意思」；选的是整段话就自动切成概括模式 |
 | 联网查证 | 博查、Tavily 两家预设，只发选中的 80 字以内，默认每小时 20 次 |
 | 关键词卡片 | 关键词、类型、一句话结论、引用条数与置信度；点开只在本地展开 |
+| 断网补齐 | 断网时卡片照出，网络恢复后 30 秒内把引用来源补上；重启后也能补 |
+| 卡片留存 | 最近 200 张卡片存进本机加密库，重启还在，清空才消失 |
 | AI 提醒 / 怎么回 | 看最近 12 句，给两条要留意的提醒和一两句能直接说出口的话 |
 | 手动出卡 | 粘贴一段会议文本，走同一条链路 |
 | 隐私控制 | 投屏拒卡、紧急遮蔽、凭据进系统凭据管理器、业务载荷字段级加密 |
@@ -70,10 +72,12 @@ Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那�
 
 Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/meeting-glossary/releases)，按要不要实时转写挑：
 
-| 安装包 | 体积 | 装完能直接转写 | 还要自己装 |
-|---|---|---|---|
-| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB（模型压缩后约 42 MB） | 能 | 无 |
-| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
+| 安装包 | 下载体积 | 装完占用 | 能直接转写 | 还要自己装 |
+|---|---|---|---|---|
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB | 约 145 MB | 能 | 无 |
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 约 12 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
+
+完整版的 145 MB 里，程序约 11 MB、内嵌 Python 约 69 MB、识别模型约 65 MB。安装包对这两块做了压缩，所以下载 60 MB、装完 145 MB；换来的是装完直接能听，不用再下一次。
 
 两个版本界面和功能完全一样，差别只在转写的依赖：完整版把 vosk 模型和一份内嵌 Python 打进包，装完就能听；精简版只带程序本体，模型和解释器自己准备。只想开会时选词查意思、或者用粘贴生成卡片，精简版就够。
 
@@ -103,7 +107,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 - 凭据只写入 Windows 凭据管理器，模型、博查、Tavily 三个目标分开存，配置文件里只有服务名和限额
 - 日志只允许白名单字段，原文、完整地址、查询内容都不落盘；识别文本只写计数，不写内容
 - 数据库打开需要密钥引用和实际派生密钥，业务表按字段做 AES-256-GCM；需要连 FTS 索引一起加密时切到 `sqlcipher`
-- 出网只有三处，全部由点击触发：查意思（≤200 字 + 前后各一句）、联网查（≤80 字）、AI 提醒（最近 12 句，≤900 字）
+- 出网只有三处，全部由点击触发：查意思（≤200 字 + 前后各一句）、联网查（≤80 字）、AI 提醒（最近 12 句，≤900 字）。断网时点击照样出卡，联网后补发的是同一条检索请求
 - 审计只追加，在线保留 180 天，归档保留 5 年
 
 ## 已知限制
@@ -112,7 +116,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 - 字幕通道基本用不上：腾讯会议、飞书的窗口里读不到字幕文本，实际靠系统音频识别；OCR 兜底默认关闭，也没在真实字幕上验证过。
 - 投屏检测和紧急遮蔽目前只能通过开发期环境变量注入触发，Windows 上没有自动侦测。
 - 大规模的会中表现还没统计过：真机性能、误触发率、二十场以上的稳定性都还缺数据；联网查的召回质量取决于你配的那家检索服务。
-- 只做会中，不做会后纪要导出。转写全文留在内存里，退出即清空。
+- 只做会中，不做会后纪要导出。转写全文留在内存里，退出即清空（卡片单独留存，见「功能」）。
 - 安装包没有代码签名，首次运行会被 SmartScreen 拦；自签证书解决不了，要 OV/EV 证书或 Azure Trusted Signing。
 
 ## 技术栈
@@ -136,7 +140,7 @@ bash scripts/scan-secrets.sh
 
 CI 分六组：web、rust（Windows 加两个 Darwin 交叉编译）、用例名差集、特性覆盖、合规（许可证 / SBOM / 密钥扫描 / 分层）、sqlcipher。
 
-发版：`git tag v0.1.0 && git push origin v0.1.0`。`release` 工作流在 Windows 机器上编译精简版与完整版两个安装包、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。模型在构建时从 vosk 官方直链下载；仓库如果配了 secret `ASR_MODEL_URL`，会优先用它（换镜像或内网源时用）。
+发版：把版本号同步到三处——`Cargo.toml` 的 `[workspace.package] version`、`app/src-tauri/tauri.conf.json`、`app/package.json`——再跑一次 `cargo metadata` 更新 `Cargo.lock`；各 `crates/*/Cargo.toml` 里的内部依赖也带着版本号，漏改会直接解析失败。然后 `git tag vX.Y.Z && git push origin vX.Y.Z`。工作流会用 tag 名覆盖安装包版本，所以包名和 exe 的文件属性（详细信息里的产品版本）都是 tag 那个号。`release` 工作流在 Windows 机器上编译精简版与完整版两个安装包、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。模型在构建时从 vosk 官方直链下载；仓库如果配了 secret `ASR_MODEL_URL`，会优先用它（换镜像或内网源时用）。
 
 README 里的动图和截图不是手工截的：`bash scripts/readme-capture/render-demo-gif.sh` 会用真实前端加一份假 IPC 重新渲染，改界面之后重跑即可。
 

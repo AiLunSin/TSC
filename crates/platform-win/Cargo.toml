@@ -7,8 +7,8 @@ license.workspace = true
 description = "Windows 平台：WASAPI 环回、UI Automation 字幕读取、Windows.Media.Ocr。"
 
 [dependencies]
-meeting-copilot-application = { version = "0.1.0", path = "../application" }
-meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
+meeting-copilot-application = { version = "0.1.2", path = "../application" }
+meeting-copilot-domain = { version = "0.1.2", path = "../domain" }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Security_Cryptography", "Storage_Streams", "Win32_Foundation", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_WinRT", "Win32_UI_Accessibility"] }

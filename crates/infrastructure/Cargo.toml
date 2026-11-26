@@ -18,7 +18,7 @@ llm-https = ["dep:native-tls"]
 [dependencies]
 aes-gcm = "0.10"
 hkdf = "0.12"
-meeting-copilot-domain = { version = "0.1.0", path = "../domain" }
+meeting-copilot-domain = { version = "0.1.2", path = "../domain" }
 rusqlite = { version = "0.43" }
 schemars = { version = "1", features = ["derive"] }
 serde_json.workspace = true
@@ -32,4 +32,4 @@ native-tls = { version = "0.2", optional = true }
 native-tls = { version = "0.2", optional = true }
 
 [dev-dependencies]
-meeting-copilot-application = { version = "0.1.0", path = "../application" }
+meeting-copilot-application = { version = "0.1.2", path = "../application" }

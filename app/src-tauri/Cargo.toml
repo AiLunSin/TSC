@@ -11,11 +11,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 jieba-rs = { version = "0.7", features = ["tfidf"] }
-meeting-copilot-application = { version = "0.1.0", path = "../../crates/application" }
-meeting-copilot-domain = { version = "0.1.0", path = "../../crates/domain" }
-meeting-copilot-infrastructure = { version = "0.1.0", path = "../../crates/infrastructure", default-features = false, features = ["bundled-sqlite"] }
-meeting-copilot-platform-win = { version = "0.1.0", path = "../../crates/platform-win" }
-meeting-copilot-ui-bridge = { version = "0.1.0", path = "../../crates/ui-bridge" }
+meeting-copilot-application = { version = "0.1.2", path = "../../crates/application" }
+meeting-copilot-domain = { version = "0.1.2", path = "../../crates/domain" }
+meeting-copilot-infrastructure = { version = "0.1.2", path = "../../crates/infrastructure", default-features = false, features = ["bundled-sqlite"] }
+meeting-copilot-platform-win = { version = "0.1.2", path = "../../crates/platform-win" }
+meeting-copilot-ui-bridge = { version = "0.1.2", path = "../../crates/ui-bridge" }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.10"

@@ -2837,3 +2837,46 @@ capture.chunks=400 audio=4.0s stable=1
 **影响面。** 已发布的 `v0.1.1`（精简版与完整版）都带这个 bug：完整版会缺资源报错退出，精简版即使用户自己放了模型也一样。修复随下一个 tag 发布。
 
 **验证方法沉淀。** 借 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` 起应用，用 CDP 执行页面脚本（点按钮、读 DOM），比 UI 自动化可靠（`Add-Type`、`Reflection.Assembly` 在本机都被拦）。注意：进程随启动它的 shell 结束而退出，启动、点按、读日志要放在同一次调用里。
+
+## §64 产品介绍口径校准（2026-11-26 17:40）
+
+用户要求更新产品介绍。范围限定在 `README.md` 与 `docs/ABOUT.md` 的对外口径，不改能力与代码，不把 bug 史写进介绍。
+
+**改动**
+
+| 文件 | 改动 |
+|---|---|
+| `README.md` 安装表 | 「体积」拆成「下载体积 / 装完占用」两列：full 约 60 MB → 装完约 145 MB；lite 约 4.9 MB → 装完约 12 MB。删掉「模型压缩后约 42 MB」的绕法，改为 11 MB 程序 + 69 MB 内嵌 Python + 65 MB 模型，并说明下载与装完为何差这么多 |
+| `README.md` 功能表 | 新增「断网补齐」（恢复后 30 秒补来源，重启也能补）与「卡片留存」（最近 200 张进加密库，重启还在） |
+| `README.md` 已知限制 | 「转写全文退出即清空」补一句「卡片单独留存」，避免与卡片留存混淆 |
+| `README.md` 发版段 | tag 示例改占位 `vX.Y.Z`，写明打 tag 前同步 `Cargo.toml` / `tauri.conf.json` / `package.json` 三处版本号 |
+| `docs/ABOUT.md` 首段 | 原写「把值得解释的术语挑出来」与默认不出卡冲突，改为「你选中哪句，它才解释哪句」 |
+| `docs/ABOUT.md` 能力 | 补「两种装法」「断网补齐」「卡片留存」；「还不能做什么」补安装包未签名 |
+| `README.md` / `docs/ABOUT.md` 隐私段 | 「出网全部由点击触发」补一句：断网时那次点击先出卡，联网后补发同一条检索请求（§56.8 的补齐回放） |
+
+**依据**：§56.8 / §56.9（补齐窗口与重启补齐）、§56.10（`MAX_CARDS=200`）、§63.2 / §63.4（体积实测）、`app/src-tauri/src/ipc/card_store.rs:45,49`（200 张、同词 90 秒、每分钟 8 张）、`.github/workflows/release.yml`（`--config` 覆盖版本、`draft: true`）。
+
+**交叉核对**：IPC 命令 31 项（`generate_handler!` 实测），与 README / ABOUT 一致；CI 作业仍六组（web / rust / test-name-inventory / feature-coverage / compliance / sqlcipher）；旧口径词 `42 MB`、`压缩后` 全文已无残留。
+
+**版本号核对（17:40 时点，未改）**：源码三处仍是 `0.1.0`（`Cargo.toml` workspace、`app/src-tauri/tauri.conf.json`、`app/package.json`），已发布 tag 为 `v0.1.2`，`v0.1.1` 本地与远端均已不存在。发布包内版本由 workflow 用 tag 名注入，所以线上包显示 0.1.2 是正确的，落后的只有源码与本地构建（`cargo build` 出来的 exe 仍是 0.1.0）。
+
+**发布状态**：`v0.1.2` 已发布（非草稿），资产 full 60.5 MiB / lite 4.9 MiB，含 §63.5 的 verbatim 修复——§63.5 末尾「修复随下一个 tag 发布」已闭环。
+
+### §64.1 版本号同步到 0.1.2（2026-11-26 17:52）
+
+用户裁决「版本号就按 0.1.2 来」，把源码从 `0.1.0` 对齐到已发布 tag。**实际不止三处**，共 10 个文件 23 处：
+
+| 位置 | 处数 | 说明 |
+|---|---|---|
+| `Cargo.toml` `[workspace.package] version` | 1 | 源头 |
+| `app/src-tauri/Cargo.toml` 内部 path 依赖 | 5 | `version = "0.1.2", path = ...` |
+| `crates/application` / `infrastructure` / `platform-win` / `ui-bridge` 清单 | 1 / 2 / 2 / 2 | 同上；**路径依赖带 version 约束，漏改直接解析失败** |
+| `app/src-tauri/tauri.conf.json` | 1 | 写进 exe 文件属性（产品版本）与安装包元数据；界面没有「关于」页 |
+| `app/package.json` / `app/package-lock.json` | 1 / 2 | 用 `npm version 0.1.2 --no-git-tag-version`，lock 顶部两处一并更新 |
+| `Cargo.lock` workspace 包条目 | 6 | 按包名逐条改，未动第三方 |
+
+**校验**：`cargo metadata --no-deps` 退出 0，六层包全部解析为 `0.1.2`。残留 `0.1.0` 六处已确认是第三方（`yocto-queue`、`vswhom`、`windows-strings`），未误伤。
+
+**顺带修正**：README 原写「同步三处」，漏了 crate 内部依赖与 lock，已改为「三处 + `cargo metadata` 更新 lock + 注意 `crates/*` 内部依赖」。
+
+**未做**：没有重新构建本地 exe 验证文件属性里的版本显示。`tauri.conf.json` 与已发布 tag 现已一致；下次发版把上表位置一起改到下个号，再打新 tag。

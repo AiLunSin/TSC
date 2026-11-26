@@ -2316,7 +2316,7 @@ dependencies = [
 
 [[package]]
 name = "meeting-copilot-application"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "meeting-copilot-domain",
  "serde",
@@ -2326,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "meeting-copilot-desktop"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "jieba-rs",
  "meeting-copilot-application",
@@ -2345,7 +2345,7 @@ dependencies = [
 
 [[package]]
 name = "meeting-copilot-domain"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "proptest",
  "schemars 1.2.3",
@@ -2356,7 +2356,7 @@ dependencies = [
 
 [[package]]
 name = "meeting-copilot-infrastructure"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "aes-gcm",
  "hkdf",
@@ -2373,7 +2373,7 @@ dependencies = [
 
 [[package]]
 name = "meeting-copilot-platform-win"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "meeting-copilot-application",
  "meeting-copilot-domain",
@@ -2383,7 +2383,7 @@ dependencies = [
 
 [[package]]
 name = "meeting-copilot-ui-bridge"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "meeting-copilot-application",
  "meeting-copilot-domain",
