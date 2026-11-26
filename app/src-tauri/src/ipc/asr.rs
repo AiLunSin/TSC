@@ -36,6 +36,26 @@ pub struct AsrPaths {
     python: Option<PathBuf>,
 }
 
+/// 去掉 Windows 的 `\\?\` 扩展长度前缀。
+///
+/// 打包态 `resource_dir()` 给的是 verbatim 路径，Rust 的 `is_file()` 认，
+/// 但 vosk（Kaldi）不认：`Model()` 会直接报 "does not contain model files"，
+/// 识别进程启动即退出——现象就是"点了开始转写，一个字都没有"。
+/// 开发态走 `DEV_ROOT` 拼的路径没有前缀，所以这个坑只在安装包里出现。
+fn simplify_path(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let text = path.to_string_lossy();
+        if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{rest}"));
+        }
+        if let Some(rest) = text.strip_prefix(r"\\?\") {
+            return PathBuf::from(rest);
+        }
+    }
+    path
+}
+
 /// 安装包自带的解释器只认固定位置，编译期不存在就是没有，不做 PATH 搜索。
 fn bundled_python(asr_dir: &Path) -> Option<PathBuf> {
     let exe = asr_dir.join("python").join("python.exe");
@@ -52,9 +72,9 @@ impl AsrPaths {
             if script.is_file() && model.is_dir() {
                 let python = bundled_python(&asr_dir);
                 return Self {
-                    script,
-                    model,
-                    python,
+                    script: simplify_path(script),
+                    model: simplify_path(model),
+                    python: python.map(simplify_path),
                 };
             }
         }
@@ -64,14 +84,14 @@ impl AsrPaths {
         let repository_model = dev_root.join("asr").join(MODEL_DIR_NAME);
         if repository_model.is_dir() {
             return Self {
-                python: bundled_python(&dev_root.join("asr")),
-                script: repository_script,
-                model: repository_model,
+                python: bundled_python(&dev_root.join("asr")).map(simplify_path),
+                script: simplify_path(repository_script),
+                model: simplify_path(repository_model),
             };
         }
         Self {
-            script: repository_script,
-            model: dev_root.join("../../.tmp/asr").join(MODEL_DIR_NAME),
+            script: simplify_path(repository_script),
+            model: simplify_path(dev_root.join("../../.tmp/asr").join(MODEL_DIR_NAME)),
             python: None,
         }
     }
@@ -845,6 +865,28 @@ mod tests {
         assert_eq!(full.python, Some(asr.join("python").join("python.exe")));
         assert_eq!(full.model, asr.join(MODEL_DIR_NAME));
         assert!(full.validate().is_ok());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// 打包态的 `resource_dir()` 带 `\\?\` 前缀；原样传给 python 会被 vosk 拒掉。
+    #[test]
+    #[cfg(windows)]
+    fn verbatim_prefix_is_stripped_for_child_process() {
+        let root = std::env::temp_dir().join(format!("mc-asr-verbatim-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let asr = root.join("asr");
+        std::fs::create_dir_all(asr.join(MODEL_DIR_NAME)).expect("建模型目录");
+        std::fs::write(asr.join("stream_asr.py"), b"print('hi')").expect("写脚本");
+
+        let verbatim = std::path::PathBuf::from(format!(r"\\?\{}", root.display()));
+        let resolved = AsrPaths::resolve(Some(&verbatim));
+        let shown = resolved.model.to_string_lossy().to_string();
+        assert!(
+            !shown.starts_with(r"\\?\"),
+            "模型路径仍带 verbatim 前缀，vosk 会打不开: {shown}"
+        );
+        assert_eq!(resolved.model, asr.join(MODEL_DIR_NAME));
 
         let _ = std::fs::remove_dir_all(&root);
     }
