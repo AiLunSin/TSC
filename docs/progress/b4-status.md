@@ -2705,3 +2705,36 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 - **打包结果**：精简版 `Meeting Copilot_0.1.0_x64-setup.exe` 4.91 MiB；完整版配置（含 42 MB 解释器 + 占位模型）20.82 MiB。按模型压缩后约 42 MB 推算，完整版实际下载约 65 MB，README 与发版正文已按此修正（原写 100 MB）。
 - **资源落位**：`target/release/asr` 40 MB，说明 `asr/python` 与 `asr/*` 确实进了包；占位模型已在自检后删除，避免后续误打。
 - **未完成**：NSIS 静默安装（`/S /D=`）在本机被拦下，没能验证安装后的目录结构；安装包签名仍未做。
+
+
+### §63.2 双安装包在真实 runner 上跑通（2026-11-26）
+
+§63.1 遗留的"工作流没在真实 runner 跑过""内嵌解释器没在 CI 拼装过"两项，本轮补齐，并顺带修掉一个设计缺陷。
+
+**设计缺陷：完整版不该依赖 secret。** 原 `plan` 作业检测 `ASR_MODEL_URL` 是否存在，没配就只构建精简版。这让"忘了配 secret"表现为"少发一个包"，而模型本来就是 vosk 官方公开直链（`vosk-model-small-cn-0.22.zip`，41.9 MB，版本固定）。改为：
+
+- 工作流 env 增加 `VOSK_MODEL_URL` 作为默认源；secret 若存在则覆盖（留给镜像/内网源）。
+- `plan` 恒定输出 lite + full 两个变体，并通过 `outputs.model_url` 把地址传给构建作业。
+- 地址用 `env:` 传进 PowerShell，不拼进脚本字符串。
+- `publish` 加 `if: ${{ !cancelled() }}`：full 失败不连累已经打好的 lite；正文按实际产物生成，缺包一眼能看出。
+
+**实测结果（两次运行）：**
+
+| 运行 | 内容 | 耗时 | 产物 |
+|---|---|---|---|
+| release #3 `45777984473` | tag v0.1.1，v2 动作 | 7m53s | lite 4.88 MB、full 60.5 MB |
+| release #4 `45779204884` | 同 tag 移到 `c3d0739`，v3 动作 | 5m8s | lite 4.88 MB、full 60.5 MB |
+| ci #124 `45779190162` | 主分支，全部动作升级后 | 3m24s | 六个作业全绿 |
+
+- 完整版 60.5 MB 是真实产出，不是推算：含 42 MB 内嵌解释器 + 约 42 MB 模型（NSIS 压缩后）。§63.1 写的"约 65 MB"是推算值，README/DOWNLOAD 已改为实测。
+- 内嵌解释器在 windows-2022 上按 `tauri.asr-full.conf.json` 落进 `resources/asr/python`，`python.exe -c "import vosk"` 自检通过；模型解压目录名 `vosk-model-small-cn-0.22` 与 `AsrPaths` 预期一致。
+- `download-artifact@v8` 与 `upload-artifact@v7` 混用正常（同属 `@actions/artifact` 6.3.1）。
+
+**动作升级（消除 Node 20 弃用警告）：** checkout v4→v7、setup-node v4→v7、setup-python v5→v7、upload-artifact v4→v7、download-artifact v4→v8、softprops/action-gh-release v2→v3。升级后两处运行均无弃用告警。
+
+**仍未完成：**
+
+- Release 是草稿，匿名访问看不到，需要人工点发布；v0.1.0 那份只有精简版的草稿应删掉。
+- 仓库 description 与 topics 未改（需网页或 token 操作），现描述仍是"离线契约与 CI 已闭环，真实采集与真机验收待交付"。
+- 仓库名 `TSC` 是否改成可搜的名字未决。
+- 安装包无代码签名；NSIS 静默安装（`/S /D=`）在本机被安全策略拦下，未验证安装后目录结构。
