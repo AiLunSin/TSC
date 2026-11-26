@@ -107,6 +107,7 @@
 |---|---|---|---|
 | GitHub Actions 全红 | **已恢复**：run #56 全部 8 个 job `success` | 此前账户预算设为 $0，Actions 使用被阻止；公开后公共仓库免费额度生效 | 已关闭 |
 | 仓库可见性 | **已公开**（2026-11-23） | 用户要求公开 | 已完成；About 描述与 topics 已同步 |
+| 仓库简介 / topics | **已更新（2026-11-26）**：description 换成产品文案，topics 13 个（rust / tauri / local-first / privacy-first / speech-to-text 等） | 原描述停留在开发期口径「离线契约与 CI 已闭环，真实采集与真机验收待交付」 | 已完成；API 复核见 `b4-status.md §64.2` |
 | LICENSE | 已补 `LICENSE-MIT` 与 `LICENSE-APACHE` | README 声称 MIT OR Apache-2.0 | 已完成（GitHub 识别为 Apache-2.0） |
 | 本机 sqlcipher 编译 | **已修复（2026-11-25）**：`cargo check --features sqlcipher` 与 `cargo test --features sqlcipher` 均通过（首次全量编译约 6.5 分钟） | **根因**：Git 自带 cygwin perl 是精简版，缺 `Locale::Maketext::Simple`，OpenSSL `Configure` 退出码 2（`--no-asm` 下 nasm 非当前阻塞） | 已改用便携 Strawberry Perl 5.32（`%USERPROFILE%\.tools\strawberry-perl`）并在项目 `.cargo/config.toml` 固定 `PERL`；已验 unset 后仍生效；无需 Linux/WSL |
 | 本机绝对路径 | **已完成历史改写** | 历史提交曾含本机绝对路径 | 已完成：全历史检索旧路径 0 命中；备份分支与 bundle 已删、reflog 已清、gc 已做 |

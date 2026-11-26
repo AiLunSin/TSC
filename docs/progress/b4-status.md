@@ -2880,3 +2880,16 @@ capture.chunks=400 audio=4.0s stable=1
 **顺带修正**：README 原写「同步三处」，漏了 crate 内部依赖与 lock，已改为「三处 + `cargo metadata` 更新 lock + 注意 `crates/*` 内部依赖」。
 
 **未做**：没有重新构建本地 exe 验证文件属性里的版本显示。`tauri.conf.json` 与已发布 tag 现已一致；下次发版把上表位置一起改到下个号，再打新 tag。
+
+### §64.2 仓库简介与 topics 已更新（2026-11-26 18:40）
+
+§63.2「仍未完成」里记着「仓库 description 与 topics 未改，现描述仍是『离线契约与 CI 已闭环，真实采集与真机验收待交付』」。经 API 复核，两项都已换掉，该条关闭。
+
+| 项 | 现值 |
+|---|---|
+| description | 开会听不懂的术语，选中就能查；不打开就不打扰。Windows 桌面端，系统音频本地转写，按需出卡，数据不外发。Rust + Tauri 2，MIT/Apache-2.0 开源。 |
+| topics（13 个） | chinese、glossary、local-first、meeting、meeting-notes、offline、privacy-first、productivity、rust、speech-to-text、tauri、transcription、windows-desktop |
+
+来源：`GET /repos/AiLunSin/meeting-glossary`（2026-11-26 18:40 实测，`topics` 字段非空）。§63.2 正文按「历史章节不改写」保留原样，状态以本节为准；`open-items.md` §5 已同步登记为已完成。
+
+**仍 open 的相关项**：§63.2 同段还列了「仓库名 `TSC` 是否改成可搜的名字未决」——该条已由 `6810e90`（改名 `meeting-glossary`）实际解决，一并关闭。
