@@ -26,20 +26,36 @@ const MODEL_DIR_NAME: &str = "vosk-model-small-cn-0.22";
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// ASR 资源定位：发布包优先使用 `resource_dir/asr`，开发环境回退到仓库目录。
+///
+/// `python` 是完整版安装包自带的解释器（`asr/python/python.exe`）。精简版没有这一项，
+/// 走 PATH 里的 Python；完整版用户不装 Python 也能转写。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AsrPaths {
     script: PathBuf,
     model: PathBuf,
+    python: Option<PathBuf>,
+}
+
+/// 安装包自带的解释器只认固定位置，编译期不存在就是没有，不做 PATH 搜索。
+fn bundled_python(asr_dir: &Path) -> Option<PathBuf> {
+    let exe = asr_dir.join("python").join("python.exe");
+    exe.is_file().then_some(exe)
 }
 
 impl AsrPaths {
     pub fn resolve(resource_dir: Option<&Path>) -> Self {
         let dev_root = Path::new(DEV_ROOT);
         if let Some(resource_dir) = resource_dir {
-            let script = resource_dir.join("asr/stream_asr.py");
-            let model = resource_dir.join("asr").join(MODEL_DIR_NAME);
+            let asr_dir = resource_dir.join("asr");
+            let script = asr_dir.join("stream_asr.py");
+            let model = asr_dir.join(MODEL_DIR_NAME);
             if script.is_file() && model.is_dir() {
-                return Self { script, model };
+                let python = bundled_python(&asr_dir);
+                return Self {
+                    script,
+                    model,
+                    python,
+                };
             }
         }
         // 打包前把模型复制到 `app/src-tauri/asr/<model>`（不入库），
@@ -48,6 +64,7 @@ impl AsrPaths {
         let repository_model = dev_root.join("asr").join(MODEL_DIR_NAME);
         if repository_model.is_dir() {
             return Self {
+                python: bundled_python(&dev_root.join("asr")),
                 script: repository_script,
                 model: repository_model,
             };
@@ -55,16 +72,19 @@ impl AsrPaths {
         Self {
             script: repository_script,
             model: dev_root.join("../../.tmp/asr").join(MODEL_DIR_NAME),
+            python: None,
         }
     }
 
     fn validate(&self) -> Result<(), IpcErrorDto> {
         if !self.script.is_file() || !self.model.is_dir() {
-            return Err(IpcErrorDto::new(
-                "asr_resource_missing",
-                "实时转写资源缺失，请重新安装应用。",
-                false,
-            ));
+            // 精简版本来就不带模型，别把"没放模型"说成"安装坏了"。
+            let message = if self.python.is_some() {
+                "实时转写资源缺失，请重新安装完整版。"
+            } else {
+                "没找到识别模型。精简版需要自己下载模型（约 52 MB），放法见 DOWNLOAD.md 第 2 节。"
+            };
+            return Err(IpcErrorDto::new("asr_resource_missing", message, false));
         }
         Ok(())
     }
@@ -511,7 +531,7 @@ impl Drop for AsrPipeline {
     }
 }
 
-fn quiet_command(program: &str, prefix_args: &[&str]) -> Command {
+fn quiet_command(program: &str, prefix_args: &[String]) -> Command {
     let mut command = Command::new(program);
     command.args(prefix_args);
     // 子进程 stdout 走管道时，Windows 上 Python 可能退回 cp936；固定 UTF-8 以免中文乱码或解码失败。
@@ -552,7 +572,7 @@ pub fn parse_line(line: &str) -> Option<Recognized> {
 ///
 /// PATH 里第一个 `python` 未必是装了 vosk 的那个（例如 IDE/工具自带的嵌入式 Python），
 /// 直接用它会让识别进程启动后立刻 ImportError 退出，表现为"开始转写但一直没有文本"。
-fn python_has_vosk(program: &str, prefix_args: &[&str]) -> bool {
+fn python_has_vosk(program: &str, prefix_args: &[String]) -> bool {
     quiet_command(program, prefix_args)
         .arg("-c")
         .arg("import vosk")
@@ -563,15 +583,34 @@ fn python_has_vosk(program: &str, prefix_args: &[&str]) -> bool {
         .is_ok_and(|status| status.success())
 }
 
+/// 解释器候选顺序：安装包自带的排第一，其次才是 PATH 里的三种常见入口。
+///
+/// 完整版自带解释器装满依赖，用户不需要装 Python；精简版没有自带解释器，
+/// 行为与以前一致（挨个试，只选能 `import vosk` 的那个）。
+fn interpreter_candidates(bundled: Option<&Path>) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+    if let Some(path) = bundled {
+        out.push((path.display().to_string(), Vec::new()));
+    }
+    let fallbacks: [(&str, &[&str]); 3] = [("python", &[]), ("py", &["-3"]), ("python3", &[])];
+    for (program, prefix) in fallbacks {
+        out.push((
+            program.to_owned(),
+            prefix.iter().map(|arg| (*arg).to_owned()).collect(),
+        ));
+    }
+    out
+}
+
 fn spawn_recognizer(
     paths: &AsrPaths,
 ) -> Result<(Child, std::process::ChildStdin, std::process::ChildStdout), IpcErrorDto> {
     paths.validate()?;
-    let candidates: [(&str, &[&str]); 3] = [("python", &[]), ("py", &["-3"]), ("python3", &[])];
-    let mut checked: Vec<&str> = Vec::new();
-    for (program, prefix_args) in candidates {
+    let candidates = interpreter_candidates(paths.python.as_deref());
+    let mut checked: Vec<String> = Vec::new();
+    for (program, prefix_args) in &candidates {
         if !python_has_vosk(program, prefix_args) {
-            checked.push(program);
+            checked.push(program.clone());
             crate::diag::log(&format!("python.no_vosk {program}"));
             continue;
         }
@@ -589,7 +628,7 @@ fn spawn_recognizer(
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                checked.push(program);
+                checked.push(program.clone());
                 continue;
             }
             Err(error) => {
@@ -638,9 +677,15 @@ fn spawn_recognizer(
         return Ok((child, stdin, stdout));
     }
     let detail = checked.join(" / ");
+    // 自带解释器也在列表里：它坏了说明安装包不完整，让用户装 Python 是错的方向。
+    let hint = if paths.python.is_some() {
+        "安装包自带的识别运行时不可用，请重新安装完整版；或装 Python 3 后 pip install vosk 再试。"
+    } else {
+        "请先装 Python 3 并执行 pip install vosk。"
+    };
     Err(IpcErrorDto::new(
         "asr_python_missing",
-        &format!("未找到已安装 vosk 的 Python 3（已检查 {detail}），请先 pip install vosk。"),
+        &format!("未找到能 import vosk 的 Python 3（已检查 {detail}）。{hint}"),
         false,
     ))
 }
@@ -761,6 +806,23 @@ mod tests {
     #[test]
     fn missing_program_is_not_reported_as_vosk_ready() {
         assert!(!python_has_vosk("definitely-not-a-python-under-test", &[]));
+    }
+
+    #[test]
+    fn bundled_interpreter_is_tried_first() {
+        let candidates = interpreter_candidates(Some(Path::new("C:/app/asr/python/python.exe")));
+        assert_eq!(candidates.len(), 4);
+        assert_eq!(candidates[0].0, "C:/app/asr/python/python.exe");
+        assert!(candidates[0].1.is_empty());
+        assert_eq!(candidates[1], ("python".to_owned(), Vec::new()));
+        assert_eq!(candidates[2], ("py".to_owned(), vec!["-3".to_owned()]));
+    }
+
+    #[test]
+    fn lite_build_without_bundled_interpreter_uses_path() {
+        let candidates = interpreter_candidates(None);
+        assert_eq!(candidates.len(), 3);
+        assert_eq!(candidates[0], ("python".to_owned(), Vec::new()));
     }
 
     #[test]

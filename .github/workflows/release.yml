@@ -1,7 +1,9 @@
 name: release
 
-# 打 tag 出安装包，别人从 Releases 直接下载 exe/msi，不用装 Rust 和 Node。
-# 没配 ASR_MODEL_URL 也能出包，只是包里不带识别模型，实时转写要用户自己放模型。
+# 打 tag 出两个安装包：
+#   lite —— 只有程序本体，最省流量；实时转写要用户自备 Python + vosk + 模型
+#   full —— 程序 + 识别模型 + 内嵌 Python 与 vosk，装完就能转写
+# 模型体积大且不入库，full 需要仓库 secret ASR_MODEL_URL（模型 zip 直链）。
 
 on:
   push:
@@ -18,10 +20,36 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  PYTHON_EMBED_URL: "https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip"
 
 jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      # 作业级 if 在矩阵展开之前求值，拿不到 matrix 上下文，
+      # 所以连"构建哪几个变体"也在这里定好，矩阵直接吃这个 JSON。
+      variants: ${{ steps.check.outputs.variants }}
+    steps:
+      - id: check
+        env:
+          MODEL_URL: ${{ secrets.ASR_MODEL_URL }}
+        run: |
+          if [ -n "${MODEL_URL}" ]; then
+            echo "已配置 ASR_MODEL_URL，构建 lite + full"
+            echo 'variants=[{"variant":"lite","config":""},{"variant":"full","config":"src-tauri/tauri.asr-full.conf.json"}]' >> "$GITHUB_OUTPUT"
+          else
+            echo "未配置 ASR_MODEL_URL，只构建 lite"
+            echo 'variants=[{"variant":"lite","config":""}]' >> "$GITHUB_OUTPUT"
+          fi
+
   windows-installer:
-    name: windows installer
+    name: windows (${{ matrix.variant }})
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.variants) }}
     runs-on: windows-2022
     timeout-minutes: 45
     steps:
@@ -40,7 +68,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: release-windows
+          key: release-${{ matrix.variant }}
           workspaces: ". -> target"
 
       - name: install frontend deps
@@ -50,55 +78,110 @@ jobs:
       - name: install tauri cli
         run: npm install -g @tauri-apps/cli@^2 --no-audit --no-fund
 
-      # 模型体积约 52 MB，不入库。把 zip 直链放在仓库 secret ASR_MODEL_URL 里，
-      # 解压后目录名必须是 vosk-model-small-cn-0.22。
-      - name: fetch asr model
-        if: ${{ secrets.ASR_MODEL_URL != '' }}
+      - uses: actions/setup-python@v5
+        if: matrix.variant == 'full'
+        with:
+          python-version: "3.11"
+
+      # 完整版的载荷：识别模型 + 内嵌解释器。两个目录都不入库，构建时才落盘。
+      - name: prepare full payload
+        if: matrix.variant == 'full'
         shell: pwsh
         run: |
+          $asr = "app/src-tauri/asr"
+          New-Item -ItemType Directory -Force -Path $asr | Out-Null
+
           Invoke-WebRequest -Uri "${{ secrets.ASR_MODEL_URL }}" -OutFile model.zip
-          Expand-Archive model.zip -DestinationPath app/src-tauri/asr -Force
-          if (-not (Test-Path app/src-tauri/asr/vosk-model-small-cn-0.22)) {
+          Expand-Archive model.zip -DestinationPath $asr -Force
+          if (-not (Test-Path "$asr/vosk-model-small-cn-0.22")) {
             throw "模型解压后目录名不是 vosk-model-small-cn-0.22"
           }
 
-      - name: build bundles
+          Invoke-WebRequest -Uri "$env:PYTHON_EMBED_URL" -OutFile py.zip
+          Expand-Archive py.zip -DestinationPath "$asr/python" -Force
+
+          # 官方 embed 包没有 pip，也不会自动找 site-packages：
+          # 用宿主 3.11 把依赖装进 Lib\site-packages，再把这个目录写进 _pth。
+          python -m pip install --disable-pip-version-check --target "$asr/python/Lib/site-packages" vosk
+          $pth = Get-ChildItem "$asr/python/python*._pth" | Select-Object -First 1
+          Add-Content -Path $pth.FullName -Value "Lib\site-packages" -Encoding ascii
+
+          & "$asr/python/python.exe" -c "import vosk, sys; print('embedded python ok', sys.version)"
+          if ($LASTEXITCODE -ne 0) { throw "内嵌解释器 import vosk 失败" }
+
+      - name: build installer
         working-directory: app
         shell: pwsh
         run: |
           $version = "${{ inputs.tag || github.ref_name }}" -replace '^v', ''
-          $arguments = @(
-            "build",
-            "--features", "llm-https",
-            "--bundles", "nsis,msi",
-            "--config", "{`"version`":`"$version`"}"
-          )
-          if (Test-Path "src-tauri/asr/vosk-model-small-cn-0.22") {
-            $arguments += @("--config", "src-tauri/tauri.asr.conf.json")
+          $arguments = @("build", "--features", "llm-https", "--bundles", "nsis", "--ci")
+          $arguments += @("--config", "{`"version`":`"$version`"}")
+          if ("${{ matrix.config }}" -ne "") {
+            $arguments += @("--config", "${{ matrix.config }}")
           }
           Write-Host "tauri $($arguments -join ' ')"
           tauri @arguments
 
-      - name: checksums
+      - name: rename installer
         shell: pwsh
         run: |
-          $out = "target/release/bundle/SHA256SUMS.txt"
-          Get-ChildItem target/release/bundle -Recurse -Include *.exe,*.msi |
-            ForEach-Object {
-              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-              "$hash  $($_.Name)"
-            } | Set-Content -Encoding ascii $out
-          Get-Content $out
+          $version = "${{ inputs.tag || github.ref_name }}" -replace '^v', ''
+          New-Item -ItemType Directory -Force -Path dist-installer | Out-Null
+          $target = "dist-installer/MeetingCopilot-$version-${{ matrix.variant }}-x64-setup.exe"
+          Get-ChildItem target/release/bundle/nsis/*.exe | Select-Object -First 1 |
+            Copy-Item -Destination $target
+          Get-Item $target | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - name: publish draft release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.variant }}
+          path: dist-installer/*.exe
+          if-no-files-found: error
+
+  publish:
+    name: publish draft release
+    needs: windows-installer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installer-*
+          path: release-files
+          merge-multiple: true
+
+      - name: checksums
+        working-directory: release-files
+        run: |
+          ls -lh
+          sha256sum *.exe > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: ${{ inputs.tag || github.ref_name }}
           draft: true
-          generate_release_notes: true
           files: |
-            target/release/bundle/nsis/*.exe
-            target/release/bundle/msi/*.msi
-            target/release/bundle/SHA256SUMS.txt
-          fail_on_unmatched_files: false
+            release-files/*.exe
+            release-files/SHA256SUMS.txt
+          body: |
+            ## 下载哪个
+
+            | 文件 | 体积 | 装完能不能直接转写 | 还要自己装什么 |
+            |---|---|---|---|
+            | `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 大（约 80 MB，其中 52 MB 是模型） | 能 | 什么都不用装 |
+            | `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 小（约 12 MB） | 不能 | Python 3、`pip install vosk`、识别模型 |
+
+            **只想开会时查词、不打算一直开着转写**：装精简版。手动粘贴出卡、选中查义、联网查、AI 提醒都能用。
+
+            **想装完就能听会**：装完整版。vosk 模型（约 52 MB）和一份内嵌 Python 都在包里，装完不需要再装 Python，也不要联网下模型。
+
+            ## 安装说明
+
+            - 安装包没有代码签名，首次运行会弹 SmartScreen 提示，点「更多信息 → 仍要运行」。
+            - 装完在「设置」里填模型 Key（可选）和检索 Key（可选），不填也能转写和出卡。
+            - 详细步骤见仓库的 DOWNLOAD.md；校验文件见 `SHA256SUMS.txt`。
+
+            ## 系统要求
+
+            Windows 10/11 64 位，WebView2（系统一般自带）。只读取系统正在播放的声音，不需要虚拟声卡。

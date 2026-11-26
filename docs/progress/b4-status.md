@@ -2663,3 +2663,35 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 
 边界：脚本默认带 `llm-https`（与真机使用的构建一致）；`--release` 参数可出 release 版。未改 `tauri.conf.json` 与 CSP。
 
+
+## §63 发布形态改为双安装包：精简版与完整版（2026-11-26）
+
+转写依赖 Python + vosk 是"下载即用"的最大障碍：只发一个包，要么强制所有用户装 Python，要么让转写默认不可用。处理方式是把选择权交给用户，发两个包：
+
+| 包 | 载荷 | 转写可用性 |
+|---|---|---|
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 程序本体（含 `stream_asr.py`） | 需自备 Python 3 + vosk + 模型 |
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 程序 + vosk 模型 + 内嵌 Python 与 vosk | 装完即可转写 |
+
+代码改动（`app/src-tauri/src/ipc/asr.rs`）：
+
+- `AsrPaths` 增加 `python: Option<PathBuf>`，只在 `resource_dir/asr/python/python.exe` 存在时填充；开发目录回退同样先看 `app/src-tauri/asr/python`。
+- 新增 `interpreter_candidates(bundled)`：自带解释器排第一，其后仍是 `python` / `py -3` / `python3`；精简版行为与改动前完全一致。
+- `python_has_vosk` / `quiet_command` 的前缀参数由 `&[&str]` 改为 `&[String]`，以便携带自带解释器路径。
+- `validate()` 按是否有自带解释器分支文案：完整版报"重新安装完整版"，精简版提示模型需自行下载（避免把"没放模型"说成"安装坏了"）。
+- 新增两个单测：`bundled_interpreter_is_tried_first`、`lite_build_without_bundled_interpreter_uses_path`。
+
+打包配置：新增 `app/src-tauri/tauri.asr-full.conf.json`，在 `tauri.asr.conf.json`（仅模型）基础上追加 `asr/python` 资源；原配置保持不动，避免源码路线按旧文档打包时因缺 python 目录失败。
+
+发布流程（`.github/workflows/release.yml`）：
+
+- `plan` 作业检测 secret `ASR_MODEL_URL`，未配置则跳过完整版，只出精简版，避免发出转写不可用的包。
+- `windows-installer` 用矩阵分别构建 lite / full，产物重命名为 `MeetingCopilot-vX.Y.Z-<variant>-x64-setup.exe` 并上传 artifact。
+- `publish` 汇总两个安装包、生成 `SHA256SUMS.txt`，建草稿 Release，Release 正文写清两个包的区别。
+- 完整版载荷在构建时拼装：模型 zip 来自 secret，内嵌解释器取 python.org 3.11.9 embed 包，用宿主 3.11 `pip install --target` 装入 `Lib/site-packages` 并写入 `_pth`。
+
+验证与边界：
+
+- `cargo check -p meeting-copilot-desktop` 通过；`cargo test -p meeting-copilot-desktop asr` 18 项通过（含两个新用例）。
+- release 工作流尚未在真实 runner 上执行；内嵌解释器载荷未在本机拼装验证（模型/解释器下载在本机代理下超时），首次打 tag 需盯 `prepare full payload` 与 `build installer` 两步。
+- 安装包仍未做代码签名，首次运行会被 SmartScreen 拦截。

@@ -57,13 +57,18 @@
 
 ## 安装
 
-Windows 10/11，WebView2 一般系统自带。
+Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/TSC/releases)，每次发版出两个，按要不要实时转写挑：
 
-**下载安装包**：打 tag 时由 GitHub Actions 构建，产物在 [Releases](https://github.com/AiLunSin/TSC/releases)。下载 `Meeting Copilot_<版本>_x64-setup.exe` 双击即可，不用装 Rust 和 Node。
+| 安装包 | 体积 | 装完能直接转写 | 还要自己装 |
+|---|---|---|---|
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 80 MB（含 52 MB 模型） | 能 | 无 |
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 12 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
 
-**实时转写还需要 Python**：识别脚本是 Python 写的，程序会在 PATH 里找能 `import vosk` 的解释器，装完 Python 3.8+ 再 `pip install vosk`。安装包带的是识别模型（约 52 MB），不带 Python 运行时。
+两个版本界面和功能完全一样，差别只在转写的依赖：完整版把 vosk 模型（约 52 MB）和一份内嵌 Python 打进包，装完就能听；精简版只带程序本体，模型和解释器自己准备。只想开会时选词查意思、或者用粘贴生成卡片，精简版就够。
 
-还没有发版时，从源码构建：
+安装包没有代码签名，首次运行 Windows 会拦一下，点「更多信息 → 仍要运行」。
+
+从源码构建（改代码时用）：
 
 ```bash
 cargo build --workspace
@@ -78,7 +83,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 
 `llm-https` 不是默认特性。不带它也能转写和出卡，但「查意思」只会给本机上下文，联网查和 AI 提醒会直接报「未启用传输」，不静默失败。
 
-识别模型不入库，发布前手动放进 `app/src-tauri/asr/`；完整的准备工作（五样基础工具、模型下载地址、首次配置）见 [DOWNLOAD.md](DOWNLOAD.md)。
+识别模型不入库，放在 `app/src-tauri/asr/`；完整的准备工作（五样基础工具、模型下载地址、首次配置）见 [DOWNLOAD.md](DOWNLOAD.md)。
 
 ## 隐私
 
@@ -119,7 +124,7 @@ bash scripts/scan-secrets.sh
 
 CI 分六组：web、rust（Windows 加两个 Darwin 交叉编译）、用例名差集、特性覆盖、合规（许可证 / SBOM / 密钥扫描 / 分层）、sqlcipher。
 
-发版：`git tag v0.1.0 && git push origin v0.1.0`。`release` 工作流在 Windows 机器上编译 exe 与 msi、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。仓库 secret 里配 `ASR_MODEL_URL`（模型 zip 直链）才会把识别模型打进包。
+发版：`git tag v0.1.0 && git push origin v0.1.0`。`release` 工作流在 Windows 机器上编译精简版与完整版两个安装包、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。完整版需要仓库 secret `ASR_MODEL_URL`（模型 zip 直链），没配就只出精简版。
 
 改动前请确认能力状态与 `docs/progress/` 里的记录一致。没做完的写没做完，别在文档里提前宣布。
 

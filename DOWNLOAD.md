@@ -2,12 +2,18 @@
 
 适用系统：**Windows 10 / 11 64 位**。
 
-先看 [Releases](https://github.com/AiLunSin/TSC/releases) 里有没有 `Meeting Copilot_<版本>_x64-setup.exe`：
+本仓库发版时会出两个安装包，功能完全一样，差别只在实时转写要不要额外装东西：
 
-- **有**：下载双击安装，装完直接跳到第 5 节做首次配置。下面的 1～4 节是从源码编译的路线，可以跳过。
-- **没有**（还没有正式发版）：按 1～4 节从源码生成一个可以双击运行的 `meeting-copilot-desktop.exe`。整套工具只需要装一次，以后每次使用直接双击 exe。
+| 安装包 | 体积 | 实时转写 | 还要额外准备 |
+|---|---|---|---|
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 80 MB（含 52 MB 模型） | 装完就能用 | 无 |
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 12 MB | 要自己配 | Python 3.8+、`pip install vosk`、识别模型 |
 
-不管走哪条路，**实时转写都要 Python 3.8+ 和 `pip install vosk`**：识别脚本是 Python 写的，程序会在 PATH 里找能 `import vosk` 的解释器。安装包只带识别模型，不带 Python 运行时。
+先去 [Releases](https://github.com/AiLunSin/TSC/releases) 看有没有包：
+
+- **装完整版**：双击安装 → 打开程序 → 直接跳到第 5 节。第 1～4 节都不用看。
+- **装精简版**：先做 1.5 节（Python 与 vosk）和第 2 节（模型，放进程序的 `asr` 文件夹），再跳到第 5 节。第 3、4 节是编译，不用看。
+- **Releases 是空的**（还没发版）：按第 1～4 节从源码生成 exe，这条路同样需要 1.5 节和第 2 节。
 
 > 这是开发预览版，不是成熟商业软件。请不要在参会人不知情的情况下录音或转写；遵守你所在公司制度和当地法律。
 
@@ -25,6 +31,8 @@
 | 不需要 | 虚拟声卡、额外麦克风、账号注册；安装开发工具时需要管理员权限，日常运行不需要 |
 
 程序抓的是**系统正在播放的声音**（WASAPI 环回），所以开会时只要电脑能听到对方声音，就能转写，不需要装 VB-Cable 之类的虚拟声卡。
+
+上表是**从源码编译**的最低要求。装完整版安装包的话，磁盘 200 MB、不需要 Python、也不需要管理员权限。
 
 ---
 
@@ -90,6 +98,8 @@ npm -v
 
 ### 1.5 Python 与 vosk（本地语音识别用）
 
+> 装**完整版**安装包的跳过本节：内嵌解释器和 vosk 已经在包里了。
+
 打开：
 
 https://www.python.org/downloads/windows/
@@ -143,31 +153,41 @@ Test-Path C:\TSC\Cargo.toml
 
 ## 2. 下载中文语音模型
 
-程序不自带语音模型，需要单独下载一次（约 52 MB）。
+完整版安装包自带模型，本节跳过。**精简版**和**源码路线**需要单独下一次（约 52 MB）。
 
-在 PowerShell 里逐行执行：
+### 2.1 先确认放到哪
 
-```powershell
-cd C:\TSC
-New-Item -ItemType Directory -Force .tmp\asr | Out-Null
-Invoke-WebRequest "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip" -OutFile ".tmp\asr\model.zip"
-Expand-Archive ".tmp\asr\model.zip" -DestinationPath ".tmp\asr" -Force
-Remove-Item ".tmp\asr\model.zip"
+| 你的情况 | 模型放这里 |
+|---|---|
+| 装的精简版 | 程序安装目录下的 `asr` 文件夹，和 `stream_asr.py` 同一层 |
+| 从源码跑 | `C:\TSC\.tmp\asr` |
+
+找不到安装目录：右键桌面上的「会议副驾」快捷方式 → **打开文件所在位置**，里面能看到 `asr` 文件夹。
+默认按当前用户安装，一般在这个位置（版本号会变）：
+
+```text
+%LOCALAPPDATA%\Programs\Meeting Copilot\asr
 ```
 
-检查目录：
+### 2.2 下载并解压
+
+在 PowerShell 里执行下面几行，第一行换成你的目录：
 
 ```powershell
-Test-Path C:\TSC\.tmp\asr\vosk-model-small-cn-0.22\am
-```
+$dst = "$env:LOCALAPPDATA\Programs\Meeting Copilot\asr"   # 源码路线改成 C:\TSC\.tmp\asr
+New-Item -ItemType Directory -Force $dst | Out-Null
+Invoke-WebRequest "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip" -OutFile "$dst\model.zip"
+Expand-Archive "$dst\model.zip" -DestinationPath $dst -Force
+Remove-Item "$dst\model.zip"
 
-返回 `True` 说明解压正确。
+Test-Path "$dst\vosk-model-small-cn-0.22\am"   # 返回 True 就对了
+```
 
 正确的层级是：
 
 ```text
-C:\TSC\.tmp\asr\vosk-model-small-cn-0.22\am
-C:\TSC\.tmp\asr\vosk-model-small-cn-0.22\conf
+<上面那个目录>\vosk-model-small-cn-0.22\am
+<上面那个目录>\vosk-model-small-cn-0.22\conf
 ...
 ```
 
@@ -495,7 +515,8 @@ meeting-copilot/search-api-key-tavily
 ## 9. 能力边界
 
 - 目前只有 Windows 版本，没有 macOS 版。
-- 有安装包但没做代码签名，首次运行会被 SmartScreen 拦一下（点「更多信息 → 仍要运行」）；实时转写仍需自己装 Python 3.8+ 与 `pip install vosk`。
+- 有安装包但没做代码签名，首次运行会被 SmartScreen 拦一下（点「更多信息 → 仍要运行」）。
+- 完整版自带识别模型和内嵌 Python；精简版要自己装 Python 3.8+、`pip install vosk` 并放模型，否则点「开始实时转写」会提示缺资源。
 - 本地转写用 vosk 小模型，安静环境和清晰音频下效果更好；嘈杂环境会受影响。
 - 腾讯会议、飞书窗口当前读不到可用字幕文本，"字幕文本通道"通常显示降级；实时转写请使用系统音频通道。
 - AI 释义、AI 提醒依赖 DeepSeek 接口；联网查依赖博查或 Tavily；真实效果会受 Key、余额、网络和服务质量影响。
