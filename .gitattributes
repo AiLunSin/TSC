@@ -7,3 +7,5 @@
 *.toml text eol=lf
 *.ico binary
 *.db binary
+*.png binary
+*.jpg binary
