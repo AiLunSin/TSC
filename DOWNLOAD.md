@@ -2,7 +2,12 @@
 
 适用系统：**Windows 10 / 11 64 位**。
 
-先说明一件事：这个仓库目前**没有发布现成的安装包**（GitHub Releases 为空）。所以下面不是"点一下 exe 就装好"，而是带你从源码生成一个可以双击运行的 `meeting-copilot-desktop.exe`。整套工具只需要装一次，以后每次使用直接双击 exe。
+先看 [Releases](https://github.com/AiLunSin/TSC/releases) 里有没有 `Meeting Copilot_<版本>_x64-setup.exe`：
+
+- **有**：下载双击安装，装完直接跳到第 5 节做首次配置。下面的 1～4 节是从源码编译的路线，可以跳过。
+- **没有**（还没有正式发版）：按 1～4 节从源码生成一个可以双击运行的 `meeting-copilot-desktop.exe`。整套工具只需要装一次，以后每次使用直接双击 exe。
+
+不管走哪条路，**实时转写都要 Python 3.8+ 和 `pip install vosk`**：识别脚本是 Python 写的，程序会在 PATH 里找能 `import vosk` 的解释器。安装包只带识别模型，不带 Python 运行时。
 
 > 这是开发预览版，不是成熟商业软件。请不要在参会人不知情的情况下录音或转写；遵守你所在公司制度和当地法律。
 
