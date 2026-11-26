@@ -2738,3 +2738,35 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 - 仓库 description 与 topics 未改（需网页或 token 操作），现描述仍是"离线契约与 CI 已闭环，真实采集与真机验收待交付"。
 - 仓库名 `TSC` 是否改成可搜的名字未决。
 - 安装包无代码签名；NSIS 静默安装（`/S /D=`）在本机被安全策略拦下，未验证安装后目录结构。
+
+
+### §63.3 NSIS 安装后的落位与签名现状（2026-11-26）
+
+§63.1 遗留的"`/S /D=` 静默安装被拦、安装后目录结构没验证"本轮解决。
+
+**上次为什么失败。** 不是安全策略拦了安装包，而是调用方式：NSIS 的 `/D=` 必须是**最后一个参数、不加引号**，上次传的是带引号的 `C:/...` 正斜杠路径，安装器直接忽略、退 0、什么都不做。改成 Windows 路径、去掉引号、放在末尾后正常静默安装。
+
+**真机实测（本机，两个变体各装一次）：**
+
+| 变体 | 安装后结构 | 体积 |
+|---|---|---|
+| lite | `meeting-copilot-desktop.exe`、`uninstall.exe`、`asr/stream_asr.py` | 8.1 MB |
+| full | 同上，加 `asr/python/`（35 项）、`asr/vosk-model-small-cn-0.22/am` | 79.7 MB（模型用两份占位文件，真实模型再加约 45 MB） |
+
+- `asr` 平铺在安装根目录，与 `AsrPaths::resolve(resource_dir)` 拼的 `resource_dir/asr/...` 一致。
+- 安装后的 `asr/python/python.exe` 报 `prefix=<安装目录>\asr\python`，`vosk` 从 `Lib\site-packages` 正常导入（Python 3.11.9）。这是"装完能转写"的直接证据，不再靠推断。
+- 卸载：`uninstall.exe /S` 退出 0，两个安装目录剩余文件 0，包含 68 MB 的解释器目录。
+
+**固化进流水线。** `release.yml` 的 `windows-installer` 增加 `smoke install` 步骤：静默装到 `RUNNER_TEMP\smoke`，按变体断言 `meeting-copilot-desktop.exe`、`asr/stream_asr.py`、（full）`asr/python/python.exe` 与模型 `am` 目录存在，full 再跑一次 `import vosk`，最后静默卸载。落位错位会直接失败，不会再发出去一个"装完找不到资源"的包。
+
+**签名。** 没有证书，也没打算自签：自签只会把提示换成"未知发行者"，SmartScreen 照样拦，还多一个不受信任的证书。做法是把注入点留好：
+
+- `detect signing` 步骤看 secret `WINDOWS_CERT_PFX_BASE64` 是否存在，输出 `enabled`；
+- 有则 `Import-PfxCertificate` 导入 `Cert:\CurrentUser\My`，把指纹写进 `GITHUB_ENV`；
+- 构建时若指纹存在，追加 `--config` 传入 `certificateThumbprint` / `sha256` / DigiCert 时间戳；
+- 构建后 `Get-AuthenticodeSignature` 校验，非 `Valid` 直接失败；
+- 结尾从证书存储移除证书。
+
+未配 secret 时行为与改动前一致（出未签名包）。这条路径没有证书可测，只在本地验证过等价的 PowerShell 片段。
+
+**仍缺：** 证书本身（OV/EV 或 Azure Trusted Signing），以及签名后的真机 SmartScreen 表现；新证书信誉需要靠下载量积累，头几个版本仍可能被拦。

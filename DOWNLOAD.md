@@ -9,6 +9,8 @@
 | `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 60 MB | 装完就能用 | 无 |
 | `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 4.9 MB | 要自己配 | Python 3.8+、`pip install vosk`、识别模型 |
 
+完整版装完占约 120 MB（程序 + 内嵌解释器 + 模型），精简版约 12 MB。
+
 先去 [Releases](https://github.com/AiLunSin/meeting-glossary/releases) 看有没有包：
 
 - **装完整版**：双击安装 → 打开程序 → 直接跳到第 5 节。第 1～4 节都不用看。
@@ -512,10 +514,33 @@ meeting-copilot/search-api-key-tavily
 
 ---
 
-## 9. 能力边界
+## 9. 关于签名：第一次运行的那道拦
+
+安装包没有代码签名，Windows 首次运行会弹「Windows 已保护你的电脑」，点 **更多信息 → 仍要运行** 就能装。这不是"检测到病毒"，只是系统不认识这个发行者。
+
+想彻底消掉提示，只有买证书这一条路：
+
+- **OV / EV 代码签名证书**：CA 签发，装进证书存储后签名。
+- **Azure Trusted Signing**：微软自家的托管签名，按月计费，不用买硬件令牌。
+
+**自签证书没用**：签名会变成「未知发行者」，SmartScreen 一样拦，还多了一个"证书不受信任"。所以这个仓库不做自签。
+
+仓库已经留好了注入点：配置 secret `WINDOWS_CERT_PFX_BASE64`（pfx 的 base64）和 `WINDOWS_CERT_PASSWORD`，发版时会自动导入证书、签名，并用 `Get-AuthenticodeSignature` 校验，校验不过直接失败；不配就出未签名的包，其它流程不变。
+
+有证书也不等于立刻干净：SmartScreen 的信誉靠下载量攒，新证书头几个版本照样可能被拦。
+
+校验下载是否完整：每个 Release 都带 `SHA256SUMS.txt`，PowerShell 里比对：
+
+```powershell
+Get-FileHash .\MeetingCopilot-vX.Y.Z-full-x64-setup.exe -Algorithm SHA256
+```
+
+---
+
+## 10. 能力边界
 
 - 目前只有 Windows 版本，没有 macOS 版。
-- 有安装包但没做代码签名，首次运行会被 SmartScreen 拦一下（点「更多信息 → 仍要运行」）。
+- 有安装包但没做代码签名，首次运行会被 SmartScreen 拦一下（点「更多信息 → 仍要运行」，原因见第 9 节）。
 - 完整版自带识别模型和内嵌 Python；精简版要自己装 Python 3.8+、`pip install vosk` 并放模型，否则点「开始实时转写」会提示缺资源。
 - 本地转写用 vosk 小模型，安静环境和清晰音频下效果更好；嘈杂环境会受影响。
 - 腾讯会议、飞书窗口当前读不到可用字幕文本，"字幕文本通道"通常显示降级；实时转写请使用系统音频通道。

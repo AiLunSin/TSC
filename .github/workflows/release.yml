@@ -59,6 +59,11 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.variants) }}
     runs-on: windows-2022
     timeout-minutes: 45
+    # 证书以 secret 形式传入；没配就跳过签名，照常出未签名的包。
+    # 用 job 级 env 是因为 secrets 上下文不能出现在 step 的 if 里。
+    env:
+      CERT_PFX_B64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+      CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -119,6 +124,32 @@ jobs:
           & "$asr/python/python.exe" -c "import vosk, sys; print('embedded python ok', sys.version)"
           if ($LASTEXITCODE -ne 0) { throw "内嵌解释器 import vosk 失败" }
 
+      # 证书是可选的：配了 secret 就导入证书存储、用指纹签名，没配就出未签名包。
+      # 单独一个探测步骤，是因为 secrets 不能直接出现在 step 的 if 里。
+      - name: detect signing
+        id: sign
+        shell: pwsh
+        run: |
+          if ($env:CERT_PFX_B64) {
+            "enabled=true" >> $env:GITHUB_OUTPUT
+            Write-Host "检测到签名证书，将签名安装包"
+          } else {
+            "enabled=false" >> $env:GITHUB_OUTPUT
+            Write-Host "未配置签名证书，输出未签名安装包"
+          }
+
+      - name: import signing certificate
+        if: steps.sign.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT_PFX_B64))
+          $password = ConvertTo-SecureString -String $env:CERT_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx -Force
+          Write-Host "证书已导入：$($cert.Thumbprint) $($cert.Subject)"
+          "CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: build installer
         working-directory: app
         shell: pwsh
@@ -128,6 +159,14 @@ jobs:
           $arguments += @("--config", "{`"version`":`"$version`"}")
           if ("${{ matrix.config }}" -ne "") {
             $arguments += @("--config", "${{ matrix.config }}")
+          }
+          if ($env:CERT_THUMBPRINT) {
+            $signing = @{ bundle = @{ windows = @{
+              certificateThumbprint = $env:CERT_THUMBPRINT
+              digestAlgorithm       = "sha256"
+              timestampUrl          = "http://timestamp.digicert.com"
+            } } } | ConvertTo-Json -Depth 6 -Compress
+            $arguments += @("--config", $signing)
           }
           Write-Host "tauri $($arguments -join ' ')"
           tauri @arguments
@@ -142,11 +181,55 @@ jobs:
             Copy-Item -Destination $target
           Get-Item $target | Select-Object Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
+      # 装得出来不等于装完能用：AsrPaths 找的是 resource_dir/asr/...，
+      # NSIS 哪天把 asr 塞进子目录，程序就会报资源缺失。这里真装一次核对落位。
+      - name: smoke install
+        shell: pwsh
+        run: |
+          $dst = Join-Path $env:RUNNER_TEMP "smoke"
+          $exe = (Get-ChildItem dist-installer/*.exe | Select-Object -First 1).FullName
+          $installed = Start-Process -FilePath $exe -ArgumentList "/S", "/D=$dst" -Wait -PassThru
+          if ($installed.ExitCode -ne 0) { throw "静默安装失败，exit=$($installed.ExitCode)" }
+
+          $expect = @("meeting-copilot-desktop.exe", "asr/stream_asr.py")
+          if ("${{ matrix.variant }}" -eq "full") {
+            $expect += @("asr/python/python.exe", "asr/vosk-model-small-cn-0.22/am")
+          }
+          foreach ($rel in $expect) {
+            if (-not (Test-Path (Join-Path $dst $rel))) { throw "安装后缺少 $rel" }
+          }
+
+          if ("${{ matrix.variant }}" -eq "full") {
+            & (Join-Path $dst "asr/python/python.exe") -c "import vosk"
+            if ($LASTEXITCODE -ne 0) { throw "安装后的内嵌解释器无法 import vosk" }
+          }
+
+          Write-Host "安装后结构核对通过：$($expect -join ', ')"
+          Start-Process -FilePath (Join-Path $dst "uninstall.exe") -ArgumentList "/S" -Wait
+
+      - name: verify signature
+        if: steps.sign.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $file = (Get-ChildItem dist-installer/*.exe | Select-Object -First 1)
+          $sig = Get-AuthenticodeSignature $file.FullName
+          Write-Host "$($file.Name)：$($sig.Status) / $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne "Valid") { throw "签名校验未通过：$($sig.Status)" }
+
       - uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.variant }}
           path: dist-installer/*.exe
           if-no-files-found: error
+
+      - name: remove signing certificate
+        if: always() && steps.sign.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          Get-ChildItem Cert:\CurrentUser\My |
+            Where-Object { $_.Thumbprint -eq $env:CERT_THUMBPRINT } |
+            Remove-Item -Force
+          Write-Host "已从证书存储移除签名证书"
 
   publish:
     name: publish draft release
