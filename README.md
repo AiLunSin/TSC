@@ -78,7 +78,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 
 `llm-https` 不是默认特性。不带它也能转写和出卡，但「查意思」只会给本机上下文，联网查和 AI 提醒会直接报「未启用传输」，不静默失败。
 
-识别模型不入库，发布前手动放进 `app/src-tauri/asr/`；完整的准备工作（四个基础工具、模型下载地址、首次配置）见 [DOWNLOAD.md](DOWNLOAD.md)。
+识别模型不入库，发布前手动放进 `app/src-tauri/asr/`；完整的准备工作（五样基础工具、模型下载地址、首次配置）见 [DOWNLOAD.md](DOWNLOAD.md)。
 
 ## 隐私
 
