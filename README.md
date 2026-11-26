@@ -1,10 +1,10 @@
-<div align="center">
-  <img src="docs/assets/hero.png" alt="会议副驾 Meeting Copilot" width="100%">
-</div>
+# 会议副驾（Meeting Copilot）
 
-<br>
+**开会时听不懂的术语，选中就能查。不选它，它一句都不打扰。**
 
-<p align="center">
+Windows 10/11 · 实时转写在你自己的电脑上跑 · 只有你点的那一下才联网
+
+<p>
   <a href="https://github.com/AiLunSin/TSC/actions/workflows/ci.yml"><img src="https://github.com/AiLunSin/TSC/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6" alt="Platform">
@@ -13,17 +13,28 @@
   <img src="https://img.shields.io/badge/React-19-61DAFB" alt="React">
 </p>
 
-# 会议副驾（Meeting Copilot）
+![在转写里选中一句话，查意思，再生成卡片](docs/assets/demo.gif)
 
-一个常驻在屏幕边上的 Windows 桌面工具。开会时它跟着听，把值得解释的词记在一边；你要是听懂了，它一句都不打扰；你要是卡住了，选中那句话就能问。
-
-仓库名 `TSC` 是项目代号。第一次用请直接看 [下载与使用指南](DOWNLOAD.md)。
+> Real-time meeting glossary for Windows. Select a phrase in the live transcript and get an explanation; local-first, nothing leaves the machine unless you click. Rust + Tauri 2.
+>
+> 仓库名 `TSC` 是项目代号，产品名叫会议副驾（Meeting Copilot）。
 
 ## 为什么做这个
 
 开会最难受的不是听不懂，是听不懂还得装作听懂了。轮到自己说话只能含糊带过，散会再去搜，搜出来的东西又跟会上那句话对不上。
 
-现有的会议 AI 大多做会后总结，或者要你把内容贴进一个聊天框。这个工具换个位置：它就在你屏幕边上，一边听一边记，需要的时候再解释，不需要的时候保持安静。
+现有的会议 AI 大多做会后总结，或者要你把内容贴进一个聊天框。这个工具换个位置：它就在屏幕边上，一边听一边记，需要的时候再解释，不需要的时候保持安静。
+
+## 和现成方案有什么不同
+
+| | 会议副驾 | 会后总结类工具 | 通用对话模型 |
+|---|---|---|---|
+| 用的时候 | 会中，你卡住的那几十秒 | 会后 | 会后 |
+| 触发方式 | 你选中哪句就解释哪句 | 全量自动总结 | 手动粘贴 |
+| 默认外发 | 只在本机转写，点一下才发最小片段 | 音频与文本上传云端 | 内容上传 |
+| 交付形态 | 装完即用的 Windows 程序 | 网页或客户端，通常要账号 | 网页 |
+
+它不替代这些工具：会后要纪要、待办、分享，那些产品更合适。这里只解决会中那几十秒。
 
 ## 它是怎么工作的
 
@@ -57,14 +68,16 @@
 
 ## 安装
 
-Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/TSC/releases)，每次发版出两个，按要不要实时转写挑：
+Windows 10/11，WebView2 一般系统自带。安装包在 [Releases](https://github.com/AiLunSin/TSC/releases)，按要不要实时转写挑：
+
+> 完整版需要仓库配置模型地址才会构建，没配的那次发版只出精简版。以 Releases 页面上实际有的文件为准。
 
 | 安装包 | 体积 | 装完能直接转写 | 还要自己装 |
 |---|---|---|---|
-| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 80 MB（含 52 MB 模型） | 能 | 无 |
-| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 12 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
+| `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 约 65 MB（模型压缩后约 42 MB） | 能 | 无 |
+| `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 约 5 MB | 不能 | Python 3、`pip install vosk`、识别模型 |
 
-两个版本界面和功能完全一样，差别只在转写的依赖：完整版把 vosk 模型（约 52 MB）和一份内嵌 Python 打进包，装完就能听；精简版只带程序本体，模型和解释器自己准备。只想开会时选词查意思、或者用粘贴生成卡片，精简版就够。
+两个版本界面和功能完全一样，差别只在转写的依赖：完整版把 vosk 模型和一份内嵌 Python 打进包，装完就能听；精简版只带程序本体，模型和解释器自己准备。只想开会时选词查意思、或者用粘贴生成卡片，精简版就够。
 
 安装包没有代码签名，首次运行 Windows 会拦一下，点「更多信息 → 仍要运行」。
 
@@ -102,6 +115,7 @@ cargo build -p meeting-copilot-desktop --features llm-https
 - 投屏检测和紧急遮蔽目前只能通过开发期环境变量注入触发，Windows 上没有自动侦测。
 - 大规模的会中表现还没统计过：真机性能、误触发率、二十场以上的稳定性都还缺数据；联网查的召回质量取决于你配的那家检索服务。
 - 只做会中，不做会后纪要导出。转写全文留在内存里，退出即清空。
+- 安装包没有代码签名，首次运行会被 SmartScreen 拦一下。
 
 ## 技术栈
 
@@ -125,6 +139,8 @@ bash scripts/scan-secrets.sh
 CI 分六组：web、rust（Windows 加两个 Darwin 交叉编译）、用例名差集、特性覆盖、合规（许可证 / SBOM / 密钥扫描 / 分层）、sqlcipher。
 
 发版：`git tag v0.1.0 && git push origin v0.1.0`。`release` 工作流在 Windows 机器上编译精简版与完整版两个安装包、生成 SHA256 清单，并建一个**草稿** Release，看过安装包再手动发布。完整版需要仓库 secret `ASR_MODEL_URL`（模型 zip 直链），没配就只出精简版。
+
+README 里的动图和截图不是手工截的：`bash scripts/readme-capture/render-demo-gif.sh` 会用真实前端加一份假 IPC 重新渲染，改界面之后重跑即可。
 
 改动前请确认能力状态与 `docs/progress/` 里的记录一致。没做完的写没做完，别在文档里提前宣布。
 

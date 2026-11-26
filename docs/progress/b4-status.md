@@ -2695,3 +2695,13 @@ README（两处）与 `docs/ABOUT.md`（两处）已改为 28；§58.2 的"26 / 
 - `cargo check -p meeting-copilot-desktop` 通过；`cargo test -p meeting-copilot-desktop asr` 18 项通过（含两个新用例）。
 - release 工作流尚未在真实 runner 上执行；内嵌解释器载荷未在本机拼装验证（模型/解释器下载在本机代理下超时），首次打 tag 需盯 `prepare full payload` 与 `build installer` 两步。
 - 安装包仍未做代码签名，首次运行会被 SmartScreen 拦截。
+
+### §63.1 安装包构建自检与钩子修复（2026-11-26）
+
+本轮把"打包能用"从推测变成跑过：
+
+- **修了一个真 bug**：`tauri.conf.json` 的 `beforeBuildCommand` 原为 `npm --prefix .. run build`。Tauri 2 执行钩子的 cwd 是 Tauri 项目根（`app/`），不是 `src-tauri/`，`--prefix ..` 因此指到仓库根，`tauri build` 直接 `ENOENT: package.json` 失败。改为 `npm run build` / `npm run dev`。这个坑在 workflow 里会以"beforeBuildCommand failed"的形式整批失败，本地先撞上了。
+- **内嵌解释器验证**：python.org 3.11.9 embed 包 + `pip download --python-version 3.11 --platform win_amd64 --abi cp311` 的轮子展开进 `Lib/site-packages`，写 `_pth` 后 `python.exe -c "import vosk"` 通过，目录 42 MB。注意：用宿主 3.13 直接 `pip install --target` 会装成 cp313 的 `_cffi_backend`，在 3.11 里必然 `ModuleNotFoundError`——CI 用的是 setup-python 3.11，与 embed 版本对齐，没这个问题。
+- **打包结果**：精简版 `Meeting Copilot_0.1.0_x64-setup.exe` 4.91 MiB；完整版配置（含 42 MB 解释器 + 占位模型）20.82 MiB。按模型压缩后约 42 MB 推算，完整版实际下载约 65 MB，README 与发版正文已按此修正（原写 100 MB）。
+- **资源落位**：`target/release/asr` 40 MB，说明 `asr/python` 与 `asr/*` 确实进了包；占位模型已在自检后删除，避免后续误打。
+- **未完成**：NSIS 静默安装（`/S /D=`）在本机被拦下，没能验证安装后的目录结构；安装包签名仍未做。

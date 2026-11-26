@@ -156,32 +156,47 @@ jobs:
           sha256sum *.exe > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      # 发版正文按实际产出的文件生成：这次没配模型就只有精简版，别在正文里列一个不存在的包。
+      - name: build release notes
+        working-directory: release-files
+        run: |
+          {
+            echo "## 下载哪个"
+            echo
+            echo "| 文件 | 装完能不能直接转写 | 还要自己装什么 |"
+            echo "|---|---|---|"
+            for file in *.exe; do
+              case "${file}" in
+                *-full-*) echo "| \`${file}\` | 能 | 什么都不用装 |" ;;
+                *-lite-*) echo "| \`${file}\` | 不能 | Python 3、\`pip install vosk\`、识别模型 |" ;;
+                *) echo "| \`${file}\` | 见说明 | 见说明 |" ;;
+              esac
+            done
+            echo
+            echo "**只想开会时查词、不打算一直开着转写**：装精简版。手动粘贴出卡、选中查义、联网查、AI 提醒都能用。"
+            echo
+            if ls *-full-*.exe >/dev/null 2>&1; then
+              echo "**想装完就能听会**：装完整版。vosk 模型和一份内嵌 Python 都在包里，装完不需要再装 Python，也不需要联网下模型（约 65 MB）。"
+              echo
+            fi
+            echo "## 安装说明"
+            echo
+            echo "- 安装包没有代码签名，首次运行会弹 SmartScreen 提示，点「更多信息 → 仍要运行」。"
+            echo "- 装完在「设置」里填模型 Key（可选）和检索 Key（可选），不填也能转写和出卡。"
+            echo "- 详细步骤见仓库的 DOWNLOAD.md；校验值见 \`SHA256SUMS.txt\`。"
+            echo
+            echo "## 系统要求"
+            echo
+            echo "Windows 10/11 64 位，WebView2（系统一般自带）。只读取系统正在播放的声音，不需要虚拟声卡。"
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           name: ${{ inputs.tag || github.ref_name }}
           draft: true
+          body_path: release-files/RELEASE_NOTES.md
           files: |
             release-files/*.exe
             release-files/SHA256SUMS.txt
-          body: |
-            ## 下载哪个
-
-            | 文件 | 体积 | 装完能不能直接转写 | 还要自己装什么 |
-            |---|---|---|---|
-            | `MeetingCopilot-vX.Y.Z-full-x64-setup.exe` | 大（约 80 MB，其中 52 MB 是模型） | 能 | 什么都不用装 |
-            | `MeetingCopilot-vX.Y.Z-lite-x64-setup.exe` | 小（约 12 MB） | 不能 | Python 3、`pip install vosk`、识别模型 |
-
-            **只想开会时查词、不打算一直开着转写**：装精简版。手动粘贴出卡、选中查义、联网查、AI 提醒都能用。
-
-            **想装完就能听会**：装完整版。vosk 模型（约 52 MB）和一份内嵌 Python 都在包里，装完不需要再装 Python，也不要联网下模型。
-
-            ## 安装说明
-
-            - 安装包没有代码签名，首次运行会弹 SmartScreen 提示，点「更多信息 → 仍要运行」。
-            - 装完在「设置」里填模型 Key（可选）和检索 Key（可选），不填也能转写和出卡。
-            - 详细步骤见仓库的 DOWNLOAD.md；校验文件见 `SHA256SUMS.txt`。
-
-            ## 系统要求
-
-            Windows 10/11 64 位，WebView2（系统一般自带）。只读取系统正在播放的声音，不需要虚拟声卡。

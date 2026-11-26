@@ -22,3 +22,4 @@ app/src-tauri/asr/vosk-model-small-cn-0.22/
 .workbuddy/
 # 本机 MSVC 编译环境配置（CRATE_CC_NO_DEFAULTS/CFLAGS/libshim，仅本机生效，不入库）
 .cargo/
+app/src-tauri/asr/python/

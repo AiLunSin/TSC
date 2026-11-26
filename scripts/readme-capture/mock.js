@@ -8,9 +8,13 @@
  * 写成内联 <script> 会被浏览器拦掉，界面只剩空状态。
  *
  * 这里的会议内容全是编的示例，不含任何真实转写。
+ *
+ * URL 带 ?demo=1 时进入演示模式：初始只有两张卡，查完意思再生成第三张，
+ * 配合 demo.js 录 README 的动图；不带参数时是静态截图用的三张卡。
  */
 (function () {
   var now = Date.now();
+  var DEMO = new URLSearchParams(location.search).has("demo");
   var cards = [
     {
       cardId: "c1",
@@ -75,9 +79,26 @@
     { index: 7, text: "灰度范围我这边再确认一下站点，晚点发群里。", atMs: now - 16_000 }
   ];
 
+  var explained = false;
+
   var handlers = {
     keyword_cards_snapshot: function () {
-      return cards;
+      if (!DEMO) {
+        return cards;
+      }
+      // 演示：SLA 这张是"查完意思再生成"的，初始不该出现。
+      return explained ? cards : cards.slice(1);
+    },
+    explain_selection: function (args) {
+      return {
+        text: (args && args.input && args.input.text) || "SLA 99.9%",
+        explanation: "服务可用性承诺：按月统计，未达标按合同约定赔付。这句是客户方口径，和上季度的 99.95% 不是同一个数。",
+        source: "local"
+      };
+    },
+    ingest_explanation: function () {
+      explained = true;
+      return 1;
     },
     transcript_snapshot: function () {
       return lines;

@@ -826,6 +826,30 @@ mod tests {
     }
 
     #[test]
+    fn resolve_picks_up_bundled_interpreter_only_when_present() {
+        let root = std::env::temp_dir().join(format!("mc-asr-paths-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let asr = root.join("asr");
+        std::fs::create_dir_all(asr.join(MODEL_DIR_NAME)).expect("建模型目录");
+        std::fs::write(asr.join("stream_asr.py"), b"print('hi')").expect("写脚本");
+
+        // 精简版：目录里没有 python，解析结果应为 None，后续走 PATH。
+        let lite = AsrPaths::resolve(Some(&root));
+        assert_eq!(lite.python, None);
+        assert_eq!(lite.model, asr.join(MODEL_DIR_NAME));
+
+        // 完整版：放上解释器后应被认出来，且模型路径不变。
+        std::fs::create_dir_all(asr.join("python")).expect("建 python 目录");
+        std::fs::write(asr.join("python").join("python.exe"), b"").expect("写解释器占位");
+        let full = AsrPaths::resolve(Some(&root));
+        assert_eq!(full.python, Some(asr.join("python").join("python.exe")));
+        assert_eq!(full.model, asr.join(MODEL_DIR_NAME));
+        assert!(full.validate().is_ok());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn error_slot_starts_empty() {
         assert_eq!(pipeline().last_error(), "");
     }
