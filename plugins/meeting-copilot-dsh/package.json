@@ -1,0 +1,31 @@
+{
+  "name": "meeting-copilot-dsh",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Meeting Copilot tools for DeepSeek Harness: term lookup, cards, live transcript, web search and meeting reminders, forwarded to the local desktop app, plus a sidebar switch to turn them off.",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-sidebar"]
+    }
+  }
+}

@@ -120,7 +120,7 @@ impl AssistStore {
 
 /// 辅助回复运行态：只有窗口设置，凭据仍走模型 Key。
 pub struct AssistState {
-    store: AssistStore,
+    pub(crate) store: AssistStore,
 }
 
 impl AssistState {

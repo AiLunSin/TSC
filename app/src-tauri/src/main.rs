@@ -2,6 +2,7 @@
 
 mod diag;
 mod ipc;
+mod plugin_bridge;
 mod privacy;
 
 use std::path::PathBuf;
@@ -132,7 +133,12 @@ fn init_file_logging(dir: &std::path::Path) {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let mut context = tauri::generate_context!();
+    // 无窗口模式：清掉窗口配置，只跑运行态和插件桥，给 DSH 插件与自动化验收用。
+    if std::env::var("MEETING_COPILOT_HEADLESS").is_ok_and(|value| value == "1") {
+        context.config_mut().app.windows.clear();
+    }
+    let app = tauri::Builder::default()
         .setup(|app| {
             let log_dir = app
                 .path()
@@ -190,6 +196,8 @@ fn main() {
                 config_dir.clone(),
             )));
             app.manage(build_state(config_dir, presets, cards.clone()));
+            // 本地插件桥：只回环、要令牌；启动失败不影响桌面应用。
+            plugin_bridge::start(app.handle());
             tracing::info!(
                 protocol = IPC_PROTOCOL_VERSION,
                 "meeting-copilot desktop bootstrapped"
@@ -229,6 +237,11 @@ fn main() {
             ipc::ui_prefs::ui_prefs,
             ipc::ui_prefs::ui_prefs_save
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run meeting-copilot desktop");
+        .build(context)
+        .expect("failed to build meeting-copilot desktop");
+    app.run(|handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            plugin_bridge::stop(handle);
+        }
+    });
 }

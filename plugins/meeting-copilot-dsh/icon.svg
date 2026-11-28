@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="Meeting Copilot">
+  <path d="M8 10a5 5 0 0 1 5-5h10a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5h-7.6L9 27.4c-.9.7-2.2.1-2.2-1V10Z" fill="#17444D"/>
+  <circle cx="17.6" cy="13.4" r="4.1" fill="#E9FBF8"/>
+  <path d="m20.8 16.6 3 3" stroke="#E9FBF8" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="17.6" cy="13.4" r="1.7" fill="#2E8B8B"/>
+</svg>

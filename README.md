@@ -100,6 +100,30 @@ cargo build -p meeting-copilot-desktop --features llm-https
 
 识别模型不入库，放在 `app/src-tauri/asr/`；完整的准备工作（五样基础工具、模型下载地址、首次配置）见 [DOWNLOAD.md](DOWNLOAD.md)。
 
+## DSH 插件
+
+`plugins/meeting-copilot-dsh/` 能装进 [DeepSeek Harness](https://github.com/deepseek-ai/dsh)。转写、卡片库、凭据、限额还是桌面应用那一份，插件不另存会议内容，只把 DSH 的工具调用转成对应用的本机请求：
+
+| 工具 | 作用 |
+|---|---|
+| `meeting_lookup` | 解释选中的词或短语；没配模型 Key 时只用本机上下文，结果里写明来源 |
+| `meeting_cards` | 列出最近卡片，或按 id 打开详情 |
+| `meeting_save_card` | 把一条解释存成卡片，进本机加密库 |
+| `meeting_transcript` | 读取实时转写，或开始 / 停止转写、查看状态 |
+| `meeting_web_search` | 用应用里配的博查 / Tavily 检索，受应用的小时限额管着 |
+| `meeting_assist` | 看最近转写，给提醒和能直接说出口的话；要配模型 Key |
+
+应用没在跑的时候，工具会直接报「会议副驾没有在运行」。左侧栏底部、Settings 上方有个开关，关掉后六个工具一起从会话里消失，状态重启后保持。
+
+桥只开在 `127.0.0.1` 的临时端口上，令牌每次启动重新生成、写进应用配置目录，退出即删。带 `Origin` 的请求一律拒绝，请求体最多 64 KiB。内容会不会离开这台电脑，看应用里配没配模型和检索服务，插件自己没有出网的路子。端点清单和验证记录见 [docs/dsh-plugin.md](docs/dsh-plugin.md)。
+
+机器上没有图形界面时，可以让应用只跑运行态和插件桥：
+
+```powershell
+$env:MEETING_COPILOT_HEADLESS = '1'
+cargo run -p meeting-copilot-desktop --features llm-https
+```
+
 ## 隐私
 
 这东西一直在听会议，所以边界写死一点：
@@ -152,6 +176,7 @@ README 里的动图和截图不是手工截的：`bash scripts/readme-capture/re
 |---|---|
 | [DOWNLOAD.md](DOWNLOAD.md) | 下载、编译、首次配置 |
 | [docs/ABOUT.md](docs/ABOUT.md) | 项目简介与能力边界 |
+| [docs/dsh-plugin.md](docs/dsh-plugin.md) | DSH 本地插件桥：端点、安全边界与验证记录 |
 | [docs/sdd/](docs/sdd/) | 需求规格、技术方案、任务清单 |
 | [docs/progress/](docs/progress/) | 各批次进度与验收记录（内部台账，随时可能过期） |
 | [docs/compliance/](docs/compliance/) | 许可证复核与归档保留期意见 |
